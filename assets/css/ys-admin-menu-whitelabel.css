@@ -1,0 +1,445 @@
+/**
+ * YS CART — White-label admin pages（v2.45.39 ADR-047）
+ *
+ * 獨立 namespace `.ysca-wl-*` + `body.ysca-wl-active` 根 selector，
+ * 完全與 YS CART admin shell（.ysca-* tokens / components）解耦。
+ *
+ * 涵蓋頁面（6 個 slug，由 YSWhiteLabelAssets::is_whitelabel_page() 判定）：
+ *   - ys-cart-platform                landing
+ *   - ys-cart-whitelabel              白牌設置
+ *   - ys-cart-license                 授權設置
+ *   - ys-cart-permissions             權限設置
+ *   - ys-cart-platform-advanced-ui    進階介面
+ *   - ys-cart-admin-theme             原生選單樣式
+ *
+ * 設計準則：
+ *   - body.ysca-wl-active 為唯一 root，無 .ysca-* tokens 依賴
+ *   - 取代 WordPress 預設 .nav-tab / .nav-tab-active 醜樣式
+ *   - indigo accent (#6366f1)、白底細邊圓角 4px、focus ring shadow
+ *   - 響應式 ≤782px 收成單欄
+ *
+ * @since 2.45.39
+ */
+
+/* ─── WP-native chrome 白底化（v2.45.40 Issue #1） ─────────
+ * 白牌 5 頁是「設定型」頁面、WP 預設 #f0f0f1 灰底太重。
+ * 把 body / #wpcontent 轉白底、.wrap 置中收斂 max-width，視覺更乾淨。
+ */
+body.ysca-wl-active {
+    background: #fff;
+}
+body.ysca-wl-active #wpcontent {
+    background: #fff;
+}
+body.ysca-wl-active .wrap {
+    max-width: 1280px;
+    margin: 20px auto;
+    padding: 0;
+}
+
+/* ─── Root container ─────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+    color: #1f2937;
+    font-size: 14px;
+    line-height: 1.55;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body.ysca-wl-active .ysca-wl-section {
+    margin-bottom: 24px;
+}
+
+body.ysca-wl-active .ysca-wl-section:last-child {
+    margin-bottom: 0;
+}
+
+/* ─── Card ────────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-card {
+    margin-bottom: 20px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+body.ysca-wl-active .ysca-wl-card:last-child {
+    margin-bottom: 0;
+}
+
+body.ysca-wl-active .ysca-wl-card__header {
+    padding: 16px 20px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+body.ysca-wl-active .ysca-wl-card__title {
+    margin: 0;
+    color: #111827;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+body.ysca-wl-active .ysca-wl-card__body {
+    padding: 20px;
+}
+
+body.ysca-wl-active .ysca-wl-card__body > *:first-child {
+    margin-top: 0;
+}
+
+body.ysca-wl-active .ysca-wl-card__body > *:last-child {
+    margin-bottom: 0;
+}
+
+body.ysca-wl-active .ysca-page-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+}
+
+/* ─── Field ──────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-field {
+    margin-bottom: 16px;
+}
+
+body.ysca-wl-active .ysca-wl-field:last-child {
+    margin-bottom: 0;
+}
+
+body.ysca-wl-active .ysca-wl-field__label {
+    display: block;
+    margin-bottom: 6px;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+body.ysca-wl-active .ysca-wl-field__label input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+body.ysca-wl-active .ysca-wl-field__hint {
+    margin: 6px 0 0;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+body.ysca-wl-active .ysca-wl-field__hint code {
+    padding: 1px 4px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 11px;
+}
+
+/* ─── Input ──────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-input,
+body.ysca-wl-active .ysca-wl-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 480px;
+    padding: 8px 10px;
+    color: #111827;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+body.ysca-wl-active .ysca-wl-textarea {
+    min-height: 96px;
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+body.ysca-wl-active .ysca-wl-input:focus,
+body.ysca-wl-active .ysca-wl-textarea:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: 0;
+}
+
+body.ysca-wl-active select.ysca-wl-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-position: right 10px center;
+    background-repeat: no-repeat;
+    padding-right: 32px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+/* ─── Button ─────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 14px;
+    color: #374151;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+body.ysca-wl-active .ysca-wl-btn:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    color: #111827;
+}
+
+body.ysca-wl-active .ysca-wl-btn:focus {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+    outline: 0;
+}
+
+body.ysca-wl-active .ysca-wl-btn--primary {
+    color: #fff;
+    background: #6366f1;
+    border-color: #6366f1;
+}
+
+body.ysca-wl-active .ysca-wl-btn--primary:hover {
+    background: #4f46e5;
+    border-color: #4f46e5;
+    color: #fff;
+}
+
+body.ysca-wl-active .ysca-wl-btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: #6366f1;
+}
+
+body.ysca-wl-active .ysca-wl-btn--ghost:hover {
+    background: #eef2ff;
+    border-color: transparent;
+    color: #4f46e5;
+}
+
+body.ysca-wl-active .ysca-wl-btn--sm {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
+}
+
+body.ysca-wl-active .ysca-wl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+body.ysca-wl-active .ysca-wl-actions--end {
+    justify-content: flex-end;
+}
+
+/* ─── Tabs（pill underline，取代 WordPress .nav-tab）─────── */
+
+body.ysca-wl-active .ysca-wl-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 0 0 20px;
+    padding: 0;
+    border-bottom: 1px solid #e5e7eb;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.ysca-wl-active .ysca-wl-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 14px;
+    color: #6b7280;
+    background: transparent;
+    border: 0;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: color 150ms ease;
+}
+
+body.ysca-wl-active .ysca-wl-tab:hover {
+    color: #6366f1;
+}
+
+body.ysca-wl-active .ysca-wl-tab:focus {
+    outline: 2px solid #6366f1;
+    outline-offset: -2px;
+}
+
+body.ysca-wl-active .ysca-wl-tab--active,
+body.ysca-wl-active .ysca-wl-tab[aria-selected="true"] {
+    color: #6366f1;
+}
+
+body.ysca-wl-active .ysca-wl-tab--active::after,
+body.ysca-wl-active .ysca-wl-tab[aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: -1px;
+    height: 2px;
+    background: #6366f1;
+    border-radius: 2px;
+}
+
+/* ─── Notice ─────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-notice {
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    background: #f3f4f6;
+    border-left: 4px solid #6b7280;
+    border-radius: 4px;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+body.ysca-wl-active .ysca-wl-notice p {
+    margin: 0;
+}
+
+body.ysca-wl-active .ysca-wl-notice p + p {
+    margin-top: 6px;
+}
+
+body.ysca-wl-active .ysca-wl-notice--info {
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+    color: #1e3a8a;
+}
+
+body.ysca-wl-active .ysca-wl-notice--success {
+    background: #ecfdf5;
+    border-left-color: #10b981;
+    color: #065f46;
+}
+
+body.ysca-wl-active .ysca-wl-notice--error {
+    background: #fef2f2;
+    border-left-color: #ef4444;
+    color: #991b1b;
+}
+
+/* ─── Table ──────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+body.ysca-wl-active .ysca-wl-table th,
+body.ysca-wl-active .ysca-wl-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+    vertical-align: top;
+}
+
+body.ysca-wl-active .ysca-wl-table th {
+    width: 160px;
+    background: #f9fafb;
+    color: #374151;
+    font-weight: 600;
+}
+
+body.ysca-wl-active .ysca-wl-table tr:last-child th,
+body.ysca-wl-active .ysca-wl-table tr:last-child td {
+    border-bottom: 0;
+}
+
+body.ysca-wl-active .ysca-wl-table code {
+    padding: 1px 4px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 12px;
+}
+
+/* ─── Badge ──────────────────────────────────────────────── */
+
+body.ysca-wl-active .ysca-wl-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: #e5e7eb;
+    border-radius: 12px;
+    color: #374151;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+body.ysca-wl-active .ysca-wl-badge--danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+body.ysca-wl-active .ysca-wl-badge--success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* ─── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 782px) {
+    body.ysca-wl-active .ysca-wl-page {
+        padding: 16px 12px 32px;
+    }
+    body.ysca-wl-active .ysca-wl-card__header,
+    body.ysca-wl-active .ysca-wl-card__body {
+        padding: 14px;
+    }
+    body.ysca-wl-active .ysca-wl-input,
+    body.ysca-wl-active .ysca-wl-textarea {
+        max-width: 100%;
+    }
+    body.ysca-wl-active .ysca-wl-table th {
+        width: auto;
+        min-width: 110px;
+    }
+    body.ysca-wl-active .ysca-wl-tabs {
+        gap: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+    body.ysca-wl-active .ysca-wl-tab {
+        flex: 0 0 auto;
+    }
+}

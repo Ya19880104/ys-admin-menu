@@ -1,0 +1,38 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Claude
+.claude/
+
+# 環境 / 秘密
+.env
+.env.*
+!.env.example
+
+# 金鑰 / 憑證
+*.pem
+*.key
+id_rsa*
+
+# WordPress
+wp-config.php
+
+# 本地備份
+*.backup
+*.bak
+
+# 內部開發物件（打包時排除，vendor/ 保留含 Hub Client）
+tests/
+DEVELOPMENT.md
+docs/
+outputs/

@@ -1,0 +1,158 @@
+/**
+ * 原生選單樣式 — 後台設定頁樣式（v2.39.0 BATCH R）
+ *
+ * 套用範圍僅 .ys-ec-admin-theme-page wrap，不洩漏全站 CSS。
+ *
+ * 設計：
+ *   - 沿用 ys-ec-card 風格（白底 + 圓角 + 細邊框 + 微陰影）
+ *   - 與 .ys-ec-permission-admin 一致的 card header (灰底 + dashicons indigo)
+ *   - 色彩 input 旁顯示 wp.colorPicker 的色塊（WP 原生組件）
+ */
+
+.ys-ec-admin-theme-page {
+    color: #1f2937;
+}
+
+.ys-ec-admin-theme-page h1 {
+    color: #111827;
+    font-size: 23px;
+    font-weight: 400;
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ys-ec-admin-theme-page h1 .dashicons {
+    color: #6366f1;
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+}
+
+/* ── ys-ec-card 樣式（與 permission-admin 對齊） ── */
+
+.ys-ec-admin-theme-page .ys-ec-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 );
+    margin: 0 0 16px 0;
+    padding: 0;
+}
+
+.ys-ec-admin-theme-page .ys-ec-card > h3 {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 8px 8px 0 0;
+    color: #111827;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ys-ec-admin-theme-page .ys-ec-card > h3 .dashicons {
+    color: #6366f1;
+    vertical-align: middle;
+}
+
+.ys-ec-admin-theme-page .ys-ec-card .inside {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 0 0 8px 8px;
+}
+
+/* ── form group ── */
+
+.ys-ec-admin-theme-page .ys-ec-form-group {
+    margin: 0 0 18px 0;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-group:last-child {
+    margin-bottom: 0;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-group > label {
+    display: block;
+    font-weight: 600;
+    color: #374151;
+    margin: 0 0 6px 0;
+    font-size: 13px;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-group label input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-group p.description {
+    color: #6b7280;
+    font-size: 12px;
+    margin: 4px 0 0 0;
+    line-height: 1.5;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-group code {
+    background: #f3f4f6;
+    color: #4b5563;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+}
+
+/* ── number input + 文字大小 row ── */
+
+.ys-ec-admin-theme-page .ys-ec-form-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.ys-ec-admin-theme-page .ys-ec-form-row .ys-ec-form-group {
+    min-width: 160px;
+    margin-bottom: 12px;
+}
+
+.ys-ec-admin-theme-page input[type="number"] {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #d1d5db;
+    font-size: 13px;
+}
+
+/* ── color picker 微調（不覆蓋 WP 內建組件，僅讓間距更舒服） ── */
+
+.ys-ec-admin-theme-page .wp-picker-container {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button {
+    margin: 0 6px 0 0;
+}
+
+/* ── 提交按鈕區 ── */
+
+.ys-ec-admin-theme-page p.submit {
+    margin-top: 20px;
+    padding: 16px 0;
+    border-top: 1px solid #e5e7eb;
+}
+
+.ys-ec-admin-theme-page p.submit .button {
+    margin-right: 8px;
+}
+
+.ys-ec-admin-theme-page p.submit .button .dashicons {
+    line-height: 1.4;
+}
+
+/* === Color picker 改浮層：避免 iris 面板展開時推擠版面（v1.0.0 UI 修正） === */
+.ys-ec-admin-theme-page .wp-picker-container { position: relative; }
+.ys-ec-admin-theme-page .wp-picker-container .wp-picker-holder {
+    position: absolute; z-index: 50; left: 0; margin-top: 4px; padding: 6px;
+    background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}

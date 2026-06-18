@@ -1,0 +1,5315 @@
+/**
+ * YS CART admin base stylesheet.
+ *
+ * Canonical admin namespace: ysca-*.
+ * Stable shared primitives may remain ys-ec-* when intentionally reused by
+ * admin and storefront surfaces. Avoid selectors that combine both namespace
+ * prefixes on a single selector; use dual markup or grouped selectors instead.
+ *
+ * @package YangSheep\Ecommerce\Admin
+ * @since   2.43.4
+ */
+
+/**
+ * YS CART — 後台管理樣式
+ * Morandi 配色系統，與 YS Enhance Hosting 視覺風格統一
+ *
+ * @package YangSheep\Ecommerce
+ * @version 2.1.0
+ *
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ 後台頁面結構規範 (Admin Page Structure Specification)            │
+ * │                                                                 │
+ * │  <div class="wrap ys-ec-admin">                                │
+ * │    <h1 class="ys-ec-page-title">                               │
+ * │      <span class="dashicons dashicons-xxx"></span>             │
+ * │      頁面標題                                                   │
+ * │      <a class="ys-ec-btn ys-ec-btn-primary" style="ml:auto">  │
+ * │    </h1>                                                       │
+ * │                                                                 │
+ * │    <!-- 統計卡片（選用） -->                                      │
+ * │    <div class="ys-ec-stats-grid">                              │
+ * │      <div class="ys-ec-stat-card ys-ec-stat-blue">...</div>   │
+ * │    </div>                                                       │
+ * │                                                                 │
+ * │    <!-- 篩選列（選用） -->                                       │
+ * │    <div class="ys-ec-filters">...</div>                        │
+ * │                                                                 │
+ * │    <!-- 主要內容卡片 -->                                         │
+ * │    <div class="ys-ec-card">                                    │
+ * │      <table class="ys-ec-table">...</table>                    │
+ * │    </div>                                                       │
+ * │                                                                 │
+ * │    <!-- 分頁（選用） -->                                         │
+ * │    <div class="ys-ec-pagination">...</div>                     │
+ * │  </div>                                                        │
+ * └─────────────────────────────────────────────────────────────────┘
+ */
+
+/* ========================================
+   1. CSS 變數 — Morandi 配色
+   ======================================== */
+:root {
+    /* Morandi 主色 */
+    --ys-ec-primary: #1f5dcf;
+    --ys-ec-primary-dark: #174fc7;
+    --ys-ec-primary-light: #b8c8f6;
+    --ys-ec-primary-bg: #eef5ff;
+    --ys-ec-secondary: #94a3af;
+
+    /* 語意色彩 */
+    --ys-ec-success: #7dab8e;
+    --ys-ec-success-bg: #e8f3ec;
+    --ys-ec-warning: #c4a67a;
+    --ys-ec-warning-bg: #faf2e5;
+    --ys-ec-danger: #c08080;
+    --ys-ec-danger-bg: #f8e8e8;
+    --ys-ec-info-bg: #e8eff5;
+
+    /* 文字與邊框 */
+    --ys-ec-text: #2c3e50;
+    --ys-ec-text-muted: #475569;
+    --ys-ec-text-light: #64748b;
+    --ys-ec-border: #d8dee4;
+    --ys-ec-border-light: #e2e8ed;
+
+    /* 背景與元件 */
+    --ys-ec-bg: #f8fafb;
+    --ys-ec-card-bg: #ffffff;
+    --ys-ec-radius: 8px;
+    --ys-ec-radius-lg: 12px;
+    --ys-ec-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --ys-ec-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --ys-ec-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+    /* 字型 */
+    --ys-ec-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+
+    /* 過渡動畫 */
+    --ys-ec-transition: 0.2s ease;
+    --ys-ec-transition-slow: 0.3s ease;
+}
+
+/* ========================================
+   1.1 強制後台白底
+   ======================================== */
+body.toplevel_page_ys-ecommerce #wpcontent,
+body[class*="ys-ec"] #wpcontent {
+    background: #ffffff;
+}
+
+body.toplevel_page_ys-cart #wpcontent,
+body[class*="_page_ys-ec-"] #wpcontent,
+body[class*="_page_ys-cart"] #wpcontent {
+    background: #f6f8fb;
+}
+
+body.toplevel_page_ys-cart,
+body[class*="_page_ys-ec-"],
+body[class*="_page_ys-cart"],
+body.toplevel_page_ys-cart #wpwrap,
+body[class*="_page_ys-ec-"] #wpwrap,
+body[class*="_page_ys-cart"] #wpwrap,
+body.toplevel_page_ys-cart #wpbody,
+body[class*="_page_ys-ec-"] #wpbody,
+body[class*="_page_ys-cart"] #wpbody,
+body.toplevel_page_ys-cart #wpbody-content,
+body[class*="_page_ys-ec-"] #wpbody-content,
+body[class*="_page_ys-cart"] #wpbody-content {
+    min-height: calc(100vh - 32px);
+    background: #f6f8fb;
+}
+
+body.toplevel_page_ys-cart #wpbody-content > .wrap,
+body[class*="_page_ys-ec-"] #wpbody-content > .wrap,
+body[class*="_page_ys-cart"] #wpbody-content > .wrap {
+    width: auto;
+    max-width: none;
+    margin-right: 24px;
+}
+
+body.toplevel_page_ys-cart #wpbody-content > .wrap.ysca-native-wrap,
+body[class*="_page_ys-ec-"] #wpbody-content > .wrap.ysca-native-wrap,
+body[class*="_page_ys-cart"] #wpbody-content > .wrap.ysca-native-wrap {
+    margin-top: 24px;
+}
+
+.ysca-native-wrap .ysca-page-head--native {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-4, 16px);
+    min-height: 92px;
+    margin: 0 0 var(--ysca-space-5, 24px);
+    padding: var(--ysca-space-5, 24px);
+    background: var(--ysca-surface, #fff);
+    border: 1px solid var(--ysca-border-subtle, #edf2f7);
+    border-radius: var(--ysca-radius-lg, 12px);
+    box-shadow: var(--ysca-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+.ysca-native-wrap .ysca-page-head__title--native {
+    margin: 4px 0 0;
+    padding: 0;
+    border: 0;
+    color: var(--ysca-text, #0f172a);
+    font-size: var(--ysca-fs-page-title, 24px);
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: 0;
+}
+
+.ysca-native-wrap .ysca-page-head__breadcrumb--native {
+    margin: 0;
+    color: var(--ysca-muted, #64748b);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.4;
+}
+
+.ysca-native-wrap .ysca-page-head__actions--native {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-native-wrap .ysca-page-head__actions--native .ysca-btn {
+    margin: 0;
+    text-decoration: none;
+}
+
+.ysca-native-wrap .ysca-page-head__actions--native .button.ysca-btn {
+    border-radius: var(--ysca-radius-md, 8px);
+}
+
+@media (max-width: 782px) {
+    .ysca-native-wrap .ysca-page-head--native {
+        align-items: stretch;
+        flex-direction: column;
+        min-height: 0;
+        padding: var(--ysca-space-4, 16px);
+    }
+
+    .ysca-native-wrap .ysca-page-head__actions--native {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 782px) {
+    body.ysca-active .ysca-page-root > .ys-ec-admin,
+    body.ysca-active .ysca-page-root > .ysca-section-root,
+    body.ysca-active .ysca-page-root > form {
+        align-self: stretch;
+        box-sizing: border-box;
+        max-width: 100%;
+        min-width: 0;
+        width: 100%;
+    }
+
+    body.ysca-active .ysca-page-root > form > * {
+        align-self: stretch;
+        box-sizing: border-box;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    body.ysca-active .ysca-page-root .ysca-table-card,
+    body.ysca-active .ys-ec-admin .ysca-table-card {
+        box-sizing: border-box;
+        max-width: 100%;
+        min-width: 0;
+        width: 100%;
+    }
+
+    body.ysca-active .ysca-page-root .ysca-table-card .ysca-table-wrap,
+    body.ysca-active .ysca-page-root .ysca-table-card .ysca-table-scroll,
+    body.ysca-active .ys-ec-admin .ysca-table-card .ysca-table-wrap,
+    body.ysca-active .ys-ec-admin .ysca-table-card .ysca-table-scroll {
+        box-sizing: border-box;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+    }
+
+    body.ysca-active .ysca-table-card.ysca-table-card--padded .ysca-table-wrap {
+        border-left: 0;
+        border-right: 0;
+        border-radius: 0;
+    }
+}
+
+body.toplevel_page_ys-cart #wpbody-content > .wrap > h1,
+body[class*="_page_ys-ec-"] #wpbody-content > .wrap > h1,
+body[class*="_page_ys-cart"] #wpbody-content > .wrap > h1 {
+    font-size: 24px;
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+/* ========================================
+   2. 全域基礎
+   ======================================== */
+.ys-ec-wrap {
+    max-width: 1400px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ys-ec-text);
+}
+
+/* WordPress 原生通知修正 — 防止與自定義 UI 重疊 */
+.ysca-page-root > .notice,
+.ysca-page-root > .updated,
+.ysca-page-root > .error {
+    margin: 8px 0 16px;
+}
+
+/* ========================================
+   3. 頁面標題 (.ys-ec-page-title)
+   ======================================== */
+.ysca-page-root h1.ys-ec-page-title,
+.ysca-page-root .ys-ec-page-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* v2.46.6: 對齊 Design System v2 主標規範 — 24px / 700 / #1f1f1f */
+    font-size: var(--ysca-fs-page-title, 24px) !important;
+    font-weight: 700 !important;
+    color: var(--ysca-text-h1, #1f1f1f) !important;
+    margin: 8px 0 24px 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-bottom: none !important;
+    text-decoration: none !important;
+    line-height: 1.4;
+    box-shadow: none !important;
+}
+
+/* WP 預設 h1 底線強制移除 */
+.ysca-page-root h1 {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    text-decoration: none !important;
+}
+
+/* WP header-end 分隔線移除 */
+.ysca-page-root hr.wp-header-end {
+    display: none !important;
+}
+
+/* 標題內按鈕：統一大小、去底線、靠右 */
+.ysca-page-root h1.ys-ec-page-title .ys-ec-btn {
+    margin-left: auto;
+    font-size: 14px;
+    min-height: 38px;
+    padding: 8px 16px;
+    text-decoration: none;
+}
+.ysca-page-root h1.ys-ec-page-title a {
+    text-decoration: none;
+}
+
+.ys-ec-page-title .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    color: var(--ys-ec-primary);
+}
+
+/* ========================================
+   4. 統計卡片 (.ys-ec-stats-grid)
+   ======================================== */
+.ys-ec-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.ys-ec-stat-card {
+    background: var(--ys-ec-card-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: var(--ys-ec-shadow);
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.ys-ec-stat-card:hover {
+    box-shadow: var(--ys-ec-shadow-hover);
+    transform: translateY(-1px);
+}
+
+.ys-ec-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ys-ec-stat-icon .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.ys-ec-stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ys-ec-text-muted);
+    margin-bottom: 4px;
+}
+
+.ys-ec-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ys-ec-text);
+}
+
+/* 統計卡片色彩變體 */
+.ys-ec-stat-blue .ys-ec-stat-icon { background: var(--ys-ec-primary-bg); color: var(--ys-ec-primary-dark); }
+.ys-ec-stat-green .ys-ec-stat-icon { background: var(--ys-ec-success-bg); color: var(--ys-ec-success); }
+.ys-ec-stat-yellow .ys-ec-stat-icon { background: var(--ys-ec-warning-bg); color: var(--ys-ec-warning); }
+.ys-ec-stat-pink .ys-ec-stat-icon { background: var(--ys-ec-danger-bg); color: var(--ys-ec-danger); }
+.ysca-stat-yellow .ys-ec-stat-icon { background: var(--ys-ec-warning-bg); color: var(--ys-ec-warning); }
+.ysca-stat-pink .ys-ec-stat-icon { background: var(--ys-ec-danger-bg); color: var(--ys-ec-danger); }
+
+/* ========================================
+   5. 卡片 (.ys-ec-card)
+   ======================================== */
+.ys-ec-card {
+    background: var(--ys-ec-card-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    box-shadow: var(--ys-ec-shadow);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.ys-ec-card h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ys-ec-text);
+    margin: 0 0 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--ys-ec-primary-light);
+}
+
+.ys-ec-card h3 .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: var(--ys-ec-primary);
+}
+
+.ys-ec-card .inside {
+    padding-top: 16px;
+}
+
+.ys-ec-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--ys-ec-primary-light);
+}
+
+.ys-ec-card-header h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ys-ec-text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ys-ec-card-header h2 .dashicons {
+    color: var(--ys-ec-primary);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+/* ========================================
+   6. 表格 (.ys-ec-table)
+   ======================================== */
+.ys-ec-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    overflow: hidden;
+}
+
+.ys-ec-table thead th {
+    background: var(--ys-ec-bg);
+    color: var(--ys-ec-text-muted);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--ys-ec-border);
+}
+
+.ys-ec-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ys-ec-border-light);
+    color: var(--ys-ec-text);
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+.ys-ec-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.ys-ec-table tbody tr:nth-child(even) {
+    background: rgba(143, 168, 184, 0.03);
+}
+
+.ys-ec-table tbody tr:hover {
+    background: rgba(143, 168, 184, 0.06);
+}
+
+.ys-ec-table .row-actions {
+    visibility: hidden;
+    font-size: 12px;
+    color: var(--ys-ec-text-muted);
+    margin: 4px 0 0 0;
+    padding: 0;
+    line-height: 1.8;
+    display: block;
+}
+
+.ys-ec-table tbody tr:hover .row-actions,
+.ys-ec-table tr:hover .row-actions {
+    visibility: visible;
+}
+
+.ys-ec-table .row-actions a {
+    color: var(--ys-ec-primary-dark);
+    text-decoration: none;
+    vertical-align: baseline;
+}
+
+.ys-ec-table .row-actions a:hover {
+    color: var(--ys-ec-primary);
+}
+
+/* 表格內連結統一：無底線、Morandi 配色 */
+.ys-ec-table a {
+    text-decoration: none;
+    color: var(--ys-ec-primary-dark);
+}
+
+.ys-ec-table a:hover {
+    color: var(--ys-ec-primary);
+    text-decoration: underline;
+}
+
+/* 強制 WP 後台白底 */
+.ysca-page-root {
+    --ysca-admin-section-gap: var(--ysca-admin-page-gap, var(--ysca-space-4, 16px));
+    display: grid;
+    align-content: start;
+    gap: var(--ysca-admin-section-gap);
+    width: min(100%, var(--ysca-content-max, 1480px));
+    max-width: var(--ysca-content-max, 1480px);
+    margin: var(--ysca-admin-page-top, var(--ysca-space-3, 12px)) auto 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+.ysca-page-root--wide {
+    width: min(100%, var(--ysca-content-wide, 1680px));
+    max-width: var(--ysca-content-wide, 1680px);
+}
+
+.ysca-page-root--narrow {
+    width: min(100%, var(--ysca-content-narrow, 1040px));
+    max-width: var(--ysca-content-narrow, 1040px);
+}
+
+.ysca-page-root--flush {
+    width: 100%;
+    max-width: none;
+}
+
+.ysca-main > .ysca-page-root--shell {
+    gap: var(--ysca-admin-section-gap, var(--ysca-admin-page-gap, var(--ysca-space-4, 16px)));
+    background: transparent;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+}
+
+.ysca-main > .ysca-page-root--shell > .ysca-page-root {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.ysca-main > .ysca-page-root--shell > .ysca-page-root--wide,
+.ysca-main > .ysca-page-root--shell > .ysca-page-root--narrow {
+    width: 100%;
+    max-width: none;
+}
+
+/* v2.47.9: every admin inner page owns vertical rhythm at the page root.
+ * Direct child surfaces and list controls no longer add their own margins on
+ * top of the root gap, which keeps list and detail pages aligned at 16px. */
+.ysca-page-root > :where(
+    .ysca-kpi-grid,
+    .ysca-filter-tabs,
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row,
+    .ysca-list-action-bar,
+    .ys-ec-batch-bar,
+    .ysca-table-card,
+    .ysca-card,
+    .ysca-surface,
+    .ys-ec-card,
+    .ys-ec-filters,
+    .ysca-section,
+    .ysca-tab-content,
+    .ys-ec-filter-bar,
+    .ys-ec-tabs,
+    .ysca-tabs,
+    .nav-tab-wrapper,
+    form,
+    section,
+    .ys-ec-pagination,
+    .tablenav
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ysca-page-root > form:not(.ysca-filter-bar):not(.ys-ec-filter-bar):not(.ys-ec-filters):not(.search-form),
+.ysca-active .ys-ec-admin > form:not(.ysca-filter-bar):not(.ys-ec-filter-bar):not(.ys-ec-filters):not(.search-form) {
+    display: grid;
+    align-content: start;
+    gap: var(--ysca-admin-section-gap, var(--ysca-space-4, 16px));
+}
+
+.ysca-page-root > form:not(.ysca-filter-bar):not(.ys-ec-filter-bar):not(.ys-ec-filters):not(.search-form) > :where(
+    .ysca-kpi-grid,
+    .ysca-product-hero,
+    .ys-ec-admin-product-hero,
+    .ysca-admin-order-hero,
+    .ys-ec-admin-order-hero,
+    .ysca-filter-tabs,
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row,
+    .ysca-list-action-bar,
+    .ys-ec-batch-bar,
+    .ysca-table-card,
+    .ysca-card,
+    .ysca-surface,
+    .ys-ec-card,
+    .ys-ec-filters,
+    .ysca-section,
+    .ysca-tab-content,
+    .ys-ec-filter-bar,
+    .ys-ec-tabs,
+    .ysca-tabs,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel,
+    .nav-tab-wrapper,
+    section,
+    .ys-ec-pagination,
+    .tablenav
+),
+.ysca-active .ys-ec-admin > form:not(.ysca-filter-bar):not(.ys-ec-filter-bar):not(.ys-ec-filters):not(.search-form) > :where(
+    .ysca-kpi-grid,
+    .ysca-product-hero,
+    .ys-ec-admin-product-hero,
+    .ysca-admin-order-hero,
+    .ys-ec-admin-order-hero,
+    .ysca-filter-tabs,
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row,
+    .ysca-list-action-bar,
+    .ys-ec-batch-bar,
+    .ysca-table-card,
+    .ysca-card,
+    .ysca-surface,
+    .ys-ec-card,
+    .ys-ec-filters,
+    .ys-ec-filter-bar,
+    .ys-ec-tabs,
+    .ysca-tabs,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel,
+    .nav-tab-wrapper,
+    section,
+    .ys-ec-pagination,
+    .tablenav
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* v2.43.5 visual refinement: page roots are layout containers. Visible
+ * border/shadow belongs to an explicit surface so admin pages avoid double
+ * frames while keeping the existing SaaS color direction. */
+.ysca-surface,
+.ysca-page-root > .ysca-card,
+.ysca-page-root > .ys-ec-card,
+.ysca-page-root > form.ysca-settings-form {
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line, #edf0f6);
+    border-radius: var(--ysca-radius-card, 12px);
+    box-shadow: 0 8px 20px rgba(22, 34, 51, 0.04);
+}
+
+.ysca-surface,
+.ysca-page-root > form.ysca-settings-form {
+    padding: var(--ysca-admin-card-padding, var(--ysca-space-6, 24px));
+}
+
+.ysca-settings-panel > h3[role="button"] {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ysca-settings-panel > h3[role="button"]::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    margin-left: auto;
+    transform: rotate(45deg);
+    transition: transform 0.16s ease;
+    opacity: 0.62;
+}
+
+.ysca-settings-panel.is-open > h3[role="button"]::after {
+    transform: rotate(225deg);
+}
+
+.ysca-settings-panel > h3[role="button"]:focus-visible {
+    outline: 2px solid var(--ysca-primary, #2563eb);
+    outline-offset: 3px;
+    border-radius: 6px;
+}
+
+.ysca-settings-panel--master > .inside,
+.ysca-settings-panel--master > .ysca-card__body {
+    display: grid;
+    gap: var(--ysca-space-4, 16px);
+}
+
+.ysca-settings-panel--master .ysca-inline-cluster:first-child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ysca-space-4, 16px);
+}
+
+.ysca-settings-panel--master .ysca-inline-cluster:first-child > .ysca-toggle {
+    order: 2;
+    justify-self: end;
+}
+
+.ysca-settings-panel--master .ysca-inline-cluster:first-child > div {
+    order: 1;
+    min-width: 0;
+}
+
+.ysca-settings-panel--master .ysca-btn[type="submit"] {
+    justify-self: stretch;
+}
+
+.ysca-surface + .ysca-surface,
+.ysca-surface + .ysca-card,
+.ysca-surface + .ys-ec-card,
+.ysca-card + .ysca-surface,
+.ys-ec-card + .ysca-surface,
+.ysca-page-root > .ysca-card + .ysca-card,
+.ysca-page-root > .ys-ec-card + .ys-ec-card {
+    margin-top: var(--ysca-space-4, 16px);
+}
+
+/* v2.51.3 Admin Visual Contract: the page root owns vertical rhythm.
+ * Direct page-child surfaces must not stack their own margin on top of
+ * .ysca-page-root gap; nested cards keep their local spacing rules. */
+.ysca-page-root > .ysca-surface + .ysca-surface,
+.ysca-page-root > .ysca-surface + .ysca-card,
+.ysca-page-root > .ysca-surface + .ys-ec-card,
+.ysca-page-root > .ysca-card + .ysca-surface,
+.ysca-page-root > .ys-ec-card + .ysca-surface,
+.ysca-page-root > .ysca-card + .ysca-card,
+.ysca-page-root > .ys-ec-card + .ys-ec-card {
+    margin-top: 0;
+}
+
+.ysca-section {
+    margin-top: var(--ysca-space-5, 20px);
+}
+
+.ysca-section:first-child {
+    margin-top: 0;
+}
+
+.ysca-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-3, 12px);
+    margin-bottom: var(--ysca-space-4, 16px);
+}
+
+.ysca-section-head__title {
+    margin: 0;
+    color: var(--ysca-text, #09090a);
+    font-size: var(--ysca-fs-h2, 18px);
+    font-weight: 700;
+    line-height: var(--ysca-line-tight, 1.18);
+}
+
+.ysca-section-head__desc {
+    width: 100%;
+    margin: 0;
+    color: var(--ysca-muted, #5f6773);
+    font-size: var(--ysca-fs-sm, 12px);
+}
+
+.ysca-page-root .ysca-card .ysca-card,
+.ysca-page-root .ys-ec-card .ys-ec-card,
+.ysca-page-root .ysca-card .ys-ec-card,
+.ysca-page-root .ys-ec-card .ysca-card {
+    background: var(--ysca-card-soft, #fbfcff);
+    box-shadow: none;
+}
+.ysca-row-inactive {
+    opacity: 0.5;
+}
+
+/* ========================================
+   7. 狀態標籤 (.ys-ec-badge)
+   ======================================== */
+.ys-ec-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 綠色系 — 成功 / 已啟用 / 已付款 / 已完成 */
+.ysca-badge-active,
+.ysca-badge-completed {
+    background: var(--ys-ec-success-bg);
+    color: var(--ys-ec-success);
+}
+
+/* 黃色系 — 待處理 / 保留中 */
+.ysca-badge-yellow,
+.ysca-badge-pending,
+.ysca-badge-on-hold {
+    background: var(--ys-ec-warning-bg);
+    color: var(--ys-ec-warning);
+}
+
+/* 紅色系 — 失敗 / 取消 / 危險 / 退款 */
+.ysca-badge-red,
+.ysca-badge-failed,
+.ysca-badge-cancelled,
+.ysca-badge-refunded {
+    background: var(--ys-ec-danger-bg);
+    color: var(--ys-ec-danger);
+}
+
+/* 灰色系 — 草稿 */
+.ysca-badge-gray {
+    background: var(--ys-ec-bg);
+    color: var(--ys-ec-text-muted);
+}
+
+/* 藍色系 — 處理中 / 已出貨 / 資訊 */
+.ysca-badge-blue,
+.ysca-badge-processing,
+.ysca-badge-shipped {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+}
+
+/* 紫色系 — 等待出貨 / 退款 */
+.ys-ec-badge-purple,
+.ys-ec-badge-awaiting-ship {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+/* 青色系 — 已出貨（配送中） */
+.ys-ec-badge-cyan {
+    background: #ecfeff;
+    color: #0891b2;
+}
+
+/* 橘色系 — 異常 */
+.ys-ec-badge-orange,
+.ys-ec-badge-abnormal {
+    background: #fff7ed;
+    color: #ea580c;
+}
+
+/* 深紅色系 — 嚴重失敗 */
+.ys-ec-badge-danger {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+/* ========================================
+   8. 按鈕 (.ys-ec-btn)
+   ======================================== */
+.ys-ec-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    border: none;
+    text-decoration: none;
+    line-height: 1.4;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.ys-ec-btn-primary {
+    background: var(--ys-ec-primary-dark);
+    color: #fff;
+}
+
+.ys-ec-btn-primary:hover {
+    background: #5a7a8a;
+    color: #fff;
+}
+.ysca-btn-success {
+    background: var(--ys-ec-success);
+    color: #fff;
+}
+.ysca-btn-success:hover {
+    background: #6a9a7b;
+    color: #fff;
+}
+
+.ys-ec-btn-danger {
+    background: var(--ys-ec-danger);
+    color: #fff;
+}
+
+.ys-ec-btn-danger:hover {
+    background: #a86c6c;
+    color: #fff;
+}
+
+.ys-ec-btn-outline {
+    background: transparent;
+    color: var(--ys-ec-primary-dark);
+    border: 1.5px solid var(--ys-ec-primary);
+}
+
+.ys-ec-btn-outline:hover {
+    background: var(--ys-ec-primary);
+    color: #fff;
+}
+
+.ys-ec-btn-sm {
+    min-height: 32px;
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 5px;
+}
+
+/* ========================================
+   9. 分頁標籤 (.ys-ec-tabs)
+   ======================================== */
+.ysca-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--ys-ec-border-light);
+    margin-bottom: 24px;
+}
+.ysca-tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ys-ec-text-muted);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    text-decoration: none;
+}
+.ysca-tab:hover {
+    color: var(--ys-ec-primary);
+}
+.ysca-tab.active {
+    color: var(--ys-ec-primary-dark);
+    border-bottom-color: var(--ys-ec-primary);
+}
+
+/* TAB 面板 */
+.ys-ec-tab-panel {
+    display: none;
+}
+
+.ys-ec-tab-panel.active {
+    display: block;
+}
+
+/* ========================================
+   10. 表單 (.ys-ec-form-group)
+   ======================================== */
+.ys-ec-form-group {
+    margin-bottom: 20px;
+}
+
+.ys-ec-form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ys-ec-text);
+    margin-bottom: 6px;
+}
+
+.ys-ec-form-group input[type="text"],
+.ys-ec-form-group input[type="number"],
+.ys-ec-form-group input[type="email"],
+.ys-ec-form-group input[type="url"],
+.ys-ec-form-group input[type="password"],
+.ys-ec-form-group input[type="date"],
+.ys-ec-form-group select,
+.ys-ec-form-group textarea {
+    width: 100%;
+    max-width: 500px;
+    min-height: 38px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 14px;
+    color: var(--ys-ec-text);
+    background: var(--ys-ec-card-bg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ys-ec-form-group input:focus,
+.ys-ec-form-group select:focus,
+.ys-ec-form-group textarea:focus {
+    border-color: var(--ys-ec-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.2);
+}
+
+.ys-ec-form-group .description {
+    font-size: 12px;
+    color: var(--ys-ec-text-muted);
+    margin-top: 4px;
+}
+
+/* 兩欄表單 */
+.ys-ec-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+/* 四欄表單 */
+.ys-ec-form-row-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+/* ========================================
+   10.1 搜尋式選擇器 (.ys-ec-search-select)
+   ======================================== */
+.ys-ec-search-select {
+    position: relative;
+    isolation: isolate;
+}
+
+.ys-ec-search-input {
+    width: 100%;
+    max-width: 500px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 14px;
+    color: var(--ys-ec-text);
+    background: var(--ys-ec-card-bg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ys-ec-search-input:focus {
+    border-color: var(--ys-ec-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.2);
+}
+
+.ys-ec-search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-width: 500px;
+    background: #fff;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 0 0 var(--ys-ec-radius) var(--ys-ec-radius);
+    box-shadow: var(--ys-ec-shadow-hover);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.ys-ec-search-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ys-ec-search-item:hover {
+    background: var(--ys-ec-primary-bg);
+}
+
+.ys-ec-search-item img {
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.ys-ec-search-item small {
+    color: var(--ys-ec-text-muted);
+    margin-left: auto;
+    font-size: 12px;
+}
+
+.ys-ec-search-item-selected {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.ys-ec-search-empty {
+    padding: 12px;
+    color: var(--ys-ec-text-muted);
+    text-align: center;
+    font-size: 13px;
+}
+
+.ys-ec-selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.ys-ec-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.ys-ec-tag-remove {
+    background: none;
+    border: none;
+    color: var(--ys-ec-text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+    line-height: 1;
+}
+
+.ys-ec-tag-remove:hover {
+    color: var(--ys-ec-danger);
+}
+
+/* ========================================
+   10.2 Mix Box 搜尋+勾選選擇器 (.ys-ec-mixbox)
+   ======================================== */
+.ys-ec-mixbox {
+    border: 1.5px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    background: var(--ys-ec-card-bg);
+    overflow: hidden;
+}
+.ys-ec-mixbox-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ys-ec-border-light, #e5e7eb);
+    background: #f9fafb;
+}
+.ys-ec-mixbox-search {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 4px 0;
+    font-size: 13px;
+    outline: none;
+    color: var(--ys-ec-text);
+}
+.ys-ec-mixbox-count {
+    font-size: 11px;
+    color: var(--ys-ec-text-muted);
+    white-space: nowrap;
+    padding: 2px 8px;
+    background: var(--ys-ec-primary-bg);
+    border-radius: 10px;
+    font-weight: 600;
+}
+.ys-ec-mixbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.ys-ec-mixbox-item,
+.ys-ec-form-group .ys-ec-mixbox-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1;
+    transition: background 0.12s;
+}
+.ys-ec-mixbox-item span {
+    line-height: 16px;
+    font-weight: 400;
+}
+.ys-ec-mixbox-item:hover {
+    background: var(--ys-ec-primary-bg);
+}
+.ys-ec-mixbox-item input[type="checkbox"] {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    accent-color: var(--ys-ec-primary);
+}
+.ys-ec-mixbox-item.ys-ec-mixbox-hidden {
+    display: none;
+}
+.ys-ec-mixbox-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--ys-ec-text-muted);
+    font-size: 13px;
+    display: none;
+}
+
+/* ========================================
+   11. 篩選按鈕 (.ys-ec-filters)
+   ======================================== */
+.ys-ec-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.ys-ec-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ys-ec-text-muted);
+    background: transparent;
+    border: 1px solid var(--ys-ec-border);
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    text-decoration: none;
+}
+
+.ys-ec-filter-btn:hover {
+    color: var(--ys-ec-primary-dark);
+    border-color: var(--ys-ec-primary-light);
+    background: var(--ys-ec-primary-bg);
+}
+
+.ys-ec-filter-btn.active {
+    background: var(--ys-ec-primary);
+    color: #fff;
+    border-color: var(--ys-ec-primary);
+}
+
+.ys-ec-filters select,
+.ys-ec-filters input {
+    padding: 6px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 13px;
+    color: var(--ys-ec-text);
+}
+
+/* ========================================
+   12. 狀態分頁標籤 (.ys-ec-status-tabs)
+   ======================================== */
+.ys-ec-status-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.ys-ec-status-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ys-ec-text-muted);
+    background: var(--ys-ec-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    text-decoration: none;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+}
+
+.ys-ec-status-tab:hover {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+    border-color: var(--ys-ec-primary-light);
+}
+
+.ys-ec-status-tab.active {
+    background: var(--ys-ec-primary);
+    color: #fff;
+    border-color: var(--ys-ec-primary);
+}
+
+/* ========================================
+   13. 詳情頁佈局 (.ys-ec-detail-layout)
+   ======================================== */
+.ys-ec-detail-layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+}
+
+.ys-ec-detail-sidebar .ys-ec-card {
+    position: sticky;
+    top: 56px;
+}
+
+.ys-ec-sidebar-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 12px 0;
+}
+
+.ys-ec-sidebar-stat {
+    text-align: center;
+    padding: 12px;
+    background: var(--ys-ec-bg);
+    border-radius: var(--ys-ec-radius);
+}
+
+.ys-ec-sidebar-stat .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ys-ec-text);
+}
+
+.ys-ec-sidebar-stat .stat-label {
+    font-size: 11px;
+    color: var(--ys-ec-text-muted);
+    margin-top: 2px;
+}
+
+/* ========================================
+   14. 設定頁佈局 (.ys-ec-settings-layout)
+   ======================================== */
+.ys-ec-settings-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 24px;
+}
+
+.ys-ec-settings-nav {
+    position: sticky;
+    top: 56px;
+    align-self: start;
+}
+
+.ys-ec-settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ys-ec-text-muted);
+    text-decoration: none;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    margin-bottom: 2px;
+}
+
+.ys-ec-settings-nav-item .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.ys-ec-settings-nav-item:hover {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+}
+
+.ys-ec-settings-nav-item.active {
+    background: var(--ys-ec-primary);
+    color: #fff;
+}
+
+.ys-ec-settings-nav-item.active .dashicons {
+    color: #fff;
+}
+
+/* ========================================
+   15. 通知 (.ys-ec-notice)
+   ======================================== */
+.ys-ec-notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 0 var(--ys-ec-radius) var(--ys-ec-radius) 0;
+    border-left: 4px solid var(--ys-ec-border);
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--ys-ec-text);
+}
+
+.ys-ec-notice-info {
+    background: var(--ys-ec-info-bg);
+    border-left-color: var(--ys-ec-primary);
+}
+
+.ys-ec-notice-success {
+    background: var(--ys-ec-success-bg);
+    border-left-color: var(--ys-ec-success);
+}
+
+.ys-ec-notice-warning {
+    background: var(--ys-ec-warning-bg);
+    border-left-color: var(--ys-ec-warning);
+}
+
+.ys-ec-notice-error {
+    background: var(--ys-ec-danger-bg);
+    border-left-color: var(--ys-ec-danger);
+}
+
+/* ========================================
+   16. 空狀態 (.ys-ec-empty-state)
+   ======================================== */
+.ys-ec-empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--ys-ec-text-muted);
+}
+
+.ys-ec-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    color: var(--ys-ec-border);
+}
+
+.ys-ec-empty-state h3 {
+    color: var(--ys-ec-text-muted);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.ys-ec-empty-state p {
+    font-size: 14px;
+    color: var(--ys-ec-text-muted);
+}
+
+/* ========================================
+   17. 圖表容器 (.ys-ec-chart-container)
+   ======================================== */
+.ysca-chart-container {
+    position: relative;
+    height: 400px;
+    margin: 20px 0;
+}
+.ysca-chart-container canvas {
+    max-height: 400px;
+}
+
+.ysca-dashboard-chart {
+    height: 360px;
+    min-height: 280px;
+    max-height: 360px;
+    overflow: hidden;
+}
+
+.ysca-dashboard-chart canvas,
+#ysEcDashboardChart {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 360px !important;
+}
+
+.ys-ec-chart-container-sm {
+    height: 300px;
+}
+
+.ys-ec-chart-container-sm canvas {
+    max-height: 300px;
+}
+
+/* ========================================
+   18. 分頁 (.ys-ec-pagination)
+   ======================================== */
+.ys-ec-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    margin-top: 20px;
+}
+
+.ys-ec-pagination a,
+.ys-ec-pagination span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+}
+
+.ys-ec-pagination a {
+    color: var(--ys-ec-text-muted);
+    background: var(--ys-ec-bg);
+    border: 1px solid var(--ys-ec-border-light);
+}
+
+.ys-ec-pagination a:hover {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+    border-color: var(--ys-ec-primary-light);
+}
+
+.ys-ec-pagination .current {
+    background: var(--ys-ec-primary);
+    color: #fff;
+    border: 1px solid var(--ys-ec-primary);
+}
+
+/* ========================================
+   19. KPI 卡片 (.ys-ec-kpi-grid)
+   ======================================== */
+.ys-ec-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.ys-ec-kpi-card {
+    background: var(--ys-ec-card-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    padding: 20px 24px;
+    box-shadow: var(--ys-ec-shadow);
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    border-left: 4px solid var(--ys-ec-border);
+}
+
+.ys-ec-kpi-card:hover {
+    box-shadow: var(--ys-ec-shadow-hover);
+    transform: translateY(-1px);
+}
+
+.ys-ec-kpi-card .kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ys-ec-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.ys-ec-kpi-card .kpi-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ys-ec-text);
+}
+
+.ys-ec-kpi-card .kpi-change {
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.ys-ec-kpi-card .kpi-change.up { color: var(--ys-ec-success); }
+.ys-ec-kpi-card .kpi-change.down { color: var(--ys-ec-danger); }
+
+/* KPI 左邊框色彩變體 */
+.ys-ec-kpi-card.primary { border-left-color: var(--ys-ec-primary); }
+.ys-ec-kpi-card.success { border-left-color: var(--ys-ec-success); }
+.ys-ec-kpi-card.warning { border-left-color: var(--ys-ec-warning); }
+.ys-ec-kpi-card.danger  { border-left-color: var(--ys-ec-danger); }
+
+/* ========================================
+   20. 開關 (.ys-ec-switch)
+   ======================================== */
+.ysca-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+.ysca-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.ysca-switch-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--ys-ec-border);
+    border-radius: 24px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+.ysca-switch-slider::before {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.ysca-switch input:checked + .ys-ec-switch-slider,
+.ysca-switch input:checked + .ysca-switch-slider {
+    background: var(--ys-ec-success);
+}
+.ysca-switch input:checked + .ys-ec-switch-slider::before,
+.ysca-switch input:checked + .ysca-switch-slider::before {
+    transform: translateX(20px);
+}
+.ysca-switch input:focus + .ys-ec-switch-slider,
+.ysca-switch input:focus + .ysca-switch-slider {
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.2);
+}
+
+/* ========================================
+   21. 響應式設計
+   ======================================== */
+@media (max-width: 1200px) {
+    .ys-ec-detail-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-detail-sidebar .ys-ec-card {
+        position: static;
+    }
+}
+
+@media (max-width: 960px) {
+    .ys-ec-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .ys-ec-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .ys-ec-settings-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-settings-nav {
+        position: static;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .ys-ec-settings-nav-item {
+        margin-bottom: 0;
+    }
+
+    .ys-ec-detail-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-form-row-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .ys-ec-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .ys-ec-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ys-ec-filter-btn {
+        justify-content: center;
+    }
+
+    .ys-ec-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-form-row-4 {
+        grid-template-columns: 1fr;
+    }
+.ysca-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 600px) {
+    .ys-ec-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ys-ec-page-title {
+        font-size: 18px;
+    }
+
+    .ys-ec-stat-card {
+        padding: 16px;
+    }
+
+    .ys-ec-card {
+        padding: 16px;
+    }
+}
+
+/* ========================================
+   訂單歷程時間軸
+   ======================================== */
+.ys-ec-timeline {
+    position: relative;
+    padding-left: 24px;
+}
+
+.ys-ec-timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--ys-ec-border-light);
+}
+
+.ys-ec-timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.ys-ec-timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.ys-ec-timeline-dot {
+    position: absolute;
+    left: -24px;
+    top: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+.ys-ec-dot-success {
+    background: var(--ys-ec-success);
+}
+
+.ys-ec-dot-warning {
+    background: var(--ys-ec-warning);
+}
+
+.ys-ec-dot-danger {
+    background: var(--ys-ec-danger);
+}
+
+.ys-ec-dot-info {
+    background: var(--ys-ec-primary);
+}
+
+.ys-ec-timeline-time {
+    font-size: 12px;
+    color: var(--ys-ec-text-muted);
+}
+
+.ys-ec-timeline-text {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 2px 0;
+}
+
+.ys-ec-timeline-actor {
+    font-size: 12px;
+    color: var(--ys-ec-text-muted);
+}
+
+/* ========================================
+   訂單詳情表格
+   ======================================== */
+.ys-ec-detail-table {
+    width: 100%;
+}
+
+.ys-ec-detail-table th {
+    width: 120px;
+    padding: 8px 12px 8px 0;
+    font-size: 13px;
+    color: var(--ys-ec-text-muted);
+    font-weight: 600;
+    text-align: left;
+    vertical-align: top;
+}
+
+.ys-ec-detail-table td {
+    padding: 8px 0;
+    font-size: 14px;
+}
+
+.ys-ec-detail-table tr + tr {
+    border-top: 1px solid var(--ys-ec-border-light);
+}
+
+
+/* ========================================
+   折扣類型教學指引區塊
+   ======================================== */
+.ys-ec-discount-guide {
+    background: var(--ys-ec-info-bg, #e8eff5);
+    border: 1px solid var(--ys-ec-primary-light, #b3c7d3);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ys-ec-text);
+    display: none;
+}
+.ys-ec-discount-guide strong {
+    color: var(--ys-ec-primary-dark, #6b8a9a);
+}
+.ys-ec-discount-guide code {
+    background: rgba(143, 168, 184, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.ys-ec-discount-guide .ys-ec-guide-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--ys-ec-primary-dark, #6b8a9a);
+}
+.ys-ec-discount-guide ul {
+    margin: 4px 0 4px 16px;
+    padding: 0;
+    list-style: disc;
+}
+.ys-ec-discount-guide ul li {
+    margin-bottom: 2px;
+}
+.ys-ec-discount-auto-note {
+    display: none;
+    color: var(--ys-ec-primary-dark, #6b8a9a);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 4px 0;
+}
+.ys-ec-free-shipping-badge {
+    display: none;
+    background: var(--ys-ec-success-bg, #e8f3ec);
+    color: var(--ys-ec-success, #7dab8e);
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+/* ========================================
+   後台側邊選單 — 分組分隔標題
+   ======================================== */
+
+/* 分組標題樣式 */
+#adminmenu .ys-ec-menu-separator {
+    display: block;
+    padding: 8px 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8fa8b8;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 8px;
+    pointer-events: none;
+}
+
+/* 分隔項目連結禁止點擊 */
+#adminmenu li a[href*="ys-ec-sep-"] {
+    pointer-events: none;
+    cursor: default;
+    opacity: 1;
+}
+
+/* 分隔項目 hover 時不要顯示背景高亮 */
+#adminmenu li a[href*="ys-ec-sep-"]:hover,
+#adminmenu li a[href*="ys-ec-sep-"]:focus {
+    background: none !important;
+    color: inherit !important;
+}
+
+/* ========================================
+   商品類型標籤
+   ======================================== */
+.ys-ec-type-simple { background: var(--ys-ec-primary-bg); color: var(--ys-ec-primary-dark); }
+.ys-ec-type-variable { background: var(--ys-ec-success-bg); color: #166534; }
+.ys-ec-type-subscription { background: #fef3c7; color: #92400e; }
+.ys-ec-type-virtual { background: #ede9fe; color: #5b21b6; }
+
+/* ========================================
+   分類階層縮排
+   ======================================== */
+.ys-ec-category-indent-1 { padding-left: 20px; }
+.ys-ec-category-indent-2 { padding-left: 40px; }
+.ys-ec-category-indent-3 { padding-left: 60px; }
+.ys-ec-category-indent-1::before,
+.ys-ec-category-indent-2::before,
+.ys-ec-category-indent-3::before {
+    content: '\2514\00a0';
+    color: var(--ys-ec-border);
+}
+
+/* ========================================
+   設定表單寬度限制
+   ======================================== */
+.ysca-settings-form .ys-ec-form-group {
+    max-width: 600px;
+}
+.ysca-settings-form .ys-ec-form-row {
+    max-width: 800px;
+}
+
+/* ========================================
+   通用表單輸入元件
+   ======================================== */
+.ysca-page-root input[type="text"]:not(.ysca-input),
+.ysca-page-root input[type="number"]:not(.ysca-input),
+.ysca-page-root input[type="email"]:not(.ysca-input),
+.ysca-page-root input[type="url"]:not(.ysca-input),
+.ysca-page-root input[type="search"]:not(.ysca-input),
+.ysca-page-root input[type="date"]:not(.ysca-input),
+.ysca-page-root input[type="datetime-local"]:not(.ysca-input),
+.ysca-page-root input[type="tel"]:not(.ysca-input),
+.ysca-page-root input[type="password"]:not(.ysca-input),
+.ysca-page-root textarea:not(.ysca-textarea),
+.ysca-page-root select:not(.ysca-select) {
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--ys-ec-text);
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+.ysca-page-root input:not(.ysca-input):focus,
+.ysca-page-root textarea:not(.ysca-textarea):focus,
+.ysca-page-root select:not(.ysca-select):focus {
+    border-color: var(--ys-ec-primary);
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.15);
+    outline: none;
+}
+
+/* 通知統一 */
+.ys-ec-notice {
+    padding: 12px 16px;
+    border-radius: var(--ys-ec-radius);
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ys-ec-notice-success {
+    background: var(--ys-ec-success-bg);
+    color: var(--ys-ec-success);
+    border: 1px solid var(--ys-ec-success);
+}
+
+.ys-ec-notice-error {
+    background: var(--ys-ec-danger-bg);
+    color: var(--ys-ec-danger);
+    border: 1px solid var(--ys-ec-danger);
+}
+
+.ys-ec-notice-info {
+    background: var(--ys-ec-info-bg);
+    color: var(--ys-ec-primary-dark);
+    border: 1px solid var(--ys-ec-primary-light);
+}
+
+/* 空狀態 */
+.ys-ec-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--ys-ec-text-muted);
+}
+
+.ys-ec-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--ys-ec-border);
+    margin-bottom: 12px;
+    display: block;
+}
+
+.ys-ec-empty-state h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ys-ec-text-muted);
+    margin: 0;
+}
+
+/* 工具列 */
+.ys-ec-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--ys-ec-card-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    margin-bottom: 16px;
+}
+
+/* 分頁統一 */
+.ys-ec-pagination {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 16px;
+    justify-content: center;
+}
+
+.ys-ec-pagination a,
+.ys-ec-pagination span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 6px;
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--ys-ec-text);
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+}
+
+.ys-ec-pagination a:hover {
+    background: var(--ys-ec-primary-bg);
+    border-color: var(--ys-ec-primary-light);
+}
+
+.ys-ec-pagination .current {
+    background: var(--ys-ec-primary);
+    color: #fff;
+    border-color: var(--ys-ec-primary);
+}
+
+/* 表格列操作（已統一在 Section 5 定義） */
+
+/* 媒體預覽區（後台商品圖片） */
+.ys-ec-media-section .ys-ec-main-image-preview:hover {
+    border-color: var(--ys-ec-primary-light);
+}
+
+/* ========================================
+   20. 商品列表縮圖
+   ======================================== */
+.ys-ec-product-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--ys-ec-border-light);
+}
+
+.ys-ec-product-thumb-placeholder {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    background: var(--ys-ec-bg);
+    border-radius: 6px;
+}
+
+/* ========================================
+   21. 規格表格輸入
+   ======================================== */
+.ys-ec-variant-input {
+    width: 80px !important;
+    padding: 5px 6px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.ys-ec-variant-input-sku {
+    width: 120px !important;
+    min-width: 120px;
+}
+
+.ys-ec-variant-gallery-cell {
+    min-width: 200px;
+}
+
+/* 規格尺寸/重量欄位 — 預設隱藏，勾選後顯示 */
+.ys-ec-variant-dim-col {
+    display: none;
+}
+
+.ys-ec-variant-dims-enabled .ys-ec-variant-dim-col {
+    display: table-cell;
+}
+
+/* 規格列表表格欄位間距調整 */
+#ys-ec-variants-table {
+    margin-top: 12px;
+}
+
+#ys-ec-variants-table td,
+#ys-ec-variants-table th {
+    padding: 10px 6px;
+}
+
+/* 規格名稱欄加 padding */
+#ys-ec-variants-table td:first-child,
+#ys-ec-variants-table th:first-child {
+    padding-left: 16px;
+}
+
+/* 規格名稱欄（第 2 欄）：給足寬度且不逐字直書換行
+   （v2.52.24 修正：先前無 min-width，欄位被其他輸入擠到近 0 寬導致
+    「格/式:/實/體/書」逐字換行）。 */
+#ys-ec-variants-table td:nth-child(2),
+#ys-ec-variants-table th:nth-child(2) {
+    min-width: 132px;
+    white-space: nowrap;
+}
+
+/* SKU 欄（第 3 欄）輸入加寬（先前誤指第 2 欄、套到規格欄的隱藏 input、無效果） */
+#ys-ec-variants-table td:nth-child(3) input {
+    min-width: 140px;
+}
+
+/* 履約下拉：給足寬度讓「繼承商品 / 實體＋數位」可讀
+   （屬性選擇器鎖定，不受欄位增減影響；先前無寬度被擠成不可讀的窄框）。 */
+#ys-ec-variants-table [data-ys-variant-fulfillment-mode] {
+    min-width: 108px;
+}
+
+/* 圖庫欄加寬（以 cell class 鎖定，取代先前誤指第 6 欄=庫存的規則） */
+#ys-ec-variants-table .ysca-variant-gallery-cell {
+    min-width: 92px;
+}
+
+/* 操作欄（×）縮小 */
+#ys-ec-variants-table td:last-child {
+    text-align: center;
+    width: 40px;
+}
+
+.ysca-variant-main-row + .ysca-variant-file-row > td {
+    border-top: 0;
+}
+
+.ysca-variant-file-row > td {
+    background: #f8fafc;
+    padding: 0 16px 14px 52px !important;
+}
+
+.ysca-variant-file-panel {
+    display: grid;
+    gap: 10px;
+    max-width: 980px;
+    padding: 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 8px;
+    background: var(--ys-ec-card-bg);
+}
+
+.ysca-variant-file-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ysca-variant-file-panel__head strong {
+    display: block;
+    font-size: 13px;
+    color: var(--ys-ec-text);
+}
+
+.ysca-variant-file-panel__head span {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ys-ec-text-muted);
+}
+
+/* 規格折扣價儲存格 */
+.ys-ec-variant-sale-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ys-ec-variant-sale-toggle {
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--ys-ec-text-muted);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.ys-ec-variant-sale-toggle:hover {
+    color: var(--ys-ec-primary);
+}
+
+.ys-ec-variant-sale-toggle.active {
+    color: var(--ys-ec-primary);
+}
+
+.ys-ec-variant-sale-dates {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+}
+
+.ys-ec-variant-sale-dates.active {
+    max-height: 60px;
+    padding: 6px 16px;
+}
+
+.ys-ec-variant-sale-dates label {
+    font-size: 12px;
+    color: var(--ys-ec-text-muted);
+    margin: 0;
+}
+
+.ys-ec-variant-sale-dates input[type="date"] {
+    padding: 3px 6px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 4px;
+    font-size: 12px;
+    width: 130px;
+}
+
+.ys-ec-variant-sale-dates-hint {
+    font-size: 11px;
+    color: var(--ys-ec-text-muted);
+    font-style: italic;
+    padding: 2px 0 0 0;
+    display: block;
+}
+
+/* ========================================
+   22. Sticky 儲存按鈕
+   ======================================== */
+.ysca-sticky-save {
+    position: sticky;
+    bottom: 0;
+    background: var(--ys-ec-card-bg);
+    border-top: 1px solid var(--ys-ec-border-light);
+    padding: 16px 24px;
+    margin: 0 -24px -20px;
+    border-radius: 0 0 var(--ys-ec-radius) var(--ys-ec-radius);
+    z-index: 5;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ========================================
+   23. 工具列搜尋輸入
+   ======================================== */
+.ys-ec-toolbar {
+    padding: 12px 16px;
+}
+
+.ys-ec-toolbar-search {
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 8px;
+    font-size: 13px;
+    width: 240px;
+}
+
+.ys-ec-toolbar-search:focus {
+    border-color: var(--ys-ec-primary);
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.15);
+    outline: none;
+}
+
+/* ========================================
+   24. 全寬表單輸入
+   ======================================== */
+.ysca-input-full {
+    width: 100%;
+}
+
+/* ========================================
+   25. 屬性列
+   ======================================== */
+.ys-ec-attribute-row {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.ys-ec-attribute-row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.ys-ec-attribute-input {
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+/* 設定按鈕（小圖示） */
+.ys-ec-btn-icon {
+    background: none;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 4px 6px;
+    color: var(--ys-ec-text-muted);
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+}
+
+.ys-ec-btn-icon:hover {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary);
+    border-color: var(--ys-ec-primary-light);
+}
+
+/* 刪除屬性按鈕（小） */
+.ys-ec-attr-remove {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+    line-height: 1;
+    border: none;
+    background: transparent;
+    color: var(--ys-ec-danger, #c08080);
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ys-ec-attr-remove:hover {
+    background: var(--ys-ec-danger-light);
+}
+
+/* 規格列表刪除按鈕（小） */
+.ys-ec-remove-variant {
+    background: none !important;
+    border: none !important;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 4px;
+}
+
+.ys-ec-remove-variant:hover {
+    color: var(--ys-ec-danger);
+}
+
+/* ========================================
+   26. 搜尋列與批次操作列
+   ======================================== */
+.ys-ec-search-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ys-ec-search-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 13px;
+}
+
+.ys-ec-date-input {
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 13px;
+}
+
+.ys-ec-batch-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--ysca-space-3, 12px);
+    margin: 0 0 var(--ysca-space-4, 16px);
+    padding: var(--ysca-space-2, 8px) var(--ysca-space-3, 12px);
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-card, 16px);
+    box-shadow: var(--ysca-shadow-card, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+.ys-ec-batch-actions {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+
+.ys-ec-batch-select {
+    padding: 8px 12px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    font-size: 13px;
+    background: #fff;
+}
+
+body.ysca-active .ys-ec-batch-bar {
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-card, 16px);
+    box-shadow: var(--ysca-shadow-card, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+body.ysca-active .ysca-list-action-bar .ysca-batch-select,
+body.ysca-active .ysca-list-action-bar .ys-ec-batch-select,
+body.ysca-active .ys-ec-batch-bar .ysca-batch-select,
+body.ysca-active .ys-ec-batch-bar .ys-ec-batch-select {
+    align-self: center;
+    width: auto;
+    height: var(--ysca-control-h-sm, 32px);
+    min-height: var(--ysca-control-h-sm, 32px);
+    line-height: calc(var(--ysca-control-h-sm, 32px) - 2px);
+    min-width: var(--ysca-select-sm, 160px);
+    max-width: 100%;
+    padding-block: 0;
+    flex: 0 0 auto;
+}
+
+body.ysca-active .ysca-list-action-bar .ysca-btn,
+body.ysca-active .ys-ec-batch-bar .ysca-btn,
+body.ysca-active .ysca-admin-order-batch-print {
+    flex: 0 0 auto;
+}
+
+.ysca-compact-bulk-actions {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    justify-content: flex-start;
+    margin: 0 0 12px;
+    padding: 0;
+}
+
+.ysca-compact-bulk-actions .ys-ec-batch-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ysca-compact-bulk-actions .ysca-batch-select,
+.ysca-compact-bulk-actions .ys-ec-batch-select {
+    flex: 0 0 auto;
+    height: var(--ysca-control-h-sm, 32px);
+    line-height: calc(var(--ysca-control-h-sm, 32px) - 2px);
+    max-width: min(220px, 100%);
+    min-height: var(--ysca-control-h-sm, 32px);
+    min-width: var(--ysca-select-sm, 160px);
+    padding-block: 0;
+    width: auto;
+}
+
+.ysca-compact-bulk-actions .ysca-btn {
+    flex: 0 0 auto;
+}
+
+.ysca-credit-overview-grid {
+    display: grid;
+    gap: var(--ysca-space-4, 16px);
+    grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+}
+
+.ysca-credit-overview-grid > .ysca-card {
+    margin: 0;
+}
+
+@media (max-width: 1100px) {
+    .ysca-credit-overview-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   27. 通用輔助 class
+   ======================================== */
+.ys-ec-text-muted {
+    color: var(--ys-ec-text-muted);
+}
+
+.ys-ec-text-sm {
+    font-size: 12px;
+}
+
+.ys-ec-text-right {
+    text-align: right;
+}
+
+.ys-ec-text-center {
+    text-align: center;
+}
+
+.ys-ec-font-semibold {
+    font-weight: 600;
+}
+
+.ys-ec-no-padding {
+    padding: 0;
+}
+
+.ys-ec-overflow-hidden {
+    overflow: hidden;
+}
+
+.ys-ec-card .inside.ys-ec-inside-flush,
+.ys-ec-inside-flush {
+    padding-top: 0 !important;
+}
+
+.ys-ec-link-primary {
+    color: var(--ys-ec-primary-dark);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.ys-ec-link-primary:hover {
+    color: var(--ys-ec-primary);
+}
+
+.ys-ec-del-price {
+    color: #94a3b8;
+}
+
+.ys-ec-sale-price {
+    color: #ef4444;
+    font-weight: 700;
+}
+
+.ys-ec-stock-unmanaged {
+    color: #94a3b8;
+}
+
+.ys-ec-total-count {
+    color: var(--ys-ec-text-muted);
+    font-size: 13px;
+}
+
+/* ========================================
+   28. 商品表單兩欄佈局
+   ======================================== */
+.ysca-product-form-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    align-items: start;
+}
+/* 右欄（即時摘要 + 活動期間）sticky：左欄較長時，右側不再留下大片靜止空白。 */
+.ysca-product-form-sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+}
+.ysca-product-form-main .ys-ec-form-group input[type="text"],
+.ysca-product-form-main .ys-ec-form-group input[type="number"],
+.ysca-product-form-main .ys-ec-form-group input[type="date"],
+.ysca-product-form-main .ys-ec-form-group select,
+.ysca-product-form-main .ys-ec-form-group textarea {
+    max-width: 100%;
+}
+.ysca-product-form-sidebar .ys-ec-card:first-child {
+    position: static;
+}
+.ysca-product-form-sidebar .ys-ec-form-group input[type="text"],
+.ysca-product-form-sidebar .ys-ec-form-group input[type="number"],
+.ysca-product-form-sidebar .ys-ec-form-group select {
+    max-width: 100%;
+}
+
+/* ========================================
+   29. 圖片上傳區
+   ======================================== */
+.ys-ec-image-upload-area {
+    border: 2px dashed var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    background: var(--ys-ec-bg);
+    min-height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ys-ec-image-upload-area:hover {
+    border-color: var(--ys-ec-primary);
+    background: var(--ys-ec-primary-bg);
+}
+
+.ys-ec-image-preview {
+    position: relative;
+    display: inline-block;
+}
+
+.ys-ec-image-preview img {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: var(--ys-ec-radius);
+    border: 1px solid var(--ys-ec-border-light);
+}
+
+.ys-ec-image-upload-area .ys-ec-image-preview img {
+    width: 160px;
+    height: 160px;
+}
+
+.ys-ec-image-remove {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--ys-ec-danger);
+    color: #fff;
+    border: 2px solid #fff;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    padding: 0;
+    z-index: 2;
+}
+
+.ys-ec-image-remove:hover {
+    background: #a86c6c;
+}
+
+.ys-ec-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+    min-height: 40px;
+}
+
+.ys-ec-gallery-grid .ys-ec-gallery-item {
+    position: relative;
+}
+
+.ys-ec-gallery-grid .ys-ec-gallery-item img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    border-radius: var(--ys-ec-radius);
+    border: 1px solid var(--ys-ec-border-light);
+}
+
+/* 拖曳排序預留位 */
+.ys-ec-sortable-placeholder {
+    background: var(--ys-ec-primary-bg);
+    border: 2px dashed var(--ys-ec-primary-light);
+    border-radius: var(--ys-ec-radius);
+    height: 100px;
+}
+
+/* ========================================
+   29b. 統一媒體管理器
+   ======================================== */
+.ys-ec-media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+    min-height: 40px;
+}
+
+.ys-ec-media-item {
+    position: relative;
+    width: 100%;
+    height: 100px;
+    border-radius: var(--ys-ec-radius);
+    overflow: hidden;
+    border: 1px solid var(--ys-ec-border-light);
+    cursor: move;
+}
+
+.ys-ec-media-item img,
+.ys-ec-media-item video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.ys-ec-media-item .ys-ec-media-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ys-ec-danger);
+    color: #fff;
+    border: 2px solid #fff;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 18px;
+    text-align: center;
+    padding: 0;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.ys-ec-media-item:hover .ys-ec-media-remove {
+    opacity: 1;
+}
+
+.ys-ec-media-item .ys-ec-media-remove:hover {
+    background: #a86c6c;
+}
+
+.ys-ec-media-video-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 20px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    pointer-events: none;
+}
+
+.ys-ec-media-cover-badge {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: rgba(245, 158, 11, 0.9);
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.ys-ec-media-cover-badge .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
+.ys-ec-media-placeholder {
+    background: var(--ys-ec-primary-bg);
+    border: 2px dashed var(--ys-ec-primary-light);
+    border-radius: var(--ys-ec-radius);
+    height: 100px;
+}
+
+/* ========================================
+   30. 分類 checkbox tree
+   ======================================== */
+.ys-ec-category-tree {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    padding: 12px;
+    background: #fafbfc;
+}
+
+.ys-ec-category-tree label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.ys-ec-category-tree .children {
+    padding-left: 20px;
+}
+
+/* ========================================
+   31. 精選商品星號（列表頁）
+   ======================================== */
+.ys-ec-featured-star {
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--ys-ec-border);
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    padding: 2px;
+    line-height: 1;
+}
+
+.ys-ec-featured-star:hover {
+    color: #f59e0b;
+}
+
+.ys-ec-featured-star.is-featured {
+    color: #f59e0b;
+}
+
+/* ========================================
+   32. 商品表單兩欄 RWD
+   ======================================== */
+@media (max-width: 960px) {
+    .ys-ec-product-form-layout {
+        grid-template-columns: 1fr;
+    }
+    /* 單欄時取消 sticky，避免右欄卡在捲動位置。 */
+    .ysca-product-form-sidebar {
+        position: static;
+    }
+}
+
+/* ========================================
+   33. 使用說明頁面
+   ======================================== */
+
+/* 目錄區塊 */
+.ysca-help-toc {
+    margin-bottom: 24px;
+}
+.ysca-help-toc-list {
+    columns: 2;
+    column-gap: 32px;
+    margin: 0;
+    padding-left: 20px;
+}
+.ysca-help-toc-list li {
+    margin-bottom: 6px;
+    break-inside: avoid;
+}
+.ysca-help-toc-list li a {
+    color: var(--ys-ec-primary-dark);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color var(--ys-ec-transition);
+}
+.ysca-help-toc-list li a:hover {
+    color: var(--ys-ec-primary);
+    text-decoration: underline;
+}
+
+/* 通用說明文字 */
+.ysca-help-intro {
+    color: var(--ys-ec-text-muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+/* 短代碼區塊 */
+.ysca-help-shortcode-block {
+    background: var(--ys-ec-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: var(--ys-ec-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.ysca-help-shortcode-block:last-child {
+    margin-bottom: 0;
+}
+.ysca-help-shortcode-name {
+    margin: 0 0 8px 0;
+    font-size: 15px;
+    color: var(--ys-ec-text);
+}
+.ysca-help-shortcode-name code {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+}
+.ysca-help-shortcode-block > p {
+    color: var(--ys-ec-text-muted);
+    font-size: 13px;
+    margin: 0 0 12px 0;
+    line-height: 1.5;
+}
+
+/* 參數表格 */
+.ysca-help-param-table {
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+.ysca-help-param-table th {
+    background: var(--ys-ec-card-bg);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.ysca-help-param-table td code {
+    background: #fff;
+    border: 1px solid var(--ys-ec-border-light);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--ys-ec-primary-dark);
+}
+
+/* 使用範例 */
+.ysca-help-example {
+    background: var(--ys-ec-card-bg);
+    border: 1px solid var(--ys-ec-border-light);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.8;
+}
+.ysca-help-example strong {
+    color: var(--ys-ec-text);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.ysca-help-example code {
+    background: var(--ys-ec-primary-bg);
+    color: var(--ys-ec-primary-dark);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: inline-block;
+    margin: 2px 0;
+    word-break: break-all;
+}
+
+/* 子區塊標題 */
+.ysca-help-subsection {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ys-ec-border-light);
+}
+.ysca-help-subsection:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+.ysca-help-subsection h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ys-ec-primary-dark);
+    margin: 0 0 10px 0;
+}
+
+/* 說明列表 */
+.ysca-help-list {
+    margin: 0;
+    padding-left: 20px;
+}
+.ysca-help-list li {
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ys-ec-text);
+}
+.ysca-help-list li strong {
+    color: var(--ys-ec-text);
+}
+
+/* ========================================
+   頂部操作按鈕列
+   ======================================== */
+.ys-ec-product-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.ys-ec-product-actions-bar .ys-ec-btn {
+    min-height: 38px;
+    height: 38px;
+}
+
+.ys-ec-product-actions-bar .ys-ec-btn-delete {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ys-ec-danger, #c08080);
+    border: 1px solid var(--ys-ec-danger, #c08080);
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s;
+    text-decoration: none;
+}
+
+.ys-ec-product-actions-bar .ys-ec-btn-delete .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.ys-ec-product-actions-bar .ys-ec-btn-delete:hover {
+    background: #a06060;
+    color: #fff;
+    border-color: #a06060;
+}
+
+/* ========================================
+   屬性色票橫向排列
+   ======================================== */
+.ys-ec-swatch-settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px;
+    background: var(--ys-ec-bg, #f7f9fb);
+    border-radius: 6px;
+    margin-top: 8px;
+}
+
+.ys-ec-swatch-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ys-ec-swatch-item label {
+    font-size: 13px;
+    min-width: 30px;
+}
+
+.ys-ec-swatch-item input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--ys-ec-border);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 1px;
+}
+
+/* ─── 商品介紹圖庫（後台） ─── */
+.ys-ec-description-gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 12px 0;
+}
+
+.ys-ec-desc-gallery-item {
+    position: relative;
+    border: 1px solid var(--ys-ec-border-light, #e2e8f0);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ys-ec-desc-gallery-item img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.ys-ec-desc-gallery-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.ys-ec-desc-gallery-remove:hover {
+    background: rgba(220,38,38,0.8);
+}
+
+/* 使用說明 RWD */
+@media (max-width: 768px) {
+    .ys-ec-help-toc-list {
+        columns: 1;
+    }
+
+    .ys-ec-help-shortcode-block {
+        padding: 14px;
+    }
+
+    .ys-ec-help-param-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+
+/* ========================================
+   下拉式多選元件 (.ys-ec-multiselect)
+   ======================================== */
+.ysca-multiselect {
+    position: relative;
+    max-width: 500px;
+}
+.ysca-multiselect-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border: 1.5px solid var(--ys-ec-border);
+    border-radius: var(--ys-ec-radius);
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ys-ec-text);
+    transition: border-color 0.2s;
+    user-select: none;
+}
+.ysca-multiselect-trigger:hover {
+    border-color: var(--ys-ec-primary);
+}
+
+.ys-ec-multiselect.open .ys-ec-multiselect-trigger,
+.ysca-multiselect.open .ysca-multiselect-trigger {
+    border-color: var(--ys-ec-primary);
+    box-shadow: 0 0 0 3px rgba(143, 168, 184, 0.15);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.ysca-multiselect-arrow::after {
+    content: '\25BC';
+    font-size: 10px;
+    color: var(--ys-ec-text-muted);
+    transition: transform 0.2s;
+}
+
+.ys-ec-multiselect.open .ys-ec-multiselect-arrow::after,
+.ysca-multiselect.open .ysca-multiselect-arrow::after {
+    content: '\25B2';
+}
+.ysca-multiselect-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    border: 1.5px solid var(--ys-ec-primary);
+    border-top: none;
+    border-radius: 0 0 var(--ys-ec-radius) var(--ys-ec-radius);
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+}
+
+.ys-ec-multiselect.open .ys-ec-multiselect-dropdown,
+.ysca-multiselect.open .ysca-multiselect-dropdown {
+    display: block;
+}
+.ysca-multiselect-search {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-bottom: 1px solid var(--ys-ec-border-light);
+    font-size: 13px;
+    outline: none;
+    box-sizing: border-box;
+    background: var(--ys-ec-bg);
+}
+.ysca-multiselect-search:focus {
+    background: #fff;
+}
+.ysca-multiselect-list {
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.ysca-ms-group {
+    padding: 0;
+}
+.ysca-ms-group-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ys-ec-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: var(--ys-ec-bg);
+    border-top: 1px solid var(--ys-ec-border-light);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.ysca-ms-group:first-child .ys-ec-ms-group-label {
+    border-top: none;
+}
+.ysca-ms-group-toggle {
+    background: none;
+    border: none;
+    font-size: 11px;
+    color: var(--ys-ec-primary-dark);
+    cursor: pointer;
+    padding: 0;
+}
+.ysca-ms-group-toggle:hover {
+    text-decoration: underline;
+}
+.ysca-ms-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ys-ec-text);
+    transition: background 0.1s;
+}
+.ysca-ms-item:hover {
+    background: var(--ys-ec-primary-bg);
+}
+.ysca-ms-item input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+.ysca-ms-item code {
+    font-size: 10px;
+    color: var(--ys-ec-text-muted);
+    margin-left: 2px;
+}
+
+/* ========================================
+   贈品模式（擇一贈品）— 規則表格簡化欄位
+   當 type=gift 且 gift_mode=pick_one 時，
+   隱藏前 4 欄（門檻金額/門檻數量/折扣方式/折扣值），
+   僅顯示贈品商品 / 贈品規格 / 贈品數量 / 操作
+   ======================================== */
+.ys-ec-gift-columns-only th:nth-child(-n+4),
+.ys-ec-gift-columns-only td:nth-child(-n+4) {
+    display: none;
+}
+
+/* ========================================
+   階梯折扣模式 — 規則表格簡化欄位
+   當 type=step_discount 時，
+   隱藏後 3 欄（贈品商品 / 贈品規格 / 贈品數量），
+   保留前 4 欄（門檻金額/門檻數量/折扣方式/折扣值）+ 操作欄
+   ======================================== */
+.ys-ec-step-columns-only th:nth-child(n+5):not(:last-child),
+.ys-ec-step-columns-only td:nth-child(n+5):not(:last-child) {
+    display: none;
+}
+
+/* ========================================
+   階梯贈品模式 — 規則表格簡化欄位
+   當 type=gift 且 gift_mode=tiered 時，
+   隱藏折扣欄（3-4 欄：折扣方式/折扣值），
+   保留門檻欄（1-2 欄）+ 贈品欄（5-7 欄）+ 操作欄
+   ======================================== */
+.ys-ec-tiered-gift-columns th:nth-child(3),
+.ys-ec-tiered-gift-columns td:nth-child(3),
+.ys-ec-tiered-gift-columns th:nth-child(4),
+.ys-ec-tiered-gift-columns td:nth-child(4) {
+    display: none;
+}
+
+/* ========================================
+   贈品搜尋選擇器（Product Picker）
+   ======================================== */
+.ys-ec-product-picker {
+    position: relative;
+    min-width: 180px;
+}
+.ys-ec-picker-search {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+.ys-ec-picker-search:focus {
+    border-color: var(--ys-ec-primary, #4f46e5);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+}
+.ys-ec-picker-dropdown {
+    display: none;
+    position: absolute;
+    z-index: 100;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+}
+.ys-ec-picker-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.15s;
+}
+.ys-ec-picker-item:last-child {
+    border-bottom: none;
+}
+.ys-ec-picker-item:hover {
+    background-color: #f5f5f5;
+}
+.ys-ec-picker-selected {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #f0f4ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 4px;
+    font-size: 13px;
+}
+.ys-ec-picker-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #1e1b4b;
+}
+.ys-ec-picker-selected .ys-ec-tag-remove {
+    background: none;
+    border: none;
+    color: #6366f1;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.ys-ec-picker-selected .ys-ec-tag-remove:hover {
+    color: #dc2626;
+}
+.ys-ec-variant-select {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* v2.35.9: align legacy YS admin primary buttons with the AA admin shell palette. */
+body.ysca-active .ys-ec-btn-primary,
+body.ysca-active .ys-ec-btn.button-primary {
+    color: #fff;
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+}
+
+body.ysca-active .ys-ec-btn-primary:hover,
+body.ysca-active .ys-ec-btn-primary:focus,
+body.ysca-active .ys-ec-btn-primary:active,
+body.ysca-active .ys-ec-btn.button-primary:hover,
+body.ysca-active .ys-ec-btn.button-primary:focus,
+body.ysca-active .ys-ec-btn.button-primary:active {
+    color: #fff;
+    background: var(--ysca-primary-hover);
+    border-color: var(--ysca-primary-hover);
+}
+
+/* v2.43.8: shared filter tabs must win over legacy ys-ec-filter-btn underline/pill rules. */
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab.active,
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab.is-active,
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab[aria-current="page"] {
+    color: #fff;
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+}
+
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab.active::after,
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab.is-active::after,
+body.ysca-active .ysca-filter-tabs .ysca-filter-tab[aria-current="page"]::after {
+    display: none;
+}
+
+/* v2.43.5 visual refinement form/surface compatibility layer. Kept at the
+ * bottom so it can normalize legacy admin pages while they migrate page by
+ * page from form-table / inline widths to explicit ysca fields. */
+.ysca-form-grid,
+.ysca-page-root .inside.ysca-form-grid {
+    display: grid;
+    gap: var(--ysca-space-4, 16px) var(--ysca-space-5, 20px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ysca-form-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ysca-form-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ysca-form-grid--compact {
+    gap: var(--ysca-space-3, 12px);
+}
+
+/* v2.45.18 Phase R2.2-E：description-flex modifier — 用於公司／商店詳細資訊
+ * markup：
+ *   div.ysca-form-grid.ysca-form-grid--description-flex
+ *     > p.ysca-form-grid__description    （說明文字，佔 100% width）
+ *     > div.ysca-form-grid__fields       （inputs flex 容器，wrap、三欄）
+ *         > div.ysca-form-field × N
+ *
+ * 用 body.ysca-active 前綴 + !important 提升 specificity，覆寫上方
+ * `.ysca-form-grid { display: grid; grid-template-columns: repeat(2, …) }`
+ * 預設規則（v2.45.17 .ysca-form-grid--3 specificity 教訓）。
+ */
+body.ysca-active .ysca-form-grid--description-flex {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--ysca-space-4, 16px);
+}
+
+body.ysca-active .ysca-form-grid--description-flex > .ysca-form-grid__description {
+    width: 100%;
+    margin: 0;
+    color: var(--ysca-muted, #6b7280);
+}
+
+body.ysca-active .ysca-form-grid--description-flex > .ysca-form-grid__fields {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: var(--ysca-space-3, 12px);
+    width: 100%;
+}
+
+body.ysca-active .ysca-form-grid--description-flex > .ysca-form-grid__fields > .ysca-form-field {
+    flex: 0 1 calc(33.333% - 12px) !important;
+    min-width: 240px;
+    box-sizing: border-box;
+}
+
+.ysca-inline-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-stack-sm {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-field,
+.ysca-page-root .ys-ec-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ysca-space-2, 8px);
+    min-width: 0;
+}
+
+.ysca-field__label,
+.ysca-page-root .ys-ec-form-group > label {
+    color: var(--ysca-text, #111827);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    font-size: var(--ysca-fs-sm, 13px);
+    font-weight: 800;
+    line-height: 1.35;
+    margin: 0;
+}
+
+.ysca-field__help,
+.ysca-field__hint,
+.ysca-page-root .description {
+    color: var(--ysca-muted, #64748b);
+    font-size: var(--ysca-fs-sm, 12px);
+    line-height: 1.55;
+    margin: 0;
+}
+
+.ysca-page-root input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.ysca-input),
+.ysca-page-root select:not([multiple]):not(.ysca-select),
+.ysca-page-root textarea:not(.ysca-textarea) {
+    min-height: 42px;
+    width: 100%;
+    border: 1px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-sm, 8px);
+    background: #fff;
+    color: var(--ysca-text, #111827);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.4;
+    padding: 9px 12px;
+    box-shadow: none;
+}
+
+.ysca-page-root textarea:not(.ysca-textarea) {
+    min-height: 96px;
+}
+
+body.toplevel_page_ys-cart .wrap input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.ysca-input),
+body.toplevel_page_ys-cart .wrap select:not([multiple]):not(.ysca-select),
+body[class*="_page_ys-ec-"] .wrap input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.ysca-input),
+body[class*="_page_ys-ec-"] .wrap select:not([multiple]):not(.ysca-select) {
+    min-height: 40px;
+    max-width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-sm, 8px);
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.ysca-page-root input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.ysca-input):focus,
+.ysca-page-root select:not(.ysca-select):focus,
+.ysca-page-root textarea:not(.ysca-textarea):focus {
+    border-color: var(--ysca-primary, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+/* Narrow modifier for single-choice selects that should not stretch to full width (v2.45.11). */
+.ysca-input--narrow,
+.ysca-select--narrow {
+    max-width: 380px;
+    width: 100%;
+}
+
+/*
+ * Filter section primitives (v2.45.13)
+ *
+ * User-specified width contract for list-page filter <input>/<select> controls:
+ * "搜尋跟 SELECT 寬度感覺可以固定 30~32%"
+ *
+ * Pre-fix (LIVE evidence):
+ *  - Order page  (?page=ys-ec-orders)        — search input + shipping select = 827px (full-width)
+ *  - Product page (?page=ys-ec-products)     — 「所有類型」「所有分類」 = 629px x 2 (left-half full)
+ *  - Shipping print (?page=ys-ec-shipping-print) — 3 selects = 520px x 3 (2x2 grid waste)
+ *
+ * Contract:
+ *  - width 32%   — three controls + gap ≈ 100% page width (3-up filter row)
+ *  - max  380px  — caps wide-viewport stretch (same ceiling as .ysca-select--narrow)
+ *  - min  240px  — floor for narrow viewport / single control rows
+ *  - .ysca-filter-row uses flex-wrap so 3+ controls stack on narrow viewports
+ *
+ * Distinct from .ysca-select--narrow (setting pages, single-control rows, no row container).
+ */
+.ysca-filter-input,
+.ysca-filter-select,
+.ysca-filter-control {
+    width: 32%;
+    max-width: 380px;
+    min-width: 240px;
+}
+
+.ysca-filter-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-page-root select[multiple] {
+    background: #fff;
+    border: 1px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-sm, 8px);
+    color: var(--ysca-text, #111827);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.45;
+    min-height: 140px;
+    padding: 8px;
+    width: 100%;
+}
+
+.ysca-page-root select[multiple] option {
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.ysca-input-group {
+    position: relative;
+    width: 100%;
+}
+
+.ysca-input-group__prefix,
+.ysca-input-prefix {
+    align-items: center;
+    color: var(--ysca-muted, #64748b);
+    display: inline-flex;
+    font-size: var(--ysca-fs-sm, 13px);
+    height: 100%;
+    left: 12px;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+}
+
+.ysca-input-group input,
+.ysca-input-group .ysca-input {
+    padding-left: 28px !important;
+}
+
+.ysca-stack-spaced {
+    margin-top: 20px;
+}
+
+.ysca-table-narrow {
+    max-width: 600px;
+}
+
+.ysca-stats-grid-single {
+    grid-template-columns: repeat(1, 1fr) !important;
+}
+
+.ysca-stat-grid-narrow {
+    margin-bottom: 20px;
+    max-width: 300px;
+}
+
+.ysca-toggle {
+    display: inline-block;
+    height: 24px;
+    position: relative;
+    vertical-align: middle;
+    width: 44px;
+}
+
+.ysca-toggle input {
+    height: 0;
+    opacity: 0;
+    width: 0;
+}
+
+.ysca-toggle .slider {
+    background: #ccc;
+    border-radius: 24px;
+    cursor: pointer;
+    inset: 0;
+    position: absolute;
+    transition: 0.25s;
+}
+
+.ysca-toggle .slider::before {
+    background: #fff;
+    border-radius: 50%;
+    bottom: 3px;
+    content: "";
+    height: 18px;
+    left: 3px;
+    position: absolute;
+    transition: 0.25s;
+    width: 18px;
+}
+
+.ysca-toggle input:checked + .slider {
+    background: #27ae60;
+}
+
+.ysca-toggle input:checked + .slider::before {
+    transform: translateX(20px);
+}
+
+.ysca-field--divider {
+    border-top: 1px dashed var(--ysca-line-strong, #dbe2ee);
+    margin-top: var(--ysca-space-3, 12px);
+    padding-top: var(--ysca-space-3, 12px);
+}
+
+.ysca-choice-panel,
+.ysca-page-root .ys-ec-option-picker,
+.ysca-page-root .ys-ec-product-picker {
+    background: #fff;
+    border: 1px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-sm, 8px);
+    overflow: hidden;
+}
+
+.ysca-choice-panel__search,
+.ysca-page-root .ys-ec-picker-search {
+    border: 0 !important;
+    border-bottom: 1px solid var(--ysca-line, #edf0f6) !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+}
+
+.ysca-choice-panel__body,
+.ysca-page-root .ys-ec-picker-dropdown {
+    max-height: 220px;
+    overflow: auto;
+}
+
+.ysca-check-list--panel {
+    background: #fff;
+    border: 1px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-sm, 8px);
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+    max-height: 220px;
+    overflow: auto;
+    padding: var(--ysca-space-3, 12px);
+}
+
+.ysca-check-list--compact {
+    max-height: 150px;
+}
+
+.ysca-choice-group-label {
+    margin: var(--ysca-space-1, 4px) 0 0;
+    color: var(--ysca-muted, #64748b);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.ysca-choice-group-label:first-child {
+    margin-top: 0;
+}
+
+.ysca-check-card,
+.ysca-page-root .ys-ec-checkbox-label {
+    align-items: center;
+    display: inline-flex;
+    gap: var(--ysca-space-2, 8px);
+    min-height: 34px;
+}
+
+.ysca-page-root .form-table {
+    width: 100%;
+}
+
+.ysca-page-root .form-table th {
+    width: 190px;
+    color: var(--ysca-text, #09090a);
+    font-size: var(--ysca-fs-sm, 12px);
+}
+
+.ysca-page-root .form-table td {
+    color: var(--ysca-text-body, #4c505b);
+}
+
+.ysca-field--md,
+.ysca-page-root .regular-text,
+.ysca-page-root input[type="text"]:not(.ysca-input),
+.ysca-page-root input[type="email"]:not(.ysca-input),
+.ysca-page-root input[type="password"]:not(.ysca-input),
+.ysca-page-root input[type="url"]:not(.ysca-input),
+.ysca-page-root input[type="tel"]:not(.ysca-input),
+.ysca-page-root select:not(.ysca-select) {
+    max-width: min(520px, 100%);
+}
+
+.ysca-field--lg,
+.ysca-page-root textarea:not(.ysca-textarea),
+.ysca-page-root .large-text {
+    max-width: min(720px, 100%);
+}
+
+.ysca-field--compact,
+.ysca-page-root input[type="number"]:not(.ysca-input),
+.ysca-page-root input[type="date"]:not(.ysca-input),
+.ysca-page-root input[type="datetime-local"]:not(.ysca-input) {
+    max-width: min(220px, 100%);
+}
+
+.ysca-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ysca-space-2, 8px);
+    margin-top: var(--ysca-space-5, 20px);
+    padding-top: var(--ysca-space-4, 16px);
+    border-top: 1px solid var(--ysca-line, #edf0f6);
+}
+
+.ysca-actions-bar--table {
+    justify-content: flex-start;
+    margin-top: 0;
+    padding: var(--ysca-space-3, 12px) var(--ysca-space-4, 16px);
+    border-top: 1px solid var(--ysca-line, #edf0f6);
+}
+
+.ysca-card--flush {
+    padding: 0;
+    overflow: hidden;
+}
+
+.ysca-settings-card > .inside.ysca-form-grid {
+    padding-top: var(--ysca-space-2, 8px);
+}
+
+.ysca-addon-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ysca-addon-form-grid .ysca-field--wide {
+    grid-column: 1 / -1;
+}
+
+.ysca-field--inline {
+    display: inline-flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    min-height: 44px;
+    justify-content: flex-start;
+}
+
+.ysca-switch-label--trailing {
+    width: 100%;
+    justify-content: space-between;
+    padding: var(--ysca-space-3, 12px) var(--ysca-space-4, 16px);
+    background: var(--ysca-card-soft, #fbfcff);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-input, 12px);
+    box-sizing: border-box;
+}
+
+.ysca-switch-label--trailing .ysca-switch {
+    order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.ysca-switch-label--trailing strong {
+    order: 1;
+}
+
+.ysca-check-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-check-line {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    color: var(--ysca-text, #111827);
+    font-size: var(--ysca-fs-sm, 13px);
+    font-weight: 600;
+}
+
+.ysca-check-line input[type="checkbox"] {
+    margin: 0;
+}
+
+.ysca-native-multiselect {
+    width: 100%;
+    min-height: 118px;
+}
+
+.ysca-native-multiselect--sm {
+    min-height: 92px;
+}
+
+.ysca-table-input {
+    width: 100%;
+    min-height: 36px;
+}
+
+.ysca-table-input--id {
+    max-width: 92px;
+}
+
+.ysca-table-input--sm {
+    max-width: 76px;
+}
+
+.ysca-table-input--md {
+    max-width: 116px;
+}
+
+.ysca-table-id {
+    width: 56px;
+}
+
+.ysca-empty-cell {
+    padding: var(--ysca-space-8, 32px);
+    text-align: center;
+}
+
+.ysca-tabs--scroll,
+.ysca-page-root .ysca-tabs {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* v2.43.13: final shared tab primitive. This intentionally lives at the end of
+ * the late-loaded admin base file so page, report, settings, legacy WP tabs,
+ * and migrated filter tabs cannot drift into separate visual systems again. */
+body.ysca-active .ysca-tabs,
+body.ysca-active .ys-ec-tabs,
+body.ysca-active .ys-ec-tabs-nav,
+body.ysca-active .nav-tab-wrapper {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    max-width: 100%;
+    margin: 0 0 var(--ysca-space-5, 20px);
+    padding: 0 0 var(--ysca-space-2, 8px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ysca-line, #edf0f6);
+    box-shadow: none;
+}
+
+body.ysca-active .ysca-tabs--navigation,
+body.ysca-active nav.ysca-tabs[role="tablist"],
+body.ysca-active .ysca-tabs--with-indicator {
+    margin: 0 0 var(--ysca-space-4, 16px);
+    padding: var(--ysca-space-2, 8px);
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-card, 16px);
+    box-shadow: var(--ysca-shadow-card, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+body.ysca-active .ysca-tabs::-webkit-scrollbar,
+body.ysca-active .ys-ec-tabs::-webkit-scrollbar,
+body.ysca-active .ys-ec-tabs-nav::-webkit-scrollbar,
+body.ysca-active .nav-tab-wrapper::-webkit-scrollbar,
+body.ysca-active .ysca-filter-tabs::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+body.ysca-active .ysca-tab,
+body.ysca-active .ys-ec-tab,
+body.ysca-active .ys-ec-tab-btn,
+body.ysca-active .nav-tab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ysca-space-2, 8px);
+    min-height: 40px;
+    height: auto;
+    padding: 0 var(--ysca-space-3, 12px);
+    color: var(--ysca-muted, #64748b);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ysca-radius-pill, 999px);
+    box-shadow: none;
+    font-family: var(--ysca-font-sans, inherit);
+    font-size: var(--ysca-fs-sm, 13px);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition:
+        background-color var(--ysca-motion, 160ms ease),
+        border-color var(--ysca-motion, 160ms ease),
+        color var(--ysca-motion, 160ms ease),
+        box-shadow var(--ysca-motion, 160ms ease);
+}
+
+body.ysca-active .ysca-tab:hover,
+body.ysca-active .ys-ec-tab:hover,
+body.ysca-active .ys-ec-tab-btn:hover,
+body.ysca-active .nav-tab:hover {
+    color: var(--ysca-primary, #2563eb);
+    background: var(--ysca-primary-soft, #eef4ff);
+    border-color: rgba(37, 99, 235, 0.16);
+}
+
+body.ysca-active .ysca-tab:focus-visible,
+body.ysca-active .ys-ec-tab:focus-visible,
+body.ysca-active .ys-ec-tab-btn:focus-visible,
+body.ysca-active .nav-tab:focus-visible,
+body.ysca-active .ysca-filter-tab:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, 0.34);
+    outline-offset: 2px;
+}
+
+body.ysca-active .ysca-tab.active,
+body.ysca-active .ysca-tab.is-active,
+body.ysca-active .ysca-tab[aria-selected="true"],
+body.ysca-active .ysca-tab[aria-current="page"],
+body.ysca-active .ys-ec-tab.active,
+body.ysca-active .ys-ec-tab[aria-selected="true"],
+body.ysca-active .ys-ec-tab-btn.ys-ec-tab-active,
+body.ysca-active .nav-tab.nav-tab-active {
+    color: #fff;
+    background: var(--ysca-primary, #2563eb);
+    border-color: var(--ysca-primary, #2563eb);
+    box-shadow: 0 8px 18px rgba(39, 114, 239, 0.18);
+}
+
+body.ysca-active .ysca-tab::after,
+body.ysca-active .ys-ec-tab::after,
+body.ysca-active .ys-ec-tab-btn::after,
+body.ysca-active .nav-tab::after {
+    display: none !important;
+}
+
+body.ysca-active .ysca-tab__icon,
+body.ysca-active .ysca-tab .dashicons,
+body.ysca-active .ys-ec-tab .dashicons,
+body.ysca-active .ys-ec-tab-btn .dashicons,
+body.ysca-active .nav-tab .dashicons,
+body.ysca-active .ysca-filter-tab .dashicons {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    font-size: 16px;
+    line-height: 1;
+    flex: 0 0 16px;
+}
+
+body.ysca-active .ysca-filter-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+body.ysca-active .ys-ec-admin > .ys-ec-filters:has(> .ys-ec-filter-btn) {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    max-width: 100%;
+    margin: 0 0 var(--ysca-space-5, 20px);
+    padding: 0 0 var(--ysca-space-2, 8px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ysca-line, #edf0f6);
+    box-shadow: none;
+}
+
+body.ysca-active .ys-ec-admin > .ys-ec-filters:has(> .ys-ec-filter-btn)::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+body.ysca-active .ys-ec-admin > .ysca-filter-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    max-width: 100%;
+    margin: 0 0 var(--ysca-space-3, 12px);
+    padding: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-card, 16px);
+    box-shadow: var(--ysca-shadow-card, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+/* v2.47.10: runtime cascade guard for the global 16px inner-page gap.
+ * Several legacy tab/filter/section rules are loaded later or with stronger
+ * selectors, so this high-specificity reset must stay after those rules. */
+.ysca-page-root > :is(
+    .ysca-page-head,
+    .ys-ec-page-header,
+    .ysca-admin-page-hero,
+    .ysca-product-hero,
+    .ys-ec-admin-product-hero,
+    .ysca-admin-order-hero,
+    .ys-ec-admin-order-hero,
+    .ysca-kpi-grid,
+    .ysca-stats-grid,
+    .ys-ec-stats-grid,
+    .ysca-filter-tabs,
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row,
+    .ysca-list-action-bar,
+    .ys-ec-batch-bar,
+    .ysca-table-card,
+    .ysca-card,
+    .ysca-surface,
+    .ys-ec-card,
+    .ys-ec-filters,
+    .ys-ec-filter-bar,
+    .ys-ec-tabs,
+    .ysca-tabs,
+    .ysca-section,
+    .ysca-tab-content,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel,
+    .nav-tab-wrapper,
+    form,
+    section,
+    table,
+    .ys-ec-pagination,
+    .tablenav
+),
+.ysca-active .ys-ec-admin > :is(
+    .ysca-page-head,
+    .ys-ec-page-header,
+    .ysca-admin-page-hero,
+    .ysca-product-hero,
+    .ys-ec-admin-product-hero,
+    .ysca-admin-order-hero,
+    .ys-ec-admin-order-hero,
+    .ysca-kpi-grid,
+    .ysca-stats-grid,
+    .ys-ec-stats-grid,
+    .ysca-filter-tabs,
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row,
+    .ysca-list-action-bar,
+    .ys-ec-batch-bar,
+    .ysca-table-card,
+    .ysca-card,
+    .ysca-surface,
+    .ys-ec-card,
+    .ys-ec-filters,
+    .ys-ec-filter-bar,
+    .ys-ec-tabs,
+    .ysca-tabs,
+    .ysca-section,
+    .ysca-tab-content,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel,
+    .nav-tab-wrapper,
+    form,
+    section,
+    table,
+    .ys-ec-pagination,
+    .tablenav
+),
+body.ysca-active .ysca-page-root > :is(
+    .ysca-filter-tabs,
+    .ysca-section,
+    .ysca-tab-content
+),
+body.ysca-active .ys-ec-admin > :is(
+    .ysca-filter-tabs,
+    .ysca-section,
+    .ysca-tab-content
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* v2.47.14: keep the inner-page rhythm single-sourced from page/card gap.
+ * Legacy tab, card-head, and action-bar margins otherwise stack on top of
+ * .ysca-page-root / .ysca-stack-* gaps and create 32px+ visual holes. */
+.ysca-page-root > :is(
+    .ysca-tabs--navigation,
+    nav.ysca-tabs[role="tablist"],
+    .ysca-tabs--with-indicator,
+    .tab-content,
+    .ysca-tab-content,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel
+),
+body.ysca-active .ysca-page-root > :is(
+    .ysca-tabs--navigation,
+    nav.ysca-tabs[role="tablist"],
+    .ysca-tabs--with-indicator,
+    .tab-content,
+    .ysca-tab-content,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel
+),
+body.ysca-active .ys-ec-admin > :is(
+    .ysca-tabs--navigation,
+    nav.ysca-tabs[role="tablist"],
+    .ysca-tabs--with-indicator,
+    .tab-content,
+    .ysca-tab-content,
+    .ys-ec-tab-panel,
+    .ysca-tab-panel
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ysca-page-root :is(
+    .ysca-card,
+    .ys-ec-card,
+    .ysca-surface
+):is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > .ysca-card__head,
+body.ysca-active .ysca-page-root :is(
+    .ysca-card,
+    .ys-ec-card,
+    .ysca-surface
+):is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > .ysca-card__head {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ysca-page-root :is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > :is(.ysca-card, .ys-ec-card, .ysca-surface, .ysca-section),
+body.ysca-active .ysca-page-root :is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > :is(.ysca-card, .ys-ec-card, .ysca-surface, .ysca-section) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ysca-page-root :is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > .ysca-actions-bar:not(.ysca-actions-bar--table):not(.ysca-sticky-save),
+body.ysca-active .ysca-page-root :is(.ysca-stack-sm, .ysca-stack-md, .ysca-stack-lg) > .ysca-actions-bar:not(.ysca-actions-bar--table):not(.ysca-sticky-save) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn:hover {
+    color: var(--ysca-primary, #2563eb);
+    background: var(--ysca-primary-soft, #eef4ff);
+    border-color: rgba(37, 99, 235, 0.16);
+}
+
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn.active,
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn.is-active,
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn[aria-current="page"] {
+    color: #fff;
+    background: var(--ysca-primary, #2563eb);
+    border-color: var(--ysca-primary, #2563eb);
+}
+
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn.active::after,
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn.is-active::after,
+body.ysca-active .ys-ec-admin > .ys-ec-filters > .ys-ec-filter-btn[aria-current="page"]::after {
+    display: none !important;
+}
+
+@media (max-width: 782px) {
+    .ysca-page-root {
+        margin-top: 0;
+    }
+
+    .ysca-surface,
+    .ysca-page-root > form.ysca-settings-form {
+        padding: var(--ysca-space-4, 16px);
+    }
+
+    .ysca-page-root .form-table,
+    .ysca-page-root .form-table tbody,
+    .ysca-page-root .form-table tr,
+    .ysca-page-root .form-table th,
+    .ysca-page-root .form-table td {
+        display: block;
+        width: 100%;
+        padding-right: 0;
+        padding-left: 0;
+    }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  v2.45.11 — ysca-btn label nowrap hotfix
+/*
+/*  Root cause：.ysca-btn 是 inline-flex container,
+/*  在窄欄位（如 Email 範本 table 「操作」欄)中、若 button label
+/*  純中文 4 字（例「測試寄送」)、瀏覽器會在每個 CJK 字之間
+/*  允許 break point、導致按鈕內文垂直堆疊（測/試/寄/送）。
+/*  Fix: white-space: nowrap 強制 button 文字一行不換行;
+/*  button 寬度仍依內容自適應（不破壞 layout）。
+/* ═══════════════════════════════════════════════════ */
+.ysca-btn {
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  v2.45.14 — Phase 4A web-design-guidelines compliance
+/*
+/*  Source: https://raw.githubusercontent.com/vercel-labs/
+/*          web-interface-guidelines/main/command.md
+/*
+/*  範圍:
+/*   A. utility classes — tabular-nums / truncate / line-clamp
+/*   B. focus-visible ring — 補強既有 :focus 規則為鍵盤友善
+/*   C. prefers-reduced-motion safeguard — 全域 disable
+/*   D. touch-action: manipulation — 防 mobile double-tap delay
+/*   E. text-wrap: balance — heading widow 防止
+/*
+/*  不破壞既有 selector — 全部 additive 規則。
+/* ═══════════════════════════════════════════════════ */
+
+/* --- A1. Tabular nums（金額 / 庫存 / 統計 / 任何數字 column） ----- */
+.ysca-num,
+.ysca-table .ysca-num,
+.ysca-table td.ysca-num,
+.ys-ec-table .ysca-num,
+.ys-ec-table td.ysca-num,
+.ysca-stat-value,
+.ys-ec-stat-card .ys-ec-stat-value,
+.ys-ec-kpi-card .ys-ec-kpi-value {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* --- A2. Truncate（單行省略號）------------------------------------ */
+/*  注意：flex container 的 child 用 .ysca-truncate 時、父 flex item
+/*  可能需要額外 min-width: 0 才能正確 ellipsis（已含於本 utility）。 */
+.ysca-truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- A3. Line clamp（多行省略號）---------------------------------- */
+.ysca-line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ysca-line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* --- A4. Flex children min-width fix（搭配 .ysca-truncate）-------- */
+/*  「批次列印」「測試寄送」垂直 wrap 同 root cause 之 fix —
+/*  flex item 預設 min-width: auto、會撐開超出 container；
+/*  此 utility 讓 flex item 可以縮小至 0 並讓 .ysca-truncate 生效。 */
+.ysca-flex-min-w-0,
+.ysca-truncate-parent > * {
+    min-width: 0;
+}
+
+/* --- D. Touch action — interactive elements ----------------------- */
+/*  防 mobile Safari / Chrome double-tap zoom 300ms delay。 */
+.ysca-btn,
+.ysca-btn--primary,
+.ysca-btn--secondary,
+.ysca-btn--ghost,
+.ysca-btn--danger,
+.ys-ec-btn,
+.ys-ec-btn-primary,
+.ys-ec-btn-danger,
+.ys-ec-btn-outline,
+.ys-ec-btn-icon,
+.ys-ec-filter-btn,
+.ys-ec-status-tab,
+.ysca-tabs__item,
+.ysca-nav__link,
+.ys-ec-settings-nav-item {
+    touch-action: manipulation;
+}
+
+/* --- E. Text wrap balance — heading widow 防止 -------------------- */
+.ysca-page-head__title,
+.ysca-section__title,
+.ysca-card__title,
+.ys-ec-page-title,
+.ys-ec-card-title,
+.ysca-page-root h1,
+.ysca-page-root h2,
+.ysca-page-root h3 {
+    text-wrap: balance;
+}
+
+/* --- B. Focus-visible ring — 鍵盤友善焦點環 ----------------------- */
+/*  Pattern: :focus-visible only（不顯示在滑鼠 click)、
+/*  使用 box-shadow ring 不影響 layout（outline 在 border-radius
+/*  邊緣會有 anti-alias 瑕疵)。 */
+:root {
+    --ysca-focus-ring-color: rgba(31, 93, 207, 0.32);
+    --ysca-focus-ring-width: 3px;
+}
+
+.ysca-btn:focus-visible,
+.ysca-btn--primary:focus-visible,
+.ysca-btn--secondary:focus-visible,
+.ysca-btn--ghost:focus-visible,
+.ysca-btn--danger:focus-visible,
+.ys-ec-btn:focus-visible,
+.ys-ec-btn-primary:focus-visible,
+.ys-ec-btn-danger:focus-visible,
+.ys-ec-btn-outline:focus-visible,
+.ys-ec-btn-icon:focus-visible,
+.ys-ec-filter-btn:focus-visible,
+.ys-ec-status-tab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--ysca-focus-ring-width) var(--ysca-focus-ring-color);
+}
+
+.ysca-input:focus-visible,
+.ysca-select:focus-visible,
+.ysca-textarea:focus-visible,
+.ys-ec-form-group input:focus-visible,
+.ys-ec-form-group select:focus-visible,
+.ys-ec-form-group textarea:focus-visible,
+.ys-ec-search-input:focus-visible,
+.ysca-page-root input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus-visible,
+.ysca-page-root select:focus-visible,
+.ysca-page-root textarea:focus-visible {
+    outline: none;
+    border-color: var(--ys-ec-primary, #1f5dcf);
+    box-shadow: 0 0 0 var(--ysca-focus-ring-width) var(--ysca-focus-ring-color);
+}
+
+.ysca-checkbox:focus-visible,
+.ysca-radio:focus-visible,
+.ysca-page-root input[type="checkbox"]:focus-visible,
+.ysca-page-root input[type="radio"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--ysca-focus-ring-width) var(--ysca-focus-ring-color);
+}
+
+/* Compound control focus-within — wrapper highlights when child focused */
+.ysca-input-group:focus-within,
+.ysca-search-box:focus-within {
+    box-shadow: 0 0 0 var(--ysca-focus-ring-width) var(--ysca-focus-ring-color);
+}
+
+/* --- C. Reduce motion safeguard — 全域 transition / animation kill ---- */
+/*  Respects prefers-reduced-motion: reduce — disable 所有 animation /
+/*  transition / smooth scroll。不能改 0 因會破壞 JS race condition、
+/*  改 0.01ms 既保留事件 timing 又達成 perception 無動畫。 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  v2.45.15 — Phase 5B admin TAB markup unification
+/*
+/*  Root cause: 3 admin list pages（訂單 / 商品 / 商店設定）
+/*  歷史各自實作 status / filter / settings TAB:
+/*    - YSOrderAdmin    : .ys-ec-filters > .ys-ec-filter-btn
+/*    - YSProductAdmin  : .ys-ec-filters > .ys-ec-filter-btn
+/*    - YSSettingsAdmin : .ysca-tabs > .ysca-tab
+/*
+/*  Phase 5B 引入 BEM canonical primitive `.ysca-tabs__item`
+/*  作為跨 page 統一 marker（不取代既有 visual system,
+/*  僅 markup 層加 dual class + ARIA + count BEM）。
+/*
+/*  策略：把 .ysca-tabs__item 加進既有 v2.43.13 shared tab primitive
+/*  的 selector group 繼承同視覺。舊 selector 100% 保留供 backward
+/*  compat（coding-standards.md §Dual-Class Migration Policy)。
+/* ═══════════════════════════════════════════════════ */
+
+/*  Base visual: 與 .ysca-tab / .ys-ec-filter-btn 同 pill 樣式。 */
+body.ysca-active .ysca-tabs__item {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ysca-space-2, 8px);
+    min-height: 38px;
+    padding: 0 var(--ysca-space-3, 12px);
+    color: var(--ysca-muted, #64748b);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ysca-radius-pill, 999px);
+    font-size: var(--ysca-fs-sm, 13px);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition:
+        background-color var(--ysca-motion, 160ms ease),
+        color var(--ysca-motion, 160ms ease),
+        border-color var(--ysca-motion, 160ms ease);
+}
+
+body.ysca-active .ysca-tabs__item:hover {
+    color: var(--ysca-primary, #2563eb);
+    background: var(--ysca-primary-soft, #eef4ff);
+    border-color: rgba(37, 99, 235, 0.16);
+}
+
+/*  Active state — BEM modifier + ARIA + legacy class 四種等價。 */
+body.ysca-active .ysca-tabs__item--active,
+body.ysca-active .ysca-tabs__item.active,
+body.ysca-active .ysca-tabs__item.is-active,
+body.ysca-active .ysca-tabs__item[aria-selected="true"],
+body.ysca-active .ysca-tabs__item[aria-current="page"] {
+    color: #fff;
+    background: var(--ysca-primary, #2563eb);
+    border-color: var(--ysca-primary, #2563eb);
+    box-shadow: 0 8px 18px rgba(39, 114, 239, 0.18);
+}
+
+body.ysca-active .ysca-tabs__item:focus-visible {
+    outline: 2px solid var(--ysca-focus-ring-color, rgba(37, 99, 235, 0.34));
+    outline-offset: 2px;
+}
+
+/*  Count badge BEM — 既有 markup 把 (15) 直接放 anchor text、
+/*  新 BEM 用 <span class="ysca-tabs__count">15</span> 包起來。 */
+body.ysca-active .ysca-tabs__count {
+    margin-left: var(--ysca-space-1, 4px);
+    font-size: 0.85em;
+    font-weight: 600;
+    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
+}
+
+body.ysca-active .ysca-tabs__item--active .ysca-tabs__count,
+body.ysca-active .ysca-tabs__item[aria-selected="true"] .ysca-tabs__count,
+body.ysca-active .ysca-tabs__item[aria-current="page"] .ysca-tabs__count {
+    opacity: 1;
+}
+
+/* ========================================================================
+   v2.45.17 — Filter row CSS specificity raise + CJK checkbox nowrap
+   ========================================================================
+
+   Problem (v2.45.13 → v2.45.16 LIVE Chrome on 1920x1080):
+     - 訂單管理 search input width = 823px / body 1905px = 43%
+       (overshoots the 32% contract by ~11pp)
+     - 商品管理 filter row columns collapse to 100% each (stack vertically)
+     - `.ysca-filter-input` / `.ysca-filter-select` markup IS present and
+       `.ysca-filter-row { display:flex; flex-wrap:wrap }` IS computed,
+       but the width:32% / max-width:380px rules silently lose.
+
+   Root cause (specificity audit):
+     - `.ysca-page-root input:not([type="checkbox"]):not([type="radio"])
+       :not([type="hidden"])` block at line ~3051 has specificity (0,4,0)
+       — declares `width: 100%`.
+     - `.ys-ec-form-group input[type="text"|"number"|"date"|...]` block at
+       line ~689 has specificity (0,1,1) — declares
+       `width: 100%; max-width: 500px`.
+     - The v2.45.13 primitive `.ysca-filter-input,.ysca-filter-select,
+       .ysca-filter-control` at line ~3111 has specificity (0,1,0) —
+       LOSES to both legacy rules whenever the filter control also lives
+       inside `.ysca-page-root` (every YS CART admin list page) or a
+       `.ys-ec-form-group` (legacy markup pattern).
+
+   Fix strategy:
+     - Raise selector specificity by prefixing `body.ysca-active` (0,1,1)
+       plus an attribute/type selector to clear the (0,4,0) ceiling,
+       and pair with `!important` on the width axis only — the other
+       declarations (border / padding / colors) still inherit from
+       the legacy rule, so visual continuity is preserved.
+     - Switch contract from "32% with max-width 380px" to pure 30%
+       per explicit user direction:
+         "列表這邊搜尋欄位可以直接用 30% 方式，而非絕對 PX"
+     - date inputs get a narrower 22% target so two side-by-side date
+       pickers + two selects + a search input fit one row on 1920px.
+
+   CJK label nowrap (paired fix):
+     - `.ysca-checkbox-line` (the canonical class used by
+       `<label class="ysca-checkbox-line ysca-admin-order-batch-label">`
+       around 「列印後標記為已安排出貨」 in YSOrderAdmin) is `display:flex`
+       so the CJK text node can hard-wrap mid-phrase when the
+       container squeezes. Force `white-space: nowrap` + `flex-shrink: 0`
+       on both the wrapping label and any adjacent text/<span> sibling
+       so the checkbox stays on a single line.
+
+   File boundary note:
+     This patch is CSS-only; admin PHP files (YSSubscriptionAdmin /
+     YSProductAdmin) are NOT modified here — markup adjustments belong to
+     Phase R2.1B. Selectors are scoped tightly to `body.ysca-active` so
+     non-YS admin pages (other plugins / WP core) are not affected.
+   ======================================================================== */
+
+body.ysca-active .ysca-filter-row {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center;
+    gap: var(--ysca-space-3, 12px);
+}
+
+body.ysca-active .ysca-filter-input,
+body.ysca-active .ysca-filter-select,
+body.ysca-active .ysca-filter-control,
+body.ysca-active .ysca-page-root input.ysca-filter-input,
+body.ysca-active .ysca-page-root select.ysca-filter-select,
+body.ysca-active .ys-ec-form-group input.ysca-filter-input,
+body.ysca-active .ys-ec-form-group select.ysca-filter-select {
+    width: 30% !important;
+    max-width: none !important;
+    min-width: 220px;
+    flex: 0 1 auto;
+    box-sizing: border-box;
+}
+
+body.ysca-active .ysca-filter-row input[type="date"],
+body.ysca-active .ysca-page-root .ysca-filter-row input[type="date"] {
+    width: 22% !important;
+    max-width: none !important;
+    min-width: 180px;
+    flex: 0 1 auto;
+}
+
+/* CJK checkbox label nowrap — keep 「列印後標記為已安排出貨」 and friends
+ * on one line. Covers three coexisting class conventions:
+ *   1. .ysca-checkbox-line   — current canonical class (YSOrderAdmin)
+ *   2. .ysca-checkbox-label  — older flavor still present in some forms
+ *   3. label.ysca-checkbox   — the BEM target reserved for new forms
+ * plus a generic `input[type="checkbox"] + label/span` fallback for any
+ * sibling-text pattern. */
+body.ysca-active label.ysca-checkbox-line,
+body.ysca-active .ysca-checkbox-line,
+body.ysca-active label.ysca-checkbox-label,
+body.ysca-active .ysca-checkbox-label,
+body.ysca-active label.ysca-checkbox,
+body.ysca-active .ysca-page-root label.ysca-checkbox-line,
+body.ysca-active .ysca-page-root .ysca-checkbox-line,
+body.ysca-active .ysca-page-root input[type="checkbox"] + label,
+body.ysca-active .ysca-page-root input[type="checkbox"] + span {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ========================================
+   v2.45.24：訂單詳情 — 退款區塊 collapse (<details>)
+   ========================================
+   - 退款 section 改用 <details> 預設收起、避免誤觸「執行退款」按鈕
+   - 隱藏原生 ▶ marker、改用右側 ▾ 旋轉箭頭
+   - <summary> 即原本 h3 的容器、覆寫 .ys-ec-card h3 與 .ysca-admin-order-section > h3
+     兩條 border-bottom（雙橫線 root cause #1：兩規則同時命中、source order
+     後者勝、最終一條灰線 — 但加上 <summary> 自身 padding 後仍視覺重複）。
+   - .ysca-refund-summary 自己掌控 border-bottom、padding，並 reset h3 內部
+     margin/padding/border 確保只剩單一橫線。
+*/
+.ysca-refund-section {
+    cursor: default;
+    padding: 0;
+}
+.ysca-refund-section > .ysca-refund-summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    margin: 0;
+    border-bottom: 1px solid var(--aor-border, #e2e8f0);
+    transition: background 0.15s ease;
+}
+.ysca-refund-section > .ysca-refund-summary::-webkit-details-marker {
+    display: none;
+}
+.ysca-refund-section > .ysca-refund-summary::after {
+    content: "▾";
+    margin-left: auto;
+    color: var(--aor-muted, #6b7280);
+    font-size: 14px;
+    line-height: 1;
+    transition: transform 0.2s ease;
+}
+.ysca-refund-section[open] > .ysca-refund-summary::after {
+    transform: rotate(180deg);
+}
+.ysca-refund-section > .ysca-refund-summary:hover {
+    background: var(--aor-bg-hover, #f5f7fa);
+}
+.ysca-refund-section > .ysca-refund-summary:focus-visible {
+    outline: 2px solid var(--aor-brand, #2563eb);
+    outline-offset: -2px;
+}
+/* h3 在 <summary> 內：reset 原本 .ys-ec-card h3 / .ysca-admin-order-section > h3
+   的 padding/margin/border —— 避免疊上 summary 自己的 border-bottom 造成雙橫線。 */
+.ysca-refund-section .ysca-refund-summary__title {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 15px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--aor-text, var(--ys-ec-text));
+}
+.ysca-refund-section .ysca-refund-summary__title .dashicons {
+    color: var(--aor-brand, var(--ys-ec-primary));
+}
+.ysca-refund-section .ysca-refund-summary__hint {
+    color: var(--aor-muted, #6b7280);
+    font-size: 12px;
+    font-weight: 400;
+}
+/* details body：套原本 ys-ec-card padding；inside 已負責 padding-top */
+.ysca-refund-section > .inside {
+    padding: 0 24px 20px;
+}
+/* 響應式：手機上 hint 換行避免擠壓箭頭 */
+@media (max-width: 600px) {
+    .ysca-refund-section > .ysca-refund-summary {
+        flex-wrap: wrap;
+        padding: 12px 16px;
+    }
+    .ysca-refund-section .ysca-refund-summary__hint {
+        flex-basis: 100%;
+        margin-left: 28px;
+    }
+    .ysca-refund-section > .ysca-refund-summary::after {
+        position: absolute;
+        right: 16px;
+        top: 14px;
+        margin-left: 0;
+    }
+    .ysca-refund-section {
+        position: relative;
+    }
+    .ysca-refund-section > .inside {
+        padding: 0 16px 16px;
+    }
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   客戶銷售能力雷達圖（v2.45.25 Phase R3.2-D）
+   左 chart canvas + 右 summary（title + 6 軸圖例）。手機收為單欄。
+   ═════════════════════════════════════════════════════════════════════ */
+.ysca-customer-radar {
+    padding: 20px 24px;
+}
+.ysca-customer-radar__layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    gap: 24px;
+    align-items: center;
+}
+.ysca-customer-radar__chart-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 1 / 1;
+}
+.ysca-customer-radar__canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+.ysca-customer-radar__summary {
+    min-width: 0;
+}
+.ysca-customer-radar__title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ys-ec-text, #1f2937);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    /* override .ys-ec-card h3 底線 — 雷達圖的 summary 不需要分隔線 */
+    border-bottom: 0;
+    padding: 0;
+}
+.ysca-customer-radar__title .dashicons {
+    color: var(--ys-ec-primary, #2563eb);
+}
+.ysca-customer-radar__desc {
+    margin: 0 0 16px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.ysca-customer-radar__legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+}
+.ysca-customer-radar__legend li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ys-ec-text, #1f2937);
+    margin: 0;
+}
+.ysca-customer-radar__legend li strong {
+    margin-left: auto;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ys-ec-primary, #2563eb);
+}
+.ysca-customer-radar__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: 0 0 10px;
+    background: rgba(59, 130, 246, 1);
+}
+.ysca-customer-radar__dot--recent     { background: #3b82f6; }
+.ysca-customer-radar__dot--frequency  { background: #10b981; }
+.ysca-customer-radar__dot--referral   { background: #f59e0b; }
+.ysca-customer-radar__dot--engagement { background: #8b5cf6; }
+.ysca-customer-radar__dot--loyalty    { background: #ec4899; }
+.ysca-customer-radar__dot--spending   { background: #ef4444; }
+@media (max-width: 782px) {
+    .ysca-customer-radar__layout {
+        grid-template-columns: 1fr;
+    }
+    .ysca-customer-radar__chart-wrap {
+        margin: 0 auto;
+        max-width: 320px;
+    }
+    .ysca-customer-radar__legend {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   Phase R3.6 — 金物流供應商卡片排版一致化
+   ========================================
+   讓有/無「物流」row 的 provider card 高度一致、
+   「前往設定」button (.ysca-provider-card__actions) 對齊底部。
+   方案 A：grid stretch + height:100% — 保持 data shape 真實，
+   不靠 placeholder row 補齊高度。
+   依賴：.ysca-provider-card 已有 display:flex; flex-direction:column;
+         .ysca-provider-card__actions 已有 margin-top:auto;
+   (定義於 ys-cart-admin-components.css，本檔僅補強 grid 高度對齊)
+   ======================================== */
+.ysca-provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    grid-auto-rows: 1fr;
+    gap: var(--ysca-space-3);
+}
+
+.ysca-provider-grid > .ysca-provider-card {
+    height: 100%;
+}
+
+/* ========================================
+   Phase R3.4 — 報表分頁佈局重整 + 促銷分析（v2.45.27）
+   ========================================
+   問題：原報表內 KPI grid / chart card / table card 直接相連、
+         section 之間無 visual breathing room、.ysca-report-customers-grid
+         class 在 HTML 內被引用但 CSS 沒有規則導致 fallback 變成 flex 黏在一起。
+   解法：
+   1. .ysca-report-section — report page vertical spacing is owned by root grid gap
+   2. .ysca-report-grid — 給多欄 chart/table 並排的 responsive auto-fit grid
+   3. .ysca-report-customers-grid — 補齊 v2.45.25 之前漏寫的 grid rule
+   4. .ysca-report-empty — 空資料 placeholder 樣式
+   ======================================== */
+.ysca-report-section + .ysca-report-section {
+    margin-top: 0;
+}
+
+.ysca-page-root--reports {
+    --ysca-report-gap: 16px;
+    --ysca-admin-section-gap: var(--ysca-report-gap);
+    display: grid;
+    align-content: start;
+    gap: var(--ysca-report-gap);
+}
+
+.ysca-page-root--reports .ysca-report-section {
+    margin: 0;
+}
+
+.ysca-page-root--reports .ysca-grid,
+.ysca-page-root--reports .ysca-report-grid,
+.ysca-page-root--reports .ysca-report-analytics-grid,
+.ysca-page-root--reports .ysca-report-customers-grid,
+.ysca-page-root--reports .ysca-report-insight-grid {
+    gap: var(--ysca-admin-section-gap, var(--ysca-space-4, 16px));
+}
+
+.ysca-page-root--reports .ysca-report-section + .ysca-report-section {
+    margin-top: 0;
+}
+
+.ysca-report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+    margin-bottom: 0;
+}
+
+.ysca-report-customers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+}
+
+.ysca-report-analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.ysca-report-insight-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.75fr);
+    gap: 20px;
+}
+
+.ysca-report-status-card {
+    display: grid;
+    gap: 6px;
+    min-height: 112px;
+    padding: 18px 20px;
+}
+
+.ysca-report-status-card__label {
+    color: var(--ysca-muted, #6b7280);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.ysca-report-status-card strong {
+    color: var(--ysca-text, #1f2937);
+    font-size: 24px;
+    line-height: 1.2;
+}
+
+.ysca-report-status-card small {
+    color: var(--ysca-muted, #6b7280);
+    font-size: 12px;
+}
+
+.ysca-page-root--reports .ysca-tabs {
+    margin: 0;
+}
+
+.ysca-page-root--reports > :where(
+    .ysca-tabs,
+    .ysca-report-toolbar,
+    .ysca-report-section,
+    .ysca-card,
+    .ysca-table-card
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+body.ysca-active .ysca-page-root--reports > :is(
+    .ysca-tabs,
+    .ysca-tabs--navigation,
+    .ysca-tabs--with-indicator,
+    .ysca-report-toolbar,
+    .ysca-report-section,
+    .ysca-card,
+    .ysca-table-card
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ysca-page-root.ysca-page-root--reports > form.ysca-toolbar.ysca-toolbar--v2.ysca-report-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ysca-report-toolbar {
+    align-items: center;
+    gap: 12px;
+}
+
+.ysca-page-root--reports .ysca-report-toolbar {
+    min-height: 56px;
+    padding: 10px 14px;
+    margin: 0;
+}
+
+.ysca-report-toolbar .ysca-toolbar__left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ysca-page-root--reports .ysca-report-toolbar .ysca-field--inline {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    min-height: var(--ysca-control-h, 40px);
+    margin: 0;
+    line-height: 1;
+}
+
+.ysca-page-root--reports .ysca-report-toolbar .ysca-field__label {
+    display: inline-flex;
+    align-items: center;
+    min-height: inherit;
+}
+
+.ysca-report-toolbar .ysca-toolbar__right,
+.ysca-report-toolbar .ysca-toolbar__group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ysca-report-toolbar .ysca-input[type="date"] {
+    width: 148px;
+    min-width: 148px;
+    max-width: 148px;
+}
+
+.ysca-report-toolbar .ysca-select {
+    width: 116px;
+    min-width: 116px;
+    max-width: 116px;
+}
+
+.ysca-report-toolbar .ysca-date-separator {
+    flex: 0 0 auto;
+}
+
+.ysca-page-root--reports .ysca-report-filter-card {
+    padding: 14px 16px;
+}
+
+.ysca-page-root--reports .ysca-report-filter-card .ysca-filter-bar {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+}
+
+.ysca-page-root--reports .ysca-report-chart-section,
+.ysca-page-root--reports .ysca-table-card {
+    margin-top: 0;
+}
+
+.ysca-page-root--reports .ysca-table-card .ysca-card__body {
+    padding: 16px;
+}
+
+.ysca-page-root--reports .ysca-table-card .ysca-card__body.inside {
+    margin: 0;
+}
+
+.ysca-page-root--reports .ysca-source-summary-table {
+    min-width: 0;
+}
+
+.ysca-page-root--reports .ysca-card__body > .ysca-chart-container {
+    height: 320px;
+    margin: 0;
+}
+
+.ysca-page-root--reports .ysca-card__body > .ysca-chart-container canvas {
+    max-height: 320px;
+}
+
+@media (max-width: 1024px) {
+    .ysca-report-grid,
+    .ysca-report-customers-grid,
+    .ysca-report-insight-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 782px) {
+    .ysca-page-root--reports .ysca-report-toolbar,
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__left,
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__right,
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__group {
+        width: 100%;
+    }
+
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-input[type="date"],
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-select {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__left,
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__group,
+    .ysca-page-root--reports .ysca-report-filter-card .ysca-filter-bar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: center;
+        gap: 8px;
+    }
+
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-field--inline {
+        grid-column: 1 / -1;
+        min-height: 24px;
+    }
+
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-date-separator {
+        display: none;
+    }
+
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-btn,
+    .ysca-page-root--reports .ysca-report-filter-card .ysca-filter-bar > * {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .ysca-page-root--reports .ysca-card__body > .ysca-chart-container {
+        height: 260px;
+    }
+
+    .ysca-page-root--reports .ysca-card__body > .ysca-chart-container canvas {
+        max-height: 260px;
+    }
+}
+
+@media (max-width: 520px) {
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__left,
+    .ysca-page-root--reports .ysca-report-toolbar .ysca-toolbar__group,
+    .ysca-page-root--reports .ysca-report-filter-card .ysca-filter-bar {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ysca-report-empty {
+    padding: 32px 20px;
+    color: var(--ysca-muted, #6b7280);
+    text-align: center;
+    font-size: 14px;
+}
+
+.ysca-report-section__intro {
+    margin: 0 0 16px 0;
+    padding: 12px 16px;
+    background: var(--ysca-card-soft, #f6f7f9);
+    border-left: 3px solid var(--ysca-accent, #2563eb);
+    border-radius: 4px;
+    color: var(--ysca-text, #1f2937);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* ========================================
+   排程模式選擇器（永久 / 限定期間 / 每月循環）— 折扣 + 4 個促銷頁共用
+   ======================================== */
+.ysca-schedule-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ysca-schedule-mode__opt {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--ysca-border, #e5e7eb);
+    border-radius: var(--ysca-radius, 8px);
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.ysca-schedule-mode__opt:hover {
+    border-color: var(--ysca-primary, #2563eb);
+}
+/* radio 視覺上隱藏但保留鍵盤可選；整張卡片可點。 */
+.ysca-schedule-mode__opt input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+.ysca-schedule-mode__opt.is-active {
+    border-color: var(--ysca-primary, #2563eb);
+    background: var(--ysca-primary-subtle, #eff6ff);
+    box-shadow: inset 0 0 0 1px var(--ysca-primary, #2563eb);
+}
+.ysca-schedule-mode__opt:focus-within {
+    outline: 2px solid var(--ysca-primary, #2563eb);
+    outline-offset: 1px;
+}
+.ysca-schedule-mode__title {
+    font-weight: 600;
+    font-size: var(--ysca-fs-sm, 13px);
+    color: var(--ysca-text, #1f2937);
+}
+.ysca-schedule-mode__title::before {
+    content: "○";
+    margin-right: 6px;
+    color: var(--ysca-text-muted, #9ca3af);
+}
+.ysca-schedule-mode__opt.is-active .ysca-schedule-mode__title::before {
+    content: "●";
+    color: var(--ysca-primary, #2563eb);
+}
+.ysca-schedule-mode__desc {
+    font-size: var(--ysca-fs-xs, 12px);
+    color: var(--ysca-text-muted, #6b7280);
+    padding-left: 18px;
+}
+.ysca-sched-group {
+    margin-top: 4px;
+}

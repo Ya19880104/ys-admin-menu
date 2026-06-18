@@ -1,0 +1,575 @@
+/**
+ * WordPress native admin menu theme runtime.
+ *
+ * Consumes variables emitted by YSAdminThemeRenderer. This stylesheet skins the
+ * native WordPress admin menu visually while preserving WordPress-owned DOM and
+ * folded/responsive menu behavior.
+ */
+
+body.ys-theme-active.wp-admin {
+    background: var( --ys-theme-admin-main-bg );
+}
+
+body.ys-theme-active #wpadminbar {
+    background: var( --ys-theme-admin-bar-bg );
+}
+
+body.ys-theme-active #adminmenu,
+body.ys-theme-active #adminmenuback,
+body.ys-theme-active #adminmenuwrap {
+    background: var( --ys-theme-menu-bg );
+}
+
+body.ys-theme-active #adminmenu {
+    box-sizing: border-box;
+    padding: 8px;
+}
+
+body.ys-theme-active #adminmenu li.wp-menu-separator {
+    height: 8px;
+    margin: 4px 0;
+    background: transparent;
+}
+
+body.ys-theme-active #adminmenu li.menu-top {
+    margin: 0 0 2px;
+    border-radius: var( --ys-theme-menu-item-radius );
+}
+
+body.ys-theme-active #adminmenu li.menu-top > a {
+    display: flex;
+    align-items: center;
+    min-height: var( --ys-theme-menu-item-height );
+    gap: var( --ys-theme-menu-item-gap );
+    padding: 0 var( --ys-theme-menu-item-x );
+    border-radius: var( --ys-theme-menu-item-radius );
+    box-sizing: border-box;
+    text-decoration: none;
+}
+
+/* 子選單方向指示器（純裝飾、非按鈕）：低調小箭頭，朝下=可展開 / 朝上=已展開。 */
+body.ys-theme-active #adminmenu li.wp-has-submenu > a.menu-top::after {
+    content: "\f347";
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: auto;
+    color: var( --ys-theme-menu-icon-color );
+    background: transparent;
+    border: 0;
+    font-family: dashicons;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.45;
+    transition: opacity 120ms ease, transform 120ms ease;
+}
+
+/* JS 未載入（漸進增強 fallback）：當前頁選單箭頭翻轉朝上。 */
+body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > a.menu-top::after,
+body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > a.menu-top::after {
+    color: var( --ys-theme-menu-text );
+    background: transparent;
+    opacity: 0.8;
+    transform: rotate(180deg);
+}
+
+/* JS 載入後：箭頭即可點收放控制。hover 提亮，展開(.ys-am-open)時翻轉朝上。 */
+body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu > a.menu-top:hover::after {
+    opacity: 0.85;
+}
+body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > a.menu-top::after {
+    color: var( --ys-theme-menu-text );
+    background: transparent;
+    opacity: 0.8;
+    transform: rotate(180deg);
+}
+
+body.ys-theme-active #adminmenu .wp-menu-name,
+body.ys-theme-active #adminmenu li.menu-top > a {
+    color: var( --ys-theme-menu-text );
+}
+
+body.ys-theme-active #adminmenu .wp-menu-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+    font-weight: 650;
+    font-size: var( --ys-theme-menu-font-size );
+    line-height: var( --ys-theme-menu-line-height );
+}
+
+body.ys-theme-active #adminmenu .wp-menu-image {
+    display: inline-flex;
+    flex: 0 0 20px;
+    align-items: center;
+    justify-content: center;
+    float: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+}
+
+body.ys-theme-active #adminmenu .wp-menu-image,
+body.ys-theme-active #adminmenu .wp-menu-image::before {
+    color: var( --ys-theme-menu-icon-color );
+}
+
+body.ys-theme-active #adminmenu .wp-menu-image::before {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    font-size: 20px;
+    line-height: 20px;
+}
+
+body.ys-theme-active #adminmenu .wp-submenu,
+body.ys-theme-active #adminmenu .opensub > .wp-submenu,
+body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu {
+    background: var( --ys-theme-submenu-bg );
+}
+
+body.ys-theme-active #adminmenu .wp-submenu a {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 var( --ys-theme-menu-item-x );
+    border-radius: var( --ys-theme-menu-item-radius );
+    box-sizing: border-box;
+    color: var( --ys-theme-submenu-text );
+    font-weight: 500;
+    font-size: var( --ys-theme-submenu-font-size );
+    line-height: var( --ys-theme-submenu-line-height );
+}
+
+body.ys-theme-active #adminmenu .wp-submenu li {
+    margin: 0;
+}
+
+/* Native accordion submenu panels. */
+body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu,
+body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu-wrap {
+    position: static;
+    display: none;
+    left: auto;
+    top: auto;
+    width: auto;
+    min-width: 0;
+    margin: 2px 0 6px;
+    padding: 2px 0 7px var( --ys-theme-submenu-indent );
+    border-radius: 0 0 var( --ys-theme-menu-item-radius ) var( --ys-theme-menu-item-radius );
+    box-shadow: none;
+    box-sizing: border-box;
+}
+
+/* JS 未載入（fallback）：當前頁選單常駐展開。 */
+body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > .wp-submenu,
+body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > .wp-submenu {
+    display: block;
+}
+/* JS 載入後：僅 .ys-am-open 展開（點箭頭收放，狀態存 localStorage）。 */
+body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > .wp-submenu {
+    display: block;
+}
+
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open) > .wp-submenu,
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open) > .wp-submenu-wrap {
+    display: none;
+}
+
+body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu {
+    padding: 2px 0 7px var( --ys-theme-submenu-indent );
+    box-sizing: border-box;
+}
+
+body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu a {
+    margin: 0 8px 2px 0;
+}
+
+body.ys-theme-active #wpadminbar,
+body.ys-theme-active #wpadminbar .ab-item,
+body.ys-theme-active #wpadminbar .ab-item::before,
+body.ys-theme-active #wpadminbar a.ab-item,
+body.ys-theme-active #wpadminbar > #wp-toolbar a.ab-item,
+body.ys-theme-active #wpadminbar > #wp-toolbar span.ab-label,
+body.ys-theme-active #wpadminbar > #wp-toolbar span.noticon {
+    color: var( --ys-theme-admin-bar-text );
+}
+
+/* hover / opensub：只有整列 a 變背景色，文字與圖示僅變色（不再各疊一層獨立色塊）。 */
+body.ys-theme-active #adminmenu li.menu-top:hover > a,
+body.ys-theme-active #adminmenu li.menu-top.opensub > a,
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub > a.menu-top,
+body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li:hover > .ab-item,
+body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li > .ab-item:focus,
+body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li.hover > .ab-item {
+    background: color-mix(in srgb, var( --ys-theme-hover-bg ) 22%, transparent);
+    color: var( --ys-theme-hover-text );
+}
+body.ys-theme-active #adminmenu li.menu-top:hover .wp-menu-name,
+body.ys-theme-active #adminmenu li.menu-top:hover .wp-menu-image::before,
+body.ys-theme-active #adminmenu li.menu-top.opensub .wp-menu-name,
+body.ys-theme-active #adminmenu li.menu-top.opensub .wp-menu-image::before {
+    background: transparent;
+    color: var( --ys-theme-hover-text );
+}
+
+/* current（當前頁所屬選單）：只有整列 a 變背景色，文字圖示僅變色。 */
+body.ys-theme-active #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu,
+body.ys-theme-active #adminmenu li.current > a.menu-top {
+    background: var( --ys-theme-hover-bg );
+    color: var( --ys-theme-hover-text );
+}
+body.ys-theme-active #adminmenu li.menu-top.current .wp-menu-image::before,
+body.ys-theme-active #adminmenu li.wp-has-current-submenu > a .wp-menu-name,
+body.ys-theme-active #adminmenu li.wp-has-current-submenu > a .wp-menu-image::before {
+    background: transparent;
+    color: var( --ys-theme-hover-text );
+}
+
+/* Native submenu links use softer states than parent rows. */
+body.ys-theme-active #adminmenu .wp-submenu a:hover,
+body.ys-theme-active #adminmenu .wp-submenu a:focus {
+    background: color-mix(in srgb, var( --ys-theme-hover-bg ) 28%, transparent);
+    color: var( --ys-theme-hover-text );
+}
+
+body.ys-theme-active #adminmenu .wp-submenu li.current a {
+    background: color-mix(in srgb, var( --ys-theme-hover-bg ) 36%, transparent);
+    color: var( --ys-theme-hover-text );
+}
+
+@media screen and (min-width: 961px) {
+    body.ys-theme-active:not(.folded) #adminmenuback,
+    body.ys-theme-active:not(.folded) #adminmenuwrap,
+    body.ys-theme-active:not(.folded) #adminmenu {
+        width: var( --ys-theme-menu-width );
+    }
+
+    body.ys-theme-active:not(.folded) #wpcontent,
+    body.ys-theme-active:not(.folded) #wpfooter {
+        margin-left: var( --ys-theme-menu-width );
+    }
+
+}
+
+body.ys-theme-active.folded #wpcontent,
+body.ys-theme-active.folded #wpfooter {
+    margin-left: 36px;
+}
+
+/* Keep current WordPress submenus inline on native WordPress pages. */
+body.ys-theme-active #adminmenu li.wp-has-current-submenu.opensub > .wp-submenu,
+#adminmenu li[id^="toplevel_page_ys-"].wp-has-current-submenu.opensub > .wp-submenu {
+    position: relative;
+    left: auto;
+    top: auto;
+    margin-left: 0;
+    box-shadow: none;
+}
+
+/* Hide native scrollbars without disabling wheel/touchpad/touch scroll. */
+body.ys-theme-active #adminmenuwrap {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
+}
+
+body.ys-theme-active #adminmenuwrap::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+body.ys-theme-active.wp-responsive-open {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+body.ys-theme-active.wp-responsive-open::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenuback,
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenuwrap,
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenu {
+    width: min( var( --ys-theme-menu-drawer-width ), calc( 100vw - 32px ) );
+}
+
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenuwrap,
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenu {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenuwrap::-webkit-scrollbar,
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenu::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+body.ys-theme-active.auto-fold #wpwrap.wp-responsive-open #adminmenu .wp-submenu {
+    width: auto;
+}
+
+/* Native admin pages use the same YS-owned canvas menu as the drawer. */
+body.ys-theme-native-canvas .ysca-wp-menu-canvas--native {
+    position: fixed;
+    top: 32px;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    width: var( --ys-theme-menu-width );
+    height: calc( 100vh - 32px );
+    overflow: hidden;
+    color: var( --ys-theme-menu-text );
+    background: var( --ys-theme-menu-bg );
+    box-shadow: none;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    z-index: 9990;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas--native .ysca-wp-menu-canvas__panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var( --ys-theme-menu-bg );
+    color: var( --ys-theme-menu-text );
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas--native .ysca-wp-menu-canvas__head {
+    display: none;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: auto;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
+    padding: 8px;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__section {
+    border-radius: var( --ys-theme-menu-item-radius );
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__top,
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__child {
+    display: flex;
+    align-items: center;
+    min-height: var( --ys-theme-menu-item-height );
+    color: var( --ys-theme-menu-text );
+    text-decoration: none;
+    border-radius: var( --ys-theme-menu-item-radius );
+    box-sizing: border-box;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__top {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: var( --ys-theme-menu-item-gap );
+    padding: 0 var( --ys-theme-menu-item-x );
+    font-weight: 650;
+    font-size: var( --ys-theme-menu-font-size );
+    line-height: var( --ys-theme-menu-line-height );
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__top .dashicons {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    color: var( --ys-theme-menu-icon-color );
+    font-size: 20px;
+    line-height: 20px;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__section-toggle {
+    display: inline-flex;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: var( --ys-theme-menu-icon-color );
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__section-toggle .dashicons {
+    width: 16px;
+    height: 16px;
+    color: currentColor;
+    font-size: 16px;
+    line-height: 16px;
+    transition: transform 120ms ease;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__section.is-open .ysca-wp-menu-canvas__section-toggle .dashicons {
+    transform: rotate(180deg);
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__children {
+    padding: 2px 0 7px var( --ys-theme-submenu-indent );
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__children[hidden] {
+    display: none;
+}
+
+body.ys-theme-native-canvas .ysca-wp-menu-canvas__child {
+    position: relative;
+    margin: 0 8px 2px 0;
+    padding: 0 var( --ys-theme-menu-item-x );
+    color: var( --ys-theme-submenu-text );
+    font-weight: 500;
+    font-size: var( --ys-theme-submenu-font-size );
+    line-height: var( --ys-theme-submenu-line-height );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__section.is-open .ysca-wp-menu-canvas__section-toggle {
+    color: var( --ys-theme-hover-text );
+    background: var( --ys-theme-hover-bg );
+}
+
+@media screen and (min-width: 961px) {
+    body.ys-theme-native-canvas #adminmenuback,
+    body.ys-theme-native-canvas #adminmenuwrap {
+        display: none !important;
+    }
+
+    body.ys-theme-native-canvas #wpcontent,
+    body.ys-theme-native-canvas #wpfooter {
+        margin-left: var( --ys-theme-menu-width );
+    }
+}
+
+@media screen and (max-width: 960px) {
+    body.ys-theme-native-canvas .ysca-wp-menu-canvas--native {
+        display: none !important;
+    }
+}
+
+@media screen and (max-width: 782px) {
+    body.ys-theme-native-canvas .ysca-wp-menu-canvas--native {
+        top: 46px;
+        height: calc( 100vh - 46px );
+    }
+}
+
+/* Bind the YS CART WordPress-menu drawer to the same native menu theme. */
+body.ys-theme-active .ysca-wp-menu-canvas {
+    background: var( --ys-theme-menu-bg );
+    color: var( --ys-theme-menu-text );
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__panel,
+body.ys-theme-active .ysca-wp-menu-canvas__head {
+    background: var( --ys-theme-menu-bg );
+    color: var( --ys-theme-menu-text );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__head {
+    border-bottom-color: color-mix(in srgb, var( --ys-theme-menu-text ) 16%, transparent);
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__list {
+    overflow-y: auto;
+    scrollbar-gutter: auto;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas::-webkit-scrollbar,
+body.ys-theme-active .ysca-wp-menu-canvas__list::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas::-webkit-scrollbar-track,
+body.ys-theme-active .ysca-wp-menu-canvas::-webkit-scrollbar-thumb,
+body.ys-theme-active .ysca-wp-menu-canvas__list::-webkit-scrollbar-track,
+body.ys-theme-active .ysca-wp-menu-canvas__list::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__top,
+body.ys-theme-active .ysca-wp-menu-canvas__child,
+body.ys-theme-active .ysca-wp-menu-canvas__close,
+body.ys-theme-active .ysca-wp-menu-canvas__section-toggle {
+    color: var( --ys-theme-menu-text );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__top {
+    font-size: var( --ys-theme-menu-font-size );
+    line-height: var( --ys-theme-menu-line-height );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__child {
+    position: relative;
+    color: var( --ys-theme-submenu-text );
+    font-size: var( --ys-theme-submenu-font-size );
+    line-height: var( --ys-theme-submenu-line-height );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__child::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: -18px;
+    width: 8px;
+    height: 1px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var( --ys-theme-submenu-text ) 56%, transparent);
+    transform: translateY(-50%);
+    transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__child:hover::before,
+body.ys-theme-active .ysca-wp-menu-canvas__child:focus-visible::before,
+body.ys-theme-active .ysca-wp-menu-canvas__child.is-current::before {
+    background: color-mix(in srgb, var( --ys-theme-hover-text ) 74%, transparent);
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__top .dashicons,
+body.ys-theme-active .ysca-wp-menu-canvas__section-toggle .dashicons {
+    color: var( --ys-theme-menu-icon-color );
+}
+
+body.ys-theme-active .ysca-wp-menu-canvas__top:hover,
+body.ys-theme-active .ysca-wp-menu-canvas__top:focus-visible,
+body.ys-theme-active .ysca-wp-menu-canvas__child:hover,
+body.ys-theme-active .ysca-wp-menu-canvas__child:focus-visible,
+body.ys-theme-active .ysca-wp-menu-canvas__close:hover,
+body.ys-theme-active .ysca-wp-menu-canvas__close:focus-visible,
+body.ys-theme-active .ysca-wp-menu-canvas__section-toggle:hover,
+body.ys-theme-active .ysca-wp-menu-canvas__section-toggle:focus-visible,
+body.ys-theme-active .ysca-wp-menu-canvas__section.is-current > .ysca-wp-menu-canvas__top,
+body.ys-theme-active .ysca-wp-menu-canvas__child.is-current {
+    background: var( --ys-theme-hover-bg );
+    color: var( --ys-theme-hover-text );
+}

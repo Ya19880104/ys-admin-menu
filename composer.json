@@ -1,0 +1,17 @@
+{
+    "name": "yangsheep/ys-admin-menu",
+    "description": "後台選單管理工具 — wp-admin 原生選單排序、隱藏、重命名、改色、角色權限、原生選單樣式美化與白牌。",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "YangSheep\\AdminMenu\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

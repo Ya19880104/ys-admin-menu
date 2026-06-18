@@ -1,0 +1,5540 @@
+/**
+ * YS CART Admin — Components
+ *
+ * 統一元件：button / badge / card / table / form / tabs / modal / toast / empty / loading / error
+ * 全部走 .ysca- 前綴。所有 token 來自 ys-cart-admin-tokens.css。
+ *
+ * v2.42.x admin namespace unification — components 為 ysca-* 純代基準層，
+ * B2-B4 期間其他檔的 admin-only ys-ec-* class 會 alias 到本檔對應 component。
+ * 參考：docs/plans/2026-05-16-admin-theme-namespace-unification-plan.md
+ *
+ * v2.46.5: Design System v2 Tier 2 component rewrite (ADR-049 Tier 2)
+ *   - 規範 source: docs/plans/2026-05-23-design-system-v2-spec.md
+ *   - Card: white / 16px radius / 1px #EEF2F7 border / shadow 非常淡
+ *   - Form: 44px / 12px radius / #E5E7EB border / 14px / hover #2563EB
+ *   - Button: 44px / 12px radius (非 pill) / icon 40×40 正圓
+ *   - Table: row 64px+ / padding 16px / header 淡灰 / hover 淡藍
+ *   - Filter bar: 桌機單排 grid / select 固定寬度
+ *
+ * v2.46.8: ADR-050 Phase A SaaS-grade primitives (append-only、不動既有 selector)
+ *   - ADR: docs/plans/2026-05-23-adr-050-admin-ui-saas-grade-rollout.md
+ *   - 新增 10 個 primitive: toolbar(v2) / kpi-card / overview-card / wizard /
+ *     action-icon-bar / filter-toolbar(v2) / skeleton / empty-state-v2 /
+ *     tabs__indicator / page-hero
+ *   - 全部 token-based、嚴禁 hard-code hex/px（除規範明示）
+ *
+ * @version 2.46.8
+ */
+
+/* v2.44.1 shared settings-page rhythm */
+.ysca-page-root :where(.ysca-card, .ysca-surface, .ys-ec-card, .ys-ec-settings-card) {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ysca-page-root :where(.ysca-card, .ysca-surface, .ys-ec-card) :where(form, .form-table) {
+    max-width: 100%;
+}
+
+.ysca-page-root :where(.ysca-form-grid, .ys-ec-form-grid) {
+    align-items: start;
+    display: grid;
+    gap: var(--ysca-space-5) var(--ysca-space-6);
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.ysca-page-root :where(.ysca-field, .ys-ec-field, .form-field, .ys-ec-form-group) {
+    min-width: 0;
+}
+
+/* v2.46.5 Tier 2: page-root fallback 也對齊 v2 spec border / radius / height */
+.ysca-page-root :where(input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="url"], input[type="date"], input[type="datetime-local"], select, textarea) {
+    border-color: var(--ysca-border);
+    border-radius: var(--ysca-radius-input);
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.ysca-page-root :where(input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="url"], input[type="date"], input[type="datetime-local"], select) {
+    min-height: var(--ysca-control-h);
+}
+
+.ysca-page-root :where(textarea) {
+    min-height: 108px;
+}
+
+.ysca-page-root :where(.nav-tab-wrapper, .ysca-tabs, .ys-ec-tabs, .ys-ec-settings-tabs) {
+    align-items: center;
+    border-bottom: 1px solid var(--ysca-line);
+    display: flex;
+    gap: var(--ysca-space-2);
+    overflow-x: auto;
+    padding: 0 0 var(--ysca-space-3);
+    scrollbar-width: none;
+}
+
+.ysca-page-root :where(.nav-tab-wrapper, .ysca-tabs, .ys-ec-tabs, .ys-ec-settings-tabs)::-webkit-scrollbar {
+    display: none;
+}
+
+.ysca-page-root :where(.nav-tab, .ysca-tab, .ys-ec-tab, .ys-ec-settings-tab) {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    min-height: 38px;
+    padding: 8px 14px;
+    white-space: nowrap;
+}
+
+.ysca-page-root :where(.nav-tab-active, .ysca-tab.is-active, .ys-ec-tab.active, .ys-ec-settings-tab.is-active) {
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+    color: #ffffff;
+}
+
+.ysca-page-root :where(.submit, .ysca-form-actions, .ys-ec-form-actions) {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3);
+    margin-top: var(--ysca-space-5);
+}
+
+.ysca-page-head--actions-only {
+    justify-content: flex-end;
+}
+
+.ysca-text-muted {
+    color: var(--ysca-muted);
+}
+
+.ysca-muted-text {
+    color: var(--ysca-muted);
+}
+
+.ysca-notice-spaced {
+    margin-top: var(--ysca-space-3, 12px);
+}
+
+.ysca-card-spaced {
+    margin-top: var(--ysca-space-4, 16px);
+}
+
+.ysca-ai-toast,
+#ys-ec-ai-toast[hidden],
+#ys-ec-ai-toast:empty {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    min-height: 0 !important;
+}
+
+#ys-ec-ai-toast.is-visible {
+    display: block !important;
+    margin: 0 !important;
+}
+
+.ysca-description-flush {
+    margin-top: 0 !important;
+}
+
+.ysca-inline-row--wide {
+    gap: var(--ysca-space-6, 24px);
+}
+
+.ysca-inline-row--tight {
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-field--xs {
+    max-width: 100px !important;
+}
+
+.ysca-field--sm {
+    max-width: 120px !important;
+}
+
+.ysca-field--select-md {
+    max-width: 280px !important;
+}
+
+.ysca-field--static-wide {
+    max-width: 400px !important;
+}
+
+.ysca-status-badge-button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+}
+
+.ysca-status-badge-button:focus-visible {
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px var(--ysca-focus-ring, rgba(37, 99, 235, 0.18));
+    outline: 2px solid var(--ysca-primary, #2563eb);
+    outline-offset: 2px;
+}
+
+.ysca-tier-level-display {
+    font-size: var(--ysca-text-h1);
+    font-weight: 700;
+}
+
+.ysca-muted-dash {
+    color: var(--ysca-soft, #94a3b8);
+}
+
+.ysca-dynamic-badge {
+    background: var(--ysca-badge-bg, var(--ysca-muted));
+    color: #fff;
+}
+
+.ysca-table__amount--positive {
+    color: var(--ysca-success, #16a34a);
+}
+
+.ysca-table__amount--negative {
+    color: var(--ysca-danger, #dc2626);
+}
+
+.ysca-inline-warning {
+    margin: var(--ysca-space-2, 8px) 0 0 !important;
+    padding: var(--ysca-space-2, 8px) var(--ysca-space-3, 12px) !important;
+}
+
+.ysca-zero-copy {
+    margin: 0 !important;
+}
+
+.ysca-button-icon {
+    vertical-align: text-bottom;
+}
+
+.ysca-text-danger {
+    color: var(--ysca-danger);
+}
+
+.ysca-text-strong {
+    font-weight: 700;
+}
+
+.ysca-text-center {
+    text-align: center;
+}
+
+.ysca-cell-center {
+    text-align: center;
+}
+
+.ysca-status-icon-success {
+    color: var(--ysca-success);
+}
+
+.ysca-status-icon-muted {
+    color: var(--ysca-muted);
+}
+
+.ysca-inline-gap-left {
+    margin-left: var(--ysca-space-2, 8px);
+}
+
+.ysca-inline-gap-left-lg {
+    margin-left: var(--ysca-space-3, 12px);
+}
+
+.ysca-notice--warning {
+    color: var(--ysca-warning);
+    background: var(--ysca-warning-soft);
+    border-color: var(--ysca-warning);
+}
+
+.ysca-panel--warning {
+    padding: var(--ysca-space-4);
+    color: var(--ysca-warning);
+    background: var(--ysca-warning-soft);
+    border: 1px solid var(--ysca-warning);
+    border-radius: var(--ysca-radius);
+}
+
+.ysca-required-mark {
+    color: var(--ysca-danger);
+}
+
+.ysca-icon--xs {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+}
+
+.ysca-icon--sm {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.ysca-icon-align-middle {
+    vertical-align: middle;
+}
+
+/* utility 隱藏類別必須 !important：否則 .ys-ec-form-group{display:flex} 等同 specificity
+   且後載入的規則會蓋過，導致條件式隱藏（如折扣「全部商品」時的指定商品/分類）失效。 */
+.ysca-is-hidden {
+    display: none !important;
+}
+
+.ysca-mt-sm {
+    margin-top: var(--ysca-space-2);
+}
+
+.ysca-mt-md {
+    margin-top: var(--ysca-space-4);
+}
+
+.ysca-mt-lg {
+    margin-top: var(--ysca-space-5);
+}
+
+.ysca-mb-sm {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-mb-md {
+    margin-bottom: var(--ysca-space-4);
+}
+
+.ysca-mb-lg {
+    margin-bottom: var(--ysca-space-5);
+}
+
+.ysca-stack-md {
+    display: grid;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-stack-sm {
+    display: grid;
+    gap: var(--ysca-space-2);
+}
+
+.ysca-stack-lg {
+    display: grid;
+    gap: var(--ysca-space-5);
+}
+
+.ysca-action-result {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-action-result.is-success {
+    color: var(--ysca-success);
+}
+
+.ysca-action-result.is-error {
+    color: var(--ysca-danger);
+}
+
+.ysca-action-result.is-pending {
+    color: var(--ysca-primary);
+}
+
+.ysca-card--member-tier-enable,
+.ysca-member-tier-disabled-notice {
+    margin-bottom: var(--ysca-space-4);
+}
+
+.ysca-card__body {
+    display: grid;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-card__body--flush {
+    padding: 0;
+}
+
+.ysca-table__center {
+    text-align: center;
+}
+
+.ysca-table__right {
+    text-align: right;
+}
+
+.ysca-table__amount {
+    font-weight: 700;
+    text-align: right;
+}
+
+.ysca-table__check {
+    width: 40px;
+}
+
+.ysca-table__narrow {
+    width: 60px;
+}
+
+.ysca-table__actions {
+    width: 88px;
+}
+
+.ysca-table__select,
+.ysca-table__drag {
+    width: 36px;
+}
+
+.ysca-table__order {
+    width: 64px;
+}
+
+.ysca-table__roles {
+    width: 200px;
+}
+
+.ysca-table__color {
+    width: 90px;
+}
+
+.ysca-table__member-no {
+    width: 140px;
+}
+
+.ysca-table__phone {
+    width: 120px;
+}
+
+.ysca-table__tier,
+.ysca-table__verification {
+    width: 100px;
+}
+
+.ysca-table__order-count,
+.ysca-table__has-password {
+    width: 80px;
+}
+
+.ysca-table__date {
+    width: 130px;
+}
+
+.ysca-table__date-wide {
+    width: 160px;
+}
+
+.ysca-table__wide-actions {
+    width: 160px;
+}
+
+.ysca-table__muted {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-soft-text {
+    color: var(--ysca-soft);
+}
+
+.ysca-table-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-4) var(--ysca-space-5);
+    border-top: 1px solid var(--ysca-line);
+}
+
+.ysca-table--compact {
+    min-width: 0;
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-table--doc {
+    max-width: 760px;
+}
+
+.ysca-report-chart-section {
+    padding: var(--ysca-space-5);
+    margin-top: var(--ysca-space-4);
+}
+
+.ysca-report-chart-section__head {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-chart-container--sales {
+    height: 320px;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  BUTTON
+/* ═══════════════════════════════════════════════════ */
+
+/* v2.46.5 Tier 2 per spec: btn 44px / 12px radius (非 pill) / 14px / padding 0 16px */
+.ysca-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ysca-space-2);
+    min-height: var(--ysca-control-h);
+    padding: 0 var(--ysca-space-4);
+    color: var(--ysca-text-body);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-border);
+    border-radius: var(--ysca-radius-btn);
+    font-family: var(--ysca-font-sans);
+    font-size: var(--ysca-fs-body);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--ysca-motion), border-color var(--ysca-motion), color var(--ysca-motion), box-shadow var(--ysca-motion);
+}
+
+.ysca-btn:hover:not(:disabled) {
+    color: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+}
+
+.ysca-btn:disabled,
+.ysca-btn[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.ysca-btn--primary {
+    color: #fff;
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+    /* v2.46.5 Tier 2 per spec: 拔重陰影，btn 不需要 elevation */
+    box-shadow: none;
+}
+
+.ysca-btn--primary:hover:not(:disabled) {
+    color: #fff;
+    background: var(--ysca-primary-hover);
+    border-color: var(--ysca-primary-hover);
+}
+
+.ysca-btn--ghost {
+    background: transparent;
+    border-color: transparent;
+}
+
+.ysca-btn--ghost:hover:not(:disabled) {
+    background: var(--ysca-primary-soft);
+    border-color: transparent;
+}
+
+.ysca-btn--outline {
+    color: var(--ysca-primary);
+    background: var(--ysca-card);
+    border-color: var(--ysca-primary);
+}
+
+.ysca-btn--outline:hover:not(:disabled) {
+    color: var(--ysca-primary-hover);
+    background: var(--ysca-primary-soft);
+    border-color: var(--ysca-primary-hover);
+}
+
+.ysca-btn--danger {
+    color: var(--ysca-danger);
+    background: var(--ysca-danger-soft);
+    border-color: var(--ysca-danger-soft);
+}
+
+.ysca-btn--danger:hover:not(:disabled) {
+    color: #fff;
+    background: var(--ysca-danger);
+    border-color: var(--ysca-danger);
+}
+
+/* v2.46.5 Tier 2 per spec: sm = 32px control-h-sm, lg keeps default 44px (no "lg" in spec) */
+.ysca-btn--sm {
+    min-height: var(--ysca-control-h-sm);
+    padding: 0 var(--ysca-space-3);
+    font-size: var(--ysca-fs-caption);
+}
+
+.ysca-btn--lg {
+    /* alias of default 44px、保留 class for backward compat */
+    min-height: var(--ysca-control-h);
+    padding: 0 var(--ysca-space-5);
+    font-size: var(--ysca-fs-body);
+}
+
+/* v2.46.5 Tier 2 per spec: Icon Button 40×40 正圓 (border-radius 50%) */
+.ysca-btn--icon {
+    width: var(--ysca-control-h-icon);
+    min-height: var(--ysca-control-h-icon);
+    padding: 0;
+    border-radius: 50%;
+}
+
+.ysca-btn--full {
+    width: 100%;
+}
+
+/* loading 狀態：v2.30.1 UX-1：absolute spinner + invisible label，no width shift */
+.ysca-btn.is-loading {
+    position: relative;
+    cursor: wait;
+    pointer-events: none;
+    color: transparent;  /* 隱藏 label 文字但保留寬度 */
+}
+
+.ysca-btn.is-loading > * {
+    visibility: hidden;
+}
+
+.ysca-btn.is-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    color: var(--ysca-primary);
+    visibility: visible;
+    animation: ysca-spin 750ms linear infinite;
+}
+
+.ysca-btn--primary.is-loading::after,
+.ysca-btn--danger.is-loading::after {
+    color: #fff;
+}
+
+@keyframes ysca-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* v2.30.1 A11Y-H4：reduced motion 下放慢 spinner（不停止，避免使用者誤以為當機）*/
+@media (prefers-reduced-motion: reduce) {
+    .ysca-btn.is-loading::after {
+        animation-duration: 2400ms;
+    }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  BADGE / STATUS PILL
+/* ═══════════════════════════════════════════════════ */
+
+/* v2.46.5 Tier 2 per spec: badge 圓角膠囊 / 12px caption / 高度一致 */
+.ysca-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-1);
+    min-height: 22px;
+    padding: 2px var(--ysca-space-2);
+    color: var(--ysca-text-body);
+    background: var(--ysca-card-soft);
+    border-radius: var(--ysca-radius-pill);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.ysca-badge--paid,
+.ysca-badge--success,
+.ysca-badge--completed {
+    color: var(--ysca-success);
+    background: var(--ysca-success-soft);
+}
+
+.ysca-badge--pending,
+.ysca-badge--draft,
+.ysca-badge--warning {
+    color: var(--ysca-warning);
+    background: var(--ysca-warning-soft);
+}
+
+.ysca-badge--processing,
+.ysca-badge--shipped,
+.ysca-badge--info {
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+}
+
+.ysca-badge--failed,
+.ysca-badge--refunded,
+.ysca-badge--danger {
+    color: var(--ysca-danger);
+    background: var(--ysca-danger-soft);
+}
+
+.ysca-badge--neutral {
+    color: var(--ysca-muted);
+    background: var(--ysca-card-soft);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  CARD
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-card {
+    background: var(--ysca-card);
+    /* v2.46.5 Tier 2 per spec: 1px solid #EEF2F7 border + 16px radius + shadow 非常淡 */
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+    padding: var(--ysca-space-6);
+}
+
+.ysca-card--soft {
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+    box-shadow: none;
+}
+
+.ysca-card--inset {
+    padding: var(--ysca-space-4);
+}
+
+/* v2.30.1 UX-7：data-dense pages 用更緊湊 padding（forms / log viewer） */
+.ysca-card--dense {
+    padding: var(--ysca-space-4);
+}
+
+.ysca-section-card {
+    display: block;
+}
+
+.ysca-section-card > h2:first-child,
+.ysca-section-card > h3:first-child {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin: 0 0 var(--ysca-space-4);
+    padding: 0 0 var(--ysca-space-3);
+    border-bottom: 1px solid var(--ysca-line);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h3);
+    font-weight: 800;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-section-card > h2:first-child .dashicons,
+.ysca-section-card > h3:first-child .dashicons {
+    width: 20px;
+    height: 20px;
+    color: var(--ysca-primary);
+    font-size: 20px;
+    line-height: 1;
+}
+
+.ysca-section-card > .inside:first-child,
+.ysca-section-card > h2:first-child + .inside,
+.ysca-section-card > h3:first-child + .inside {
+    padding-top: 0;
+}
+
+.ysca-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--ysca-space-4);
+    margin-bottom: var(--ysca-space-5);
+}
+
+.ysca-card__title {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h2);
+    font-weight: 800;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-card__sub {
+    margin: var(--ysca-space-1) 0 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-card__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin-top: var(--ysca-space-5);
+    padding-top: var(--ysca-space-4);
+    border-top: 1px solid var(--ysca-border-subtle);
+}
+
+.ysca-card__kicker {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+/* metric card variant */
+.ysca-metric-card {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    grid-template-areas:
+        "icon label"
+        "icon value"
+        "icon change";
+    align-items: center;
+    column-gap: var(--ysca-space-3);
+    padding: var(--ysca-space-5);
+    background: var(--ysca-card);
+    /* v2.46.5 Tier 2 per spec: card 統一 1px #EEF2F7 border */
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-metric-card__icon {
+    grid-area: icon;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: var(--ysca-primary);
+    border-radius: 50%;
+    font-weight: 900;
+    font-size: 12px;
+}
+
+.ysca-metric-card__icon--cyan    { background: var(--ysca-info); }
+.ysca-metric-card__icon--green   { background: var(--ysca-success); }
+.ysca-metric-card__icon--red     { background: var(--ysca-danger); }
+.ysca-metric-card__icon--warning { background: var(--ysca-warning); }
+
+.ysca-metric-card__label {
+    grid-area: label;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-metric-card__value {
+    grid-area: value;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h1);  /* v2.30.1 UX-8：22px (was 16px) — match CODEX mockup */
+    font-weight: 800;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.ysca-metric-card__change {
+    grid-area: change;
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: var(--ysca-radius-pill);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.ysca-metric-card__change--up {
+    color: var(--ysca-success);
+    background: var(--ysca-success-soft);
+}
+
+.ysca-metric-card__change--down {
+    color: var(--ysca-danger);
+    background: var(--ysca-danger-soft);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  TABLE
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-table-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.ysca-table-card--padded {
+    padding: var(--ysca-space-4);
+}
+
+.ysca-table-card--padded .ysca-card__head {
+    padding: 0 0 var(--ysca-space-3);
+}
+
+.ysca-table-card--padded .ysca-table-wrap {
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-card);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.ysca-table-card .ysca-card__head {
+    padding: var(--ysca-space-5) var(--ysca-space-6);
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--ysca-line);
+}
+
+.ysca-table-card.ysca-table-card--padded .ysca-card__head {
+    padding: 0 0 var(--ysca-space-4);
+    border-bottom: 0;
+}
+
+.ysca-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ysca-table {
+    width: 100%;
+    min-width: 720px;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+/* v2.46.5 Tier 2 per spec: padding 16px / row min 64px / header 淡灰 / hover 淡藍 */
+.ysca-table tr {
+    min-height: var(--ysca-row-h);
+}
+
+.ysca-table th,
+.ysca-table td {
+    padding: var(--ysca-space-4);
+    border-bottom: 1px solid var(--ysca-line);
+    text-align: left;
+    vertical-align: middle;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.ysca-table th {
+    /* v2.46.5 per spec: header 淡灰背景 (--ysca-line is the subtle grey) */
+    background: var(--ysca-line);
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.ysca-table td {
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+}
+
+/* v2.46.5 per spec: hover 用淡藍 primary-soft (取代原 card-soft 白) */
+.ysca-table tbody tr:hover {
+    background: var(--ysca-primary-soft);
+}
+
+.ysca-table tbody tr.is-muted {
+    opacity: 0.58;
+}
+
+.ysca-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.ysca-table td strong {
+    display: block;
+    color: var(--ysca-text);
+    font-weight: 700;
+}
+
+.ysca-table td small {
+    display: block;
+    margin-top: 2px;
+    color: var(--ysca-soft);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-table .ysca-empty-row td,
+.ysca-table td.ysca-empty-row,
+.ysca-empty-row td {
+    padding: var(--ysca-space-8) var(--ysca-space-5);
+}
+
+.ysca-code-wrap {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.ysca-detail-context {
+    display: block;
+    max-width: min(100%, 560px);
+    max-height: 240px;
+    margin: var(--ysca-space-2) 0 0;
+    padding: var(--ysca-space-3);
+    overflow: auto;
+    color: var(--ysca-text);
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius);
+    font-family: var(--ysca-font-mono);
+    font-size: var(--ysca-fs-xs);
+    line-height: var(--ysca-line-base);
+    white-space: pre-wrap;
+}
+
+/* selection checkbox column */
+.ysca-table .ysca-table__check {
+    width: 36px;
+}
+
+.ysca-table .ysca-table__id,
+.ysca-table .ysca-table__number,
+.ysca-table .ysca-table__state,
+.ysca-table .ysca-table__actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.ysca-table .ysca-table__id,
+.ysca-table .ysca-table__number {
+    min-width: 64px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ysca-table .ysca-table__state {
+    min-width: 76px;
+}
+
+.ysca-table .ysca-table__actions {
+    min-width: 92px;
+    text-align: right;
+}
+
+/* row action button */
+.ysca-table__action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-1);
+    min-height: 28px;
+    padding: 0 var(--ysca-space-3);
+    color: var(--ysca-text-body);
+    background: transparent;
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+    transition: color var(--ysca-motion), border-color var(--ysca-motion), background-color var(--ysca-motion);
+}
+
+.ysca-table__action:hover {
+    color: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+}
+
+.ysca-separator-row {
+    background: var(--ysca-card-soft);
+}
+
+.ysca-separator-cell {
+    background: var(--ysca-card-soft);
+}
+
+.ysca-separator-title {
+    color: var(--ysca-text);
+}
+
+.ysca-separator-input {
+    width: min(60%, 420px);
+    color: var(--ysca-text);
+    background: transparent;
+    border: 0;
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-separator-note {
+    font-size: var(--ysca-fs-xs);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  TOOLBAR (filter / search / bulk action)
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-4) var(--ysca-space-6);
+    background: var(--ysca-card);
+    border-bottom: 1px solid var(--ysca-line);
+}
+
+.ysca-toolbar__left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    flex: 1;
+}
+
+.ysca-toolbar__right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2);
+}
+
+/* shared status/filter tabs for list pages */
+.ysca-filter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin: 0 0 var(--ysca-space-3);
+    padding: 6px;
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-filter-tab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 14px;
+    color: var(--ysca-text-body);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ysca-radius-pill);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--ysca-motion), border-color var(--ysca-motion), color var(--ysca-motion), box-shadow var(--ysca-motion);
+}
+
+.ys-ec-filters > .ys-ec-filter-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ysca-space-2);
+    min-height: 32px;
+    padding: 0 14px;
+    color: var(--ysca-text-body);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ysca-radius-pill);
+    box-shadow: none;
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.ysca-filter-tab:hover {
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    border-color: var(--ysca-primary-soft);
+}
+
+.ysca-filter-tab .dashicons {
+    width: 16px;
+    height: 16px;
+    margin-right: var(--ysca-space-1);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.ysca-filter-tab.is-active,
+.ysca-filter-tab.active,
+.ysca-filter-tab[aria-current="page"] {
+    color: #fff;
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+    box-shadow: 0 8px 18px rgba(39, 114, 239, 0.18);
+}
+
+.ysca-filter-tab.is-active::after,
+.ysca-filter-tab.active::after,
+.ysca-filter-tab[aria-current="page"]::after {
+    display: none;
+}
+
+.ysca-filter-tabs--status {
+    min-height: 0;
+}
+
+.ysca-filter-tabs--status .ysca-tabs__count {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ysca-product-filter-separator {
+    color: var(--ysca-line-strong);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-setting-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ysca-space-3);
+    padding: 12px 16px;
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-setting-row--compact {
+    min-height: 50px;
+    padding-block: 10px;
+}
+
+.ysca-setting-row__content {
+    display: grid;
+    gap: var(--ysca-space-1);
+    min-width: 0;
+}
+
+.ysca-setting-row__control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 44px;
+}
+
+.ysca-toggle.ysca-toggle--sm {
+    width: 38px;
+    height: 20px;
+    transform: none;
+}
+
+.ysca-toggle.ysca-toggle--sm .slider {
+    border-radius: 20px;
+}
+
+.ysca-toggle.ysca-toggle--sm .slider::before {
+    width: 14px;
+    height: 14px;
+    bottom: 3px;
+    left: 3px;
+}
+
+.ysca-toggle.ysca-toggle--sm input:checked + .slider::before {
+    transform: translateX(18px);
+}
+
+/* v2.46.5 Tier 2 per spec: 桌機單排 grid、select 固定寬度、order 固定。
+ * 順序: 搜尋框 / 日期 / Select / Select / Select / 搜尋按鈕 / 重設按鈕 / 進階搜尋
+ * Mobile: 999px 雙排、690px 單欄
+ *
+ * v2.46.7 Tier 3 bridge: `.ysca-filter-row` + `.ys-ec-search-row` 為既有 9 admin
+ * (Order / Subscription / Report / Product / DigitalFile / LogViewer / Payuni /
+ * Email / Shipping) 已套用的別名 class、view-side 不動 HTML 即可拿到單排 grid。
+ * 9 admin HTML 重排（DOM 順序）視 LIVE 結果後續 Tier 3 fast-follow 分批處理。
+ */
+.ysca-filter-bar,
+.ysca-filter-row,
+.ys-ec-search-row {
+    display: grid;
+    grid-template-columns: var(--ysca-select-search) auto auto auto auto auto;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin: 0 0 var(--ysca-space-3);
+    padding: var(--ysca-space-2) var(--ysca-space-3);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-filter-bar--compact {
+    padding: 8px 12px;
+}
+
+.ysca-filter-bar--compact .ysca-input,
+.ysca-filter-bar--compact .ysca-select,
+.ysca-filter-bar--compact .ysca-btn {
+    align-self: center;
+    height: 32px;
+    min-height: 32px;
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-filter-bar--compact .ysca-input,
+.ysca-filter-bar--compact .ysca-select {
+    width: 100%;
+    min-width: 0;
+    padding: 0 12px;
+}
+
+.ysca-filter-bar--compact .ysca-select {
+    line-height: calc(var(--ysca-control-h-sm, 32px) - 2px);
+}
+
+.ysca-filter-bar--compact .ysca-btn {
+    justify-self: start;
+    width: auto;
+    min-width: 64px;
+    padding-inline: 12px;
+    border-radius: var(--ysca-radius-btn);
+    box-shadow: none;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ysca-list-action-bar,
+.ys-ec-batch-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-3);
+    margin: 0 0 var(--ysca-space-4);
+    padding: var(--ysca-space-2) var(--ysca-space-3);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-list-action-bar .ys-ec-batch-actions,
+.ys-ec-batch-bar .ys-ec-batch-actions {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    min-width: 0;
+}
+
+.ysca-list-action-bar .ysca-batch-select,
+.ysca-list-action-bar .ys-ec-batch-select,
+.ys-ec-batch-bar .ysca-batch-select,
+.ys-ec-batch-bar .ys-ec-batch-select {
+    align-self: center;
+    width: auto;
+    height: var(--ysca-control-h-sm);
+    min-height: var(--ysca-control-h-sm);
+    line-height: calc(var(--ysca-control-h-sm, 32px) - 2px);
+    min-width: var(--ysca-select-sm);
+    padding-block: 0;
+    flex: 0 0 auto;
+}
+
+.ysca-list-action-bar .ysca-btn,
+.ys-ec-batch-bar .ysca-btn {
+    flex: 0 0 auto;
+}
+
+.ysca-list-action-bar__total,
+.ys-ec-total-count {
+    margin-left: auto;
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* v2.47.8: order list owns its vertical rhythm so legacy .ys-ec-admin flex gap
+   does not stack with child margins and create oversized spacing. */
+.ysca-admin-order-list-stack,
+.ysca-admin-order-list-form {
+    display: grid;
+    gap: var(--ysca-admin-section-gap, var(--ysca-space-4));
+    margin: 0;
+}
+
+.ysca-admin-order-list-stack > .ysca-kpi-grid,
+.ysca-admin-order-list-stack > .ysca-filter-tabs,
+.ysca-admin-order-list-stack > .ysca-filter-bar,
+.ysca-admin-order-list-stack > .ysca-admin-order-list-form,
+.ysca-admin-order-list-stack > .ys-ec-pagination,
+.ysca-admin-order-list-form > .ysca-list-action-bar,
+.ysca-admin-order-list-form > .ys-ec-batch-bar,
+.ysca-admin-order-list-form > .ysca-admin-order-table-wrap {
+    margin: 0;
+}
+
+.ysca-admin-order-batch-print {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    min-width: 0;
+}
+
+.ysca-admin-order-batch-label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 999px) {
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-filter-bar,
+    .ysca-filter-row,
+    .ys-ec-search-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* v2.46.5 per spec: select fixed widths */
+.ysca-select--sm { width: var(--ysca-select-sm); max-width: 100%; }
+.ysca-select--md { width: var(--ysca-select-md); max-width: 100%; }
+.ysca-select--lg { width: var(--ysca-select-lg); max-width: 100%; }
+
+.ysca-filter-search {
+    width: var(--ysca-select-search);
+    max-width: 100%;
+}
+
+.ysca-report-export {
+    margin-left: auto;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  FORM
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-form-grid {
+    display: grid;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-field {
+    display: grid;
+    gap: var(--ysca-space-1);
+    margin-bottom: var(--ysca-space-4);
+}
+
+.ysca-field__label {
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-field__label--required::after {
+    content: " *";
+    color: var(--ysca-danger);
+}
+
+.ysca-field__hint {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-field__error {
+    color: var(--ysca-danger);
+    font-size: var(--ysca-fs-xs);
+}
+
+/* v2.46.5 Tier 2 per spec: form 44px / 12px radius / #E5E7EB border / 14px / padding 0 14px */
+.ysca-input,
+.ysca-select,
+.ysca-textarea {
+    width: 100%;
+    min-height: var(--ysca-control-h);
+    padding: 0 14px;
+    color: var(--ysca-text);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-border);
+    border-radius: var(--ysca-radius-input);
+    font-family: var(--ysca-font-sans);
+    font-size: var(--ysca-fs-body);
+    line-height: var(--ysca-line-base);
+    transition: border-color var(--ysca-motion), box-shadow var(--ysca-motion);
+}
+
+.ysca-select {
+    height: var(--ysca-control-h);
+    min-height: var(--ysca-control-h);
+    line-height: calc(var(--ysca-control-h) - 2px);
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.ysca-select--sm {
+    height: var(--ysca-control-h-sm);
+    min-height: var(--ysca-control-h-sm);
+    line-height: calc(var(--ysca-control-h-sm) - 2px);
+}
+
+.ysca-select--md {
+    height: var(--ysca-control-h);
+    min-height: var(--ysca-control-h);
+    line-height: calc(var(--ysca-control-h) - 2px);
+}
+
+.ysca-select--lg {
+    height: var(--ysca-control-h);
+    min-height: var(--ysca-control-h);
+    line-height: calc(var(--ysca-control-h) - 2px);
+}
+
+.ysca-page-root input.ysca-input,
+.ysca-page-root select.ysca-select,
+.ysca-page-root textarea.ysca-textarea,
+body.ysca-active input.ysca-input,
+body.ysca-active select.ysca-select,
+body.ysca-active textarea.ysca-textarea {
+    color: var(--ysca-text);
+    background-color: var(--ysca-card);
+    border: 1px solid var(--ysca-border);
+    border-radius: var(--ysca-radius-input);
+    box-shadow: none;
+}
+
+.ysca-textarea {
+    min-height: 96px;
+    padding: var(--ysca-space-3) 14px;
+    resize: vertical;
+}
+
+/* v2.46.5 per spec: hover 用較亮藍 #2563EB (--primary-input-hover) */
+.ysca-input:hover:not(:disabled):not(:focus),
+.ysca-select:hover:not(:disabled):not(:focus),
+.ysca-textarea:hover:not(:disabled):not(:focus) {
+    border-color: var(--ysca-primary-input-hover);
+}
+
+.ysca-input:focus,
+.ysca-select:focus,
+.ysca-textarea:focus {
+    /* v2.30.1 A11Y-C5：transparent outline 而非 none，forced-colors 模式仍可見 */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    border-color: var(--ysca-primary);
+    box-shadow: var(--ysca-shadow-focus);
+}
+
+.ysca-input[aria-invalid="true"],
+.ysca-select[aria-invalid="true"],
+.ysca-textarea[aria-invalid="true"] {
+    border-color: var(--ysca-danger);
+}
+
+/* v2.46.5 per spec: placeholder #9CA3AF */
+.ysca-input::placeholder,
+.ysca-textarea::placeholder {
+    color: var(--ysca-placeholder);
+}
+
+.ysca-checkbox-line {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ysca-space-2);
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-checkbox-line--nowrap {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.ysca-checkbox-line input[type="checkbox"] {
+    margin-top: 2px;
+}
+
+.ysca-switch-label {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    cursor: pointer;
+}
+
+.ysca-choice {
+    display: block;
+    cursor: pointer;
+}
+
+.ysca-choice-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-choice-copy {
+    margin: 0 0 0 24px;
+}
+
+.ysca-description-indent {
+    margin-left: 52px;
+}
+
+.ysca-field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-5);
+}
+
+.ysca-field-row > .ysca-field,
+.ysca-field-row > .ys-ec-form-group {
+    margin: 0;
+}
+
+.ysca-inline-control--tight {
+    gap: var(--ysca-space-1);
+}
+
+.ysca-inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-inline-actions--start {
+    justify-content: flex-start;
+    margin-top: var(--ysca-space-4);
+    margin-bottom: 0;
+}
+
+.ysca-inline-control {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    max-width: 100%;
+}
+
+.ysca-field--disabled {
+    opacity: 0.58;
+}
+
+.ysca-inline-form {
+    display: inline-flex;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.ysca-code-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px var(--ysca-space-2);
+    color: var(--ysca-text);
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-sm);
+    font-family: var(--ysca-font-mono);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-code-pill--lg {
+    min-height: 38px;
+    padding: var(--ysca-space-2) var(--ysca-space-4);
+    font-size: var(--ysca-fs-md);
+}
+
+.ysca-code-pill--xs {
+    min-height: 20px;
+    padding: 1px var(--ysca-space-2);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 600;
+}
+
+.ysca-input--member-search {
+    max-width: 280px;
+}
+
+.ysca-select--member-tier {
+    max-width: 160px;
+}
+
+.ysca-stats-grid--four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ysca-member-hero {
+    padding: var(--ysca-space-6);
+}
+
+.ysca-member-hero__layout {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-6);
+}
+
+.ysca-member-hero__primary {
+    flex: 1 1 280px;
+    min-width: 0;
+}
+
+.ysca-member-hero__meta {
+    display: grid;
+    flex: 2 1 320px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ysca-space-4);
+    min-width: min(100%, 320px);
+}
+
+.ysca-member-hero__label,
+.ysca-member-meta__label {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-member-hero__label {
+    margin-bottom: var(--ysca-space-1);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-member-hero__number {
+    color: var(--ysca-text);
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.ysca-member-hero__empty {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3);
+}
+
+.ysca-member-meta__value,
+.ysca-member-address-phone,
+.ysca-member-tier-name {
+    font-weight: 700;
+}
+
+.ysca-member-address-phone {
+    margin: var(--ysca-space-1) 0;
+    color: var(--ysca-muted);
+}
+
+.ysca-member-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--ysca-space-4);
+}
+
+.ysca-key-value-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-key-value-table td {
+    padding: var(--ysca-space-1) 0;
+    vertical-align: top;
+}
+
+.ysca-key-value-table td:first-child {
+    width: 90px;
+    color: var(--ysca-muted);
+}
+
+.ysca-key-value-table--user td:first-child {
+    width: 80px;
+}
+
+.ysca-key-value-table--muted {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-member-date-note {
+    margin-left: var(--ysca-space-1);
+    color: var(--ysca-soft);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-member-tier-name {
+    margin-bottom: var(--ysca-space-2);
+    font-size: var(--ysca-fs-lg);
+}
+
+.ysca-member-tier-badge {
+    color: #fff;
+    padding: 4px 10px;
+}
+
+.ysca-tier-name {
+    color: var(--ysca-tier-color, var(--ysca-primary));
+}
+
+.ysca-member-role-pill {
+    margin-right: 2px;
+}
+
+.ysca-help-copy {
+    margin: 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-copy-tight {
+    margin: 0;
+}
+
+.ysca-disc-list {
+    margin: 0 0 var(--ysca-space-2) var(--ysca-space-5);
+    list-style: disc;
+}
+
+.ysca-pagination-center {
+    margin-top: var(--ysca-space-4);
+    text-align: center;
+}
+
+.ysca-invoice-filter-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2);
+}
+
+.ysca-invoice-search {
+    flex: 1 1 240px;
+    width: auto;
+    min-width: min(100%, 240px);
+}
+
+.ysca-invoice-select {
+    width: auto;
+    min-width: 140px;
+}
+
+.ysca-invoice-status {
+    width: auto;
+    min-width: 120px;
+}
+
+.ysca-invoice-order-id {
+    flex: 0 0 110px;
+    width: 110px;
+}
+
+.ysca-modal__title {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h3);
+    font-weight: 800;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-invoice-detail-grid {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: var(--ysca-space-2) var(--ysca-space-4);
+    margin: var(--ysca-space-3) 0 0;
+}
+
+.ysca-invoice-detail-grid__label {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 500;
+}
+
+.ysca-invoice-detail-grid__value {
+    min-width: 0;
+    margin: 0;
+}
+
+.ysca-invoice-detail-grid__value--danger {
+    color: var(--ysca-danger);
+}
+
+.ysca-invoice-raw-summary {
+    color: var(--ysca-muted);
+    cursor: pointer;
+}
+
+.ysca-invoice-raw-pre {
+    max-height: 320px;
+    margin: var(--ysca-space-2) 0 0;
+    padding: var(--ysca-space-3);
+    overflow: auto;
+    background: var(--ysca-card-soft);
+    border-radius: var(--ysca-radius);
+    font-size: var(--ysca-fs-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 960px) {
+    .ysca-member-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .ysca-member-hero__meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ysca-log-viewer {
+    max-height: 500px;
+    margin: 0;
+    padding: var(--ysca-space-4);
+    overflow-y: auto;
+    color: #cdd6f4;
+    background: #1e1e2e;
+    border-radius: 0 0 var(--ysca-radius-card) var(--ysca-radius-card);
+    font-family: var(--ysca-font-mono);
+    font-size: var(--ysca-fs-xs);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ysca-muted-line {
+    margin: var(--ysca-space-3) 0 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-muted-line--spaced {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-member-name-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ysca-member-name-link {
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-subtitle);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.ysca-text-caption {
+    font-size: var(--ysca-fs-caption);
+    line-height: 1.4;
+}
+
+.ysca-text-mono {
+    font-family: var(--ysca-font-mono);
+    letter-spacing: 0.02em;
+}
+
+.ysca-text-italic {
+    font-style: italic;
+}
+
+.ysca-badge-wrap--sm {
+    display: inline-block;
+    font-size: var(--ysca-fs-caption);
+}
+
+.ysca-link-strong {
+    color: var(--ysca-primary);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.ysca-link-strong:hover {
+    color: var(--ysca-primary-hover);
+    text-decoration: underline;
+}
+
+/* v2.39.17 — normalize the few remaining WordPress form-table blocks inside
+ * Morandi cards. This keeps older settings templates readable while they are
+ * being migrated to explicit .ysca-field markup. */
+.ysca-card .form-table {
+    margin: 0;
+}
+
+.ysca-card .form-table th {
+    width: 180px;
+    padding: var(--ysca-space-4) var(--ysca-space-4) var(--ysca-space-4) 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 800;
+}
+
+.ysca-card .form-table td {
+    padding: var(--ysca-space-4) 0;
+    color: var(--ysca-text-body);
+}
+
+.ysca-card .form-table tr + tr th,
+.ysca-card .form-table tr + tr td {
+    border-top: 1px solid var(--ysca-line);
+}
+
+.ysca-card .form-table .description,
+.ysca-card .description {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  TABS
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-settings-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+}
+
+.ysca-settings-table th,
+.ysca-settings-table td {
+    padding: var(--ysca-space-4) 0;
+    vertical-align: top;
+}
+
+.ysca-settings-table th {
+    width: 220px;
+    padding-right: var(--ysca-space-5);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 800;
+    text-align: left;
+}
+
+.ysca-settings-table td {
+    color: var(--ysca-text-body);
+}
+
+.ysca-settings-table tr + tr th,
+.ysca-settings-table tr + tr td {
+    border-top: 1px solid var(--ysca-line);
+}
+
+.ysca-settings-table select,
+.ysca-settings-table input[type="text"],
+.ysca-settings-table input[type="number"],
+.ysca-settings-table input[type="url"],
+.ysca-settings-table input[type="email"],
+.ysca-settings-table textarea {
+    width: 100%;
+    max-width: min(520px, 100%);
+}
+
+.ysca-settings-table .small-text {
+    width: 96px;
+}
+
+.ysca-settings-table--compact th,
+.ysca-settings-table--compact td {
+    padding-top: var(--ysca-space-3);
+    padding-bottom: var(--ysca-space-3);
+}
+
+.ysca-settings-table--diagnostics {
+    max-width: 780px;
+}
+
+.ysca-table__label-wide {
+    width: 240px;
+}
+
+.ysca-code-textarea {
+    font-family: var(--ysca-font-mono);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-text-success {
+    color: var(--ysca-success);
+    font-weight: 800;
+}
+
+/* v2.45.40 Issue #2 — providers 頁面用獨立 container（替代 v2.45.39 雙層 .ysca-page-root 嵌套）
+ * 拔除 page-root layout 內距、卡 grid 直接吃滿 main，內部區塊全寬不留多餘留白。
+ */
+.ysca-providers-container {
+    width: 100%;
+    max-width: none;
+}
+
+.ysca-provider-page-lead {
+    max-width: 960px;
+    margin: calc(-1 * var(--ysca-space-2)) 0 var(--ysca-space-4);
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    line-height: var(--ysca-line-base);
+}
+
+.ysca-provider-grid {
+    display: grid;
+    /* v2.45.40 Issue #2 — min 320→340px：拉大 min 寬度、減少邊緣留白；gap 16→12px 更緊湊 */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: var(--ysca-space-3);
+    margin-bottom: var(--ysca-space-5);
+    /* v2.45.42 User LIVE 訴求「用 FLEX+GAP、不要個別 margin」：
+     * grid-auto-rows: 1fr 讓所有 row 等高、跨 row 高度均一（不只 same-row stretch）。 */
+    grid-auto-rows: 1fr;
+}
+
+.ysca-provider-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ysca-space-2);
+    /* v2.45.40 Issue #3 — compact 化：padding 20→12px，仿 WooCommerce 金流卡密度 */
+    padding: var(--ysca-space-3);
+}
+
+/* v2.45.41 CRITICAL cascade hotfix (User LIVE 抓到 BLOCKER):
+ * LIVE card 同時掛 4 class：`ysca-card ysca-surface ys-ec-card ysca-provider-card`
+ * + `body.ysca-active`、共有 4 條 padding rule 競爭：
+ *
+ *   - ysca-admin-base.css:237        `.ys-ec-card { padding: 20px 24px }`             (0,1,0)
+ *   - components.css:1536            `.ysca-provider-card { padding: --space-3 }`     (0,1,0)
+ *   - components.css                 `.ysca-surface { padding: --space-6 }`           (0,1,0)
+ *   - **legacy-bridge.css:218**      `.ysca-active .ys-ec-card { padding: --space-5 --space-6 }`  (0,2,0) ← 贏所有
+ *
+ * 上版 v2.45.40 規則 specificity 只 (0,1,0)、輸給 legacy-bridge (0,2,0)、
+ * LIVE computed padding 變 `20px 24px`（legacy 贏）而非預期 `12px`。
+ *
+ * Fix：本規則 specificity (0,3,0) 嚴格高於 legacy-bridge (0,2,0)、cascade 必勝。
+ * 限定 .ysca-provider-grid > 直接 child、避免污染其他 .ysca-provider-card 使用點。
+ */
+/* v2.45.43 cross-mode 修正（User 之前 LIVE 抓出 binary=no scope 缺失）：
+ * 從 `body.ysca-active .ysca-provider-grid > .ysca-provider-card` 改為
+ * `.ysca-provider-grid > .ysca-provider-card.ys-ec-card`。
+ * - 拔掉 `body.ysca-active` 依賴 → binary=no (純 WP-native) 也生效
+ * - 加 `.ys-ec-card` (card 永遠掛此 class) → specificity 仍 (0,3,0)
+ * - 兩模式 cascade 都 wins legacy-bridge `.ysca-active .ys-ec-card` (0,2,0)
+ *   跟 base `.ys-ec-card` (0,1,0)
+ */
+.ysca-provider-grid > .ysca-provider-card {
+    padding: var(--ysca-space-3);
+    /* v2.45.42 User LIVE 訴求 — 高度均一 via FLEX+GAP（不要個別 margin）:
+     *
+     * 已知打架的兩條 base rule:
+     *   - ysca-admin-base.css `.ysca-surface + .ysca-surface { margin-top: var(--space-5) }`
+     *     在 grid sibling 上加垂直 margin、跟 grid gap 累加、視覺破壞
+     *   - ysca-admin-base.css `.ysca-provider-grid > .ysca-provider-card { height: 100% }`
+     *     對 grid item 強制 height: 100% 可能與 grid-auto-rows: 1fr 衝突
+     *
+     * 本 scoped rule (0,3,0) 用 flex column + margin-top: 0 + align-self: stretch
+     * 三招同時化解：
+     *   1. margin-top: 0 拔 `.ysca-surface + .ysca-surface` margin 累加
+     *   2. align-self: stretch 取代 height: 100%（更可靠的 grid item stretch）
+     *   3. display flex column 配 .ysca-actions-bar margin-top: auto 把 action 推底、
+     *      不同 content 長度 card 內 action row 都對齊底邊、視覺整齊
+     */
+    margin-top: 0;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+}
+
+/* v2.45.43 cross-mode：action row 推底也拔 body.ysca-active 依賴 */
+.ysca-provider-grid > .ysca-provider-card .ysca-actions-bar,
+.ysca-provider-grid > .ysca-provider-card .ysca-provider-card__actions {
+    margin-top: auto;
+}
+
+.ysca-provider-card.is-active {
+    border: 2px solid var(--ysca-primary);
+}
+
+.ysca-provider-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-2);
+}
+
+.ysca-provider-card__title {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-lg, 16px);
+    font-weight: 800;
+}
+
+.ysca-provider-card__desc {
+    margin: 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    line-height: 1.5;
+}
+
+.ysca-provider-card__meta {
+    margin: 0;
+    color: var(--ysca-soft);
+    font-size: var(--ysca-fs-xs);
+}
+
+.ysca-provider-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2);
+    margin-top: auto;
+    /* v2.45.40 Issue #3 — actions row 與上方內容分離（細線 + 上 padding） */
+    padding-top: 8px;
+    border-top: 1px solid var(--ysca-line);
+}
+
+.ysca-provider-card__actions--split {
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ysca-provider-card__actions--split .ysca-provider-card__toggle {
+    margin: 0;
+}
+
+.ysca-provider-card__settings {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 32px;
+    margin-left: auto;
+}
+
+.ysca-provider-card__header,
+.ysca-provider-card__identity {
+    display: flex;
+    /* v2.45.39 Issue #3 — header / identity 改 align-items: flex-start，
+     * icon 對齊頂部、toggle button 對齊頂部、避免 description 多行時 baseline 漂移 */
+    align-items: flex-start;
+    /* v2.45.40 Issue #3 — header 內元素間距縮、卡片密度提升 */
+    gap: var(--ysca-space-2);
+}
+
+.ysca-provider-card__header {
+    justify-content: space-between;
+}
+
+.ysca-provider-card__identity {
+    min-width: 0;
+}
+
+.ysca-provider-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    border-radius: var(--ysca-radius);
+}
+
+.ysca-provider-card__description {
+    margin: var(--ysca-space-1) 0 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    line-height: var(--ysca-line-base);
+}
+
+.ysca-provider-card__toggle {
+    flex: 0 0 auto;
+}
+
+.ysca-provider-card__methods,
+.ysca-provider-card__badges {
+    display: flex;
+    flex-wrap: wrap;
+    /* v2.45.40 Issue #3 — methods row gap 縮為 4px，badges 密集排列 */
+    gap: 4px;
+}
+
+.ysca-provider-card__methods {
+    /* v2.45.39 Issue #3 — label 用 baseline、避免不同高度 badge 將 label 拉歪 */
+    align-items: baseline;
+    /* v2.45.40 Issue #3 — 標題與 badges 之間留小空（4px），整體更緊 */
+    padding-top: 4px;
+    font-size: 12px;
+}
+
+.ysca-provider-card__badges {
+    align-items: center;
+    /* v2.45.40 Issue #3 — badge 列表最多 2 行（48px ≈ 兩行 badge 高度）、超出隱藏避免長尾撐爆 card */
+    max-height: 48px;
+    overflow: hidden;
+}
+
+.ysca-provider-card__methods > strong {
+    /* v2.45.39 Issue #3 — 「金流：」/「物流：」 label 漂浮在最左、不被 flex 拉伸 */
+    flex: 0 0 auto;
+    align-self: flex-start;
+}
+
+/* v2.45.40 Issue #3 — 啟用狀態小圓點（綠 8px），給 header 顯示輕量化視覺狀態 */
+.ysca-provider-card__status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ysca-success);
+    margin-right: 6px;
+    flex: 0 0 auto;
+}
+
+.ysca-shopline-credential-set {
+    display: grid;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-4);
+}
+
+.ysca-shopline-installment-period {
+    min-width: 80px;
+}
+
+.ysca-detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    gap: var(--ysca-space-5);
+    align-items: start;
+}
+
+.ysca-detail-layout__main,
+.ysca-detail-layout__aside {
+    min-width: 0;
+}
+
+.ysca-variable-card {
+    position: sticky;
+    top: var(--ysca-space-4);
+}
+
+.ysca-token-group__title {
+    margin: var(--ysca-space-3) 0 var(--ysca-space-2);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 800;
+}
+
+.ysca-date-separator {
+    align-self: center;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-result-summary {
+    margin: 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+.ysca-status-progress {
+    width: 140px;
+    max-width: 100%;
+    height: 8px;
+    vertical-align: middle;
+    accent-color: var(--ysca-primary);
+}
+
+.ysca-status-progress__label {
+    display: inline-block;
+    margin-left: var(--ysca-space-2);
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 700;
+}
+
+.ysca-gateway-sortable {
+    display: grid;
+    gap: var(--ysca-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ysca-gateway-row {
+    display: grid;
+    grid-template-columns: 28px 40px minmax(0, 1fr) 56px;
+    gap: var(--ysca-space-3);
+    align-items: center;
+    min-height: 76px;
+    padding: 12px 14px;
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-md);
+    background: var(--ysca-card);
+    box-sizing: border-box;
+}
+
+.ysca-gateway-row--disabled {
+    border-color: #f2d9a6;
+    background: var(--ysca-warning-soft, #fff7e8);
+}
+
+.ysca-gateway-row__handle {
+    justify-self: center;
+    color: var(--ysca-muted);
+    cursor: grab;
+}
+
+.ysca-invoice-list-page,
+.ysca-invoice-settings-page {
+    width: 100%;
+}
+
+.ysca-invoice-list-page .ysca-filter-bar {
+    margin-top: 0;
+}
+
+.ysca-invoice-list-page .ysca-table-card,
+.ysca-invoice-settings-page .ysca-card {
+    background: var(--ysca-card, #fff);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-lg, 16px);
+    box-shadow: var(--ysca-shadow-sm);
+}
+
+.ysca-invoice-summary-card .ysca-card__head {
+    align-items: flex-start;
+}
+
+.ysca-invoice-summary-card .ysca-provider-card__actions {
+    flex: 0 0 auto;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.ysca-invoice-summary-card .ysca-provider-card__meta {
+    padding: 0 var(--ysca-space-5) var(--ysca-space-5);
+}
+
+.ysca-invoice-settings-card .ysca-card__body {
+    padding-top: 0;
+}
+
+.ysca-invoice-settings-page .ysca-form-grid {
+    gap: var(--ysca-space-4);
+}
+
+.ysca-filter-bar--products {
+    grid-template-columns:
+        minmax(260px, 420px)
+        minmax(150px, 180px)
+        minmax(150px, 180px)
+        minmax(96px, 128px)
+        auto
+        auto
+        minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--orders {
+    grid-template-columns:
+        minmax(300px, 1fr)
+        minmax(236px, 260px)
+        minmax(180px, 260px)
+        auto
+        auto
+        minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--invoice {
+    grid-template-columns:
+        minmax(240px, 1fr)
+        minmax(180px, 0.55fr)
+        minmax(160px, 0.45fr)
+        minmax(96px, 120px)
+        minmax(78px, auto)
+        minmax(76px, auto);
+    align-items: center;
+}
+
+.ysca-filter-bar--credit {
+    grid-template-columns:
+        minmax(260px, 420px)
+        auto
+        minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-page-root .wp-editor-wrap {
+    max-width: 100%;
+}
+
+.ysca-page-root .wp-editor-wrap .quicktags-toolbar,
+.ysca-page-root .wp-editor-wrap .wp-media-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-height: 34px;
+}
+
+.ysca-page-root .wp-editor-wrap .quicktags-toolbar input.ed_button,
+.ysca-page-root .wp-editor-wrap .wp-media-buttons .button,
+.ysca-page-root .wp-editor-wrap .wp-switch-editor {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto !important;
+    min-width: 0;
+    max-width: max-content;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 10px !important;
+    line-height: 1 !important;
+    box-sizing: border-box;
+}
+
+.ysca-page-root .wp-editor-wrap textarea.wp-editor-area {
+    width: 100%;
+    min-height: 240px;
+    box-sizing: border-box;
+}
+
+.ysca-filter-bar--category {
+    grid-template-columns:
+        minmax(240px, 360px)
+        minmax(72px, auto)
+        minmax(72px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--members {
+    grid-template-columns:
+        minmax(260px, 1fr)
+        minmax(180px, 220px)
+        minmax(180px, auto)
+        minmax(64px, auto)
+        minmax(64px, auto);
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--coupons {
+    grid-template-columns:
+        minmax(260px, 420px)
+        minmax(64px, auto)
+        minmax(64px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--digital-files {
+    grid-template-columns:
+        minmax(260px, 360px)
+        minmax(180px, 220px)
+        minmax(64px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--shipping-print {
+    grid-template-columns:
+        minmax(180px, 220px)
+        minmax(180px, 220px)
+        minmax(160px, 200px)
+        minmax(64px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--subscriptions {
+    grid-template-columns:
+        minmax(240px, 320px)
+        minmax(64px, auto)
+        minmax(120px, 180px)
+        minmax(64px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-filter-bar--logs {
+    grid-template-columns:
+        minmax(120px, 160px)
+        minmax(160px, 220px)
+        minmax(112px, 140px)
+        auto
+        minmax(112px, 140px)
+        minmax(64px, auto)
+        minmax(64px, auto)
+        1fr;
+    align-items: center;
+    justify-items: start;
+}
+
+.ysca-date-range {
+    display: grid;
+    grid-template-columns: minmax(104px, 116px) auto minmax(104px, 116px);
+    align-items: center;
+    gap: var(--ysca-space-2);
+    min-width: 0;
+}
+
+.ysca-table .ysca-cod-table__check {
+    width: 92px;
+    min-width: 92px;
+    white-space: nowrap;
+}
+
+.ysca-date-range__separator {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.ysca-date-range__input {
+    min-width: 0;
+}
+
+.ysca-table .ysca-table__slug {
+    width: 1%;
+    min-width: 148px;
+    white-space: nowrap;
+}
+
+.ysca-table__slug code {
+    display: inline-flex;
+    max-width: 220px;
+    overflow: hidden;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.ysca-admin-discount-apply {
+    display: inline-grid;
+    justify-items: start;
+    gap: 4px;
+}
+
+.ysca-admin-discount-apply__scope {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ysca-credit-filter-bar {
+    grid-template-columns:
+        minmax(260px, 420px)
+        auto
+        minmax(0, 1fr);
+    justify-items: start;
+}
+
+.ysca-credit-settings-page > form {
+    display: grid;
+    gap: var(--ysca-space-3);
+}
+
+.ysca-credit-settings-page > form > .ysca-settings-panel {
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+    padding: 0;
+    overflow: hidden;
+}
+
+.ysca-credit-settings-page > form > .ysca-settings-panel > h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ysca-line);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h3);
+    font-weight: 700;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-credit-settings-page > form > .ysca-settings-panel > .inside {
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+}
+
+.ysca-credit-settings-page > form > .ysca-credit-master-card > .inside,
+.ysca-credit-settings-page > form > .ysca-credit-master-card > .ysca-card__body {
+    padding: 14px 20px;
+}
+
+.ysca-credit-master-card .ysca-inline-cluster {
+    min-height: 44px;
+}
+
+.ysca-credit-master-card .ysca-field__label {
+    font-size: var(--ysca-fs-sm);
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-credit-master-card .ysca-field__hint {
+    margin: 4px 0 0;
+    max-width: 720px;
+}
+
+.ysca-settings-panel .ysca-field {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-settings-panel .ysca-field:last-child {
+    margin-bottom: 0;
+}
+
+.ysca-settings-panel .ysca-field-row {
+    gap: var(--ysca-space-3);
+}
+
+.ysca-credit-filter-bar :where(input, .ysca-btn) {
+    min-height: 32px;
+}
+
+.ysca-credit-settings-save {
+    width: auto;
+    min-width: 96px;
+}
+
+.ysca-credit-manual-card .inside,
+.ysca-credit-batch-card__body {
+    display: grid;
+    gap: var(--ysca-space-3);
+}
+
+.ysca-credit-manual-card .ysca-card__head,
+.ysca-credit-batch-card .ysca-card__head {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-credit-manual-form,
+.ysca-credit-batch-filters,
+.ysca-credit-batch-panel {
+    display: grid;
+    grid-template-columns: minmax(120px, 160px) minmax(120px, 160px) minmax(240px, 420px) max-content;
+    align-items: end;
+    gap: var(--ysca-space-3);
+}
+
+.ysca-credit-manual-form :where(input, select, .ysca-btn),
+.ysca-credit-batch-filters :where(input, select, .ysca-btn),
+.ysca-credit-batch-panel :where(input, select, .ysca-btn) {
+    height: 36px;
+    min-height: 36px;
+}
+
+.ysca-credit-manual-actions,
+.ysca-credit-batch-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    align-self: end;
+    justify-self: start;
+    white-space: nowrap;
+}
+
+.ysca-credit-batch-filters {
+    grid-template-columns: minmax(160px, 220px) repeat(4, minmax(120px, 150px)) max-content;
+    max-width: 1020px;
+}
+
+.ysca-credit-batch-action {
+    width: max-content;
+    min-width: 96px;
+    white-space: nowrap;
+}
+
+.ysca-credit-batch-panel {
+    grid-template-columns: minmax(140px, 180px) minmax(260px, 460px) max-content;
+    max-width: 900px;
+    padding: var(--ysca-space-3);
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-md);
+}
+
+.ysca-credit-batch-tabs {
+    width: max-content;
+}
+
+.ysca-segmented {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-pill);
+}
+
+.ysca-segmented__item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 var(--ysca-space-3);
+    color: var(--ysca-text);
+    background: transparent;
+    border: 0;
+    border-radius: var(--ysca-radius-pill);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ysca-segmented__item:hover,
+.ysca-segmented__item:focus-visible {
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    outline: none;
+}
+
+.ysca-segmented__item.is-active {
+    color: #fff;
+    background: var(--ysca-primary);
+    box-shadow: var(--ysca-shadow-soft);
+}
+
+@media (max-width: 1180px) {
+    .ysca-filter-bar--orders,
+    .ysca-filter-bar--members,
+    .ysca-filter-bar--coupons,
+    .ysca-filter-bar--digital-files,
+    .ysca-credit-filter-bar,
+    .ysca-credit-manual-form,
+    .ysca-credit-batch-filters,
+    .ysca-credit-batch-panel {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-filter-bar--products {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-filter-bar--orders,
+    .ysca-filter-bar--members,
+    .ysca-filter-bar--coupons,
+    .ysca-filter-bar--digital-files,
+    .ysca-credit-filter-bar,
+    .ysca-credit-manual-form,
+    .ysca-credit-batch-filters,
+    .ysca-credit-batch-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-date-range {
+        grid-template-columns: 1fr auto 1fr;
+    }
+}
+
+@media (max-width: 782px) {
+    .ysca-filter-bar--products {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        justify-items: stretch;
+        width: 100%;
+        max-width: 100%;
+        overflow: visible;
+    }
+
+    .ysca-filter-bar--products .ysca-filter-search {
+        grid-column: 1 / -1;
+        width: 100%;
+        max-width: none;
+    }
+
+    .ysca-filter-bar--products .ysca-input,
+    .ysca-filter-bar--products .ysca-select,
+    .ysca-filter-bar--products .ysca-btn {
+        justify-self: stretch;
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 520px) {
+    .ysca-filter-bar--products {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ysca-gateway-row.is-dragging,
+.ysca-shipping-sortable__item.is-dragging {
+    opacity: 0.72;
+    border-color: var(--ysca-primary);
+    box-shadow: var(--ysca-shadow-md);
+}
+
+.ysca-gateway-row__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    border-radius: var(--ysca-radius);
+}
+
+.ysca-gateway-row__content {
+    display: grid;
+    gap: var(--ysca-space-1);
+    min-width: 0;
+}
+
+.ysca-gateway-row__provider,
+.ysca-gateway-row__status {
+    width: fit-content;
+}
+
+.ysca-gateway-row__description {
+    display: block;
+}
+
+.ysca-gateway-row__toggle {
+    margin-bottom: 0;
+}
+
+@media (max-width: 782px) {
+    .ysca-detail-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-variable-card {
+        position: static;
+    }
+
+    .ysca-gateway-row {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .ysca-gateway-row__toggle {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 782px) {
+    .ysca-settings-table,
+    .ysca-settings-table tbody,
+    .ysca-settings-table tr,
+    .ysca-settings-table th,
+    .ysca-settings-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .ysca-settings-table th {
+        padding-bottom: var(--ysca-space-2);
+    }
+
+    .ysca-settings-table td {
+        padding-top: 0;
+    }
+}
+
+.ysca-tabs {
+    display: flex;
+    flex-wrap: nowrap;            /* v2.30.1 UX-5：避免 7+ tab 換行破版 */
+    overflow-x: auto;             /* v2.30.1 UX-5：橫向 scroll 取代 wrap */
+    gap: var(--ysca-space-1);
+    padding: 0 var(--ysca-space-2);
+    border-bottom: 1px solid var(--ysca-line);
+    scrollbar-width: thin;
+}
+
+/* v2.30.1 UX-5：垂直 tab variant 給 settings 用 */
+.ysca-tabs--navigation,
+nav.ysca-tabs[role="tablist"],
+.ys-ec-filters.ysca-tabs--with-indicator {
+    margin: 0 0 var(--ysca-space-4);
+    padding: var(--ysca-space-2);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-tabs--vertical {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-x: visible;
+    border-bottom: 0;
+    border-right: 1px solid var(--ysca-line);
+    padding: var(--ysca-space-2) 0;
+}
+
+.ysca-tabs--vertical .ysca-tab[aria-selected="true"]::after {
+    left: auto;
+    right: -1px;
+    top: var(--ysca-space-2);
+    bottom: var(--ysca-space-2);
+    width: 2px;
+    height: auto;
+}
+
+.ysca-tab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    min-height: 44px;
+    height: 38px;
+    padding: 0 var(--ysca-space-4);
+    color: var(--ysca-text-body);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-family: var(--ysca-font-sans);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+    white-space: nowrap;
+    transition: color var(--ysca-motion);
+}
+
+.ysca-tab:hover {
+    color: var(--ysca-primary);
+}
+
+.ysca-tab.active,
+.ysca-tab.is-active,
+.ysca-tab[aria-selected="true"],
+.ysca-tab[aria-current="page"],
+.ysca-tabs__item--active,
+.ysca-tabs__item.active,
+.ysca-tabs__item.is-active,
+.ysca-tabs__item[aria-selected="true"],
+.ysca-tabs__item[aria-current="page"],
+.ys-ec-filter-btn.active,
+.ys-ec-filter-btn.is-active,
+.ys-ec-filter-btn[aria-current="page"],
+.ys-ec-tab.active,
+.ys-ec-tab.is-active,
+.ys-ec-tab[aria-selected="true"],
+.nav-tab.nav-tab-active {
+    color: #fff;
+    background: var(--ysca-primary);
+    border-color: var(--ysca-primary);
+    box-shadow: 0 8px 18px rgba(39, 114, 239, 0.18);
+}
+
+.ysca-tab.active::after,
+.ysca-tab.is-active::after,
+.ysca-tab[aria-selected="true"]::after,
+.ysca-tab[aria-current="page"]::after,
+.ysca-tabs__item--active::after,
+.ysca-tabs__item.active::after,
+.ysca-tabs__item.is-active::after,
+.ysca-tabs__item[aria-selected="true"]::after,
+.ysca-tabs__item[aria-current="page"]::after,
+.ys-ec-filter-btn.active::after,
+.ys-ec-filter-btn.is-active::after,
+.ys-ec-filter-btn[aria-current="page"]::after,
+.ys-ec-tab.active::after,
+.ys-ec-tab.is-active::after,
+.ys-ec-tab[aria-selected="true"]::after,
+.nav-tab.nav-tab-active::after {
+    display: none;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  MODAL / DIALOG
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ysca-z-modal);
+    display: grid;
+    place-items: center;
+    padding: var(--ysca-space-4);
+    background: rgba(15, 23, 42, 0.45);
+    animation: ysca-fade var(--ysca-motion);
+}
+
+/* v2.39.12 CODEX P1: HTML hidden attribute must hide the backdrop.
+   Without this rule, display:grid above overrides hidden=true and the modal
+   stays full-screen-grey on page load. !important needed because the base
+   .ysca-modal-backdrop rule has equal specificity but appears earlier. */
+.ysca-modal-backdrop[hidden] {
+    display: none !important;
+}
+
+@keyframes ysca-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.ysca-modal {
+    width: min(560px, 100%);          /* default = md */
+    max-height: calc(100vh - var(--ysca-space-8));
+    overflow: auto;
+    background: var(--ysca-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-pop);
+}
+
+/* v2.30.1 UX-6：modal size variants */
+.ysca-modal--sm { width: min(420px, 100%); }
+.ysca-modal--lg { width: min(800px, 100%); }
+.ysca-modal--xl { width: min(1080px, 100%); }
+
+.ysca-modal__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--ysca-space-4);
+    padding: var(--ysca-space-5) var(--ysca-space-6);
+    border-bottom: 1px solid var(--ysca-line);
+}
+
+.ysca-modal__body {
+    padding: var(--ysca-space-5) var(--ysca-space-6);
+}
+
+.ysca-modal__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ysca-space-2);
+    padding: var(--ysca-space-4) var(--ysca-space-6);
+    border-top: 1px solid var(--ysca-line);
+    background: var(--ysca-card-soft);
+}
+
+.ysca-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.ysca-modal-content {
+    position: relative;
+    width: min(640px, 90vw);
+    max-height: calc(100vh - var(--ysca-space-8));
+    overflow: auto;
+    background: var(--ysca-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-pop);
+}
+
+.ysca-modal-header,
+.ysca-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-4) var(--ysca-space-6);
+}
+
+.ysca-modal-header {
+    border-bottom: 1px solid var(--ysca-line);
+}
+
+.ysca-modal-header h3 {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h3);
+    font-weight: 800;
+}
+
+.ysca-modal-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--ysca-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--ysca-radius);
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+}
+
+.ysca-modal-close:hover {
+    color: var(--ysca-text);
+    background: var(--ysca-card-soft);
+}
+
+.ysca-modal-body {
+    padding: var(--ysca-space-5) var(--ysca-space-6);
+}
+
+.ysca-modal-footer {
+    justify-content: flex-end;
+    border-top: 1px solid var(--ysca-line);
+    background: var(--ysca-card-soft);
+}
+
+.ysca-customer-results {
+    position: absolute;
+    z-index: calc(var(--ysca-z-modal) + 1);
+    width: calc(100% - 48px);
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius);
+    box-shadow: var(--ysca-shadow-pop);
+}
+
+.ysca-customer-item {
+    padding: var(--ysca-space-2) var(--ysca-space-3);
+    border-bottom: 1px solid var(--ysca-line);
+    color: var(--ysca-text);
+    cursor: pointer;
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-customer-item:hover {
+    background: var(--ysca-card-soft);
+}
+
+.ysca-customer-item:last-child {
+    border-bottom: 0;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  TOAST
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-toast-region {
+    position: fixed;
+    top: var(--ysca-space-4);
+    right: var(--ysca-space-4);
+    z-index: var(--ysca-z-toast);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ysca-space-2);
+    width: min(360px, calc(100vw - var(--ysca-space-8)));
+    pointer-events: none;
+}
+
+.ysca-toast {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+    color: var(--ysca-text);
+    background: var(--ysca-card);
+    border-left: 3px solid var(--ysca-primary);
+    border-radius: var(--ysca-radius);
+    box-shadow: var(--ysca-shadow-pop);
+    pointer-events: auto;
+    animation: ysca-toast-in var(--ysca-motion);
+}
+
+.ysca-toast--success {
+    border-left-color: var(--ysca-success);
+}
+
+.ysca-toast--warning {
+    border-left-color: var(--ysca-warning);
+}
+
+.ysca-toast--danger {
+    border-left-color: var(--ysca-danger);
+}
+
+@keyframes ysca-toast-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.ysca-toast__close {
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: 0;
+    color: var(--ysca-muted);
+    cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  STATE — empty / loading / error
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-state {
+    display: grid;
+    place-items: center;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-10) var(--ysca-space-4);
+    color: var(--ysca-muted);
+    text-align: center;
+}
+
+.ysca-state__title {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-h3);
+    font-weight: 700;
+}
+
+.ysca-state__hint {
+    max-width: 360px;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+}
+
+.ysca-state__icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    background: var(--ysca-primary-soft);
+    color: var(--ysca-primary);
+    border-radius: 50%;
+}
+
+.ysca-state--loading .ysca-state__icon::after {
+    content: "";
+    width: 22px;
+    height: 22px;
+    border: 3px solid var(--ysca-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: ysca-spin 750ms linear infinite;
+}
+
+.ysca-state--error .ysca-state__icon {
+    color: var(--ysca-danger);
+    background: var(--ysca-danger-soft);
+}
+
+.ysca-state--empty .ysca-state__icon {
+    color: var(--ysca-muted);
+    background: var(--ysca-card-soft);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  PILL & KICKER
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px var(--ysca-space-3);
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    border-radius: var(--ysca-radius-pill);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 800;
+}
+
+.ysca-pill--neutral {
+    color: var(--ysca-muted);
+    background: var(--ysca-card-soft);
+    border: 1px solid var(--ysca-line);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  GRID HELPERS
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-grid {
+    display: grid;
+    gap: var(--ysca-space-5);
+}
+
+.ysca-grid--metrics {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.ysca-grid--two {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ysca-grid--main-aside {
+    grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+@media (max-width: 1024px) {
+    .ysca-grid--two,
+    .ysca-grid--main-aside {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  INVOICE PREVIEW（v2.39.14 Item 2）
+/*    給「電子發票列表 → 查看發票」 modal 用的證明聯預覽。
+/*    模仿真實電子發票排版（B2C 二聯式 / B2B 三聯式）。
+/* ═══════════════════════════════════════════════════ */
+
+.ysca-invoice-preview {
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-strong);
+    border-radius: var(--ysca-radius-card);
+    padding: var(--ysca-space-5) var(--ysca-space-6);
+    color: var(--ysca-text);
+    /* 收據觸感：底部 dashed，模擬撕線 */
+    box-shadow: 0 2px 4px rgba(22, 34, 51, 0.04);
+}
+
+.ysca-invoice-preview__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-3);
+    padding-bottom: var(--ysca-space-3);
+    border-bottom: 1px dashed var(--ysca-line-strong);
+    margin-bottom: var(--ysca-space-4);
+}
+
+.ysca-invoice-preview__title {
+    flex: 1 1 auto;
+    text-align: center;
+    font-size: var(--ysca-fs-h2);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ysca-text);
+}
+
+.ysca-invoice-preview__seller {
+    text-align: center;
+    font-size: var(--ysca-fs-md);
+    font-weight: 600;
+    color: var(--ysca-text-body);
+    margin-bottom: var(--ysca-space-2);
+}
+
+.ysca-invoice-preview__seller-tax {
+    text-align: center;
+    font-size: var(--ysca-fs-sm);
+    color: var(--ysca-muted);
+    margin-bottom: var(--ysca-space-3);
+    font-family: var(--ysca-font-mono);
+    letter-spacing: 0.04em;
+}
+
+.ysca-invoice-preview__grid {
+    display: grid;
+    grid-template-columns: 96px 1fr 96px 1fr;
+    gap: var(--ysca-space-2) var(--ysca-space-3);
+    margin: var(--ysca-space-3) 0 0;
+    padding: var(--ysca-space-3) 0 0;
+    border-top: 1px dashed var(--ysca-line);
+}
+
+.ysca-invoice-preview__grid > dt {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 500;
+    align-self: center;
+}
+
+.ysca-invoice-preview__grid > dd {
+    margin: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-base);
+    align-self: center;
+    word-break: break-all;
+}
+
+.ysca-invoice-preview__grid > dd.is-mono {
+    font-family: var(--ysca-font-mono);
+    letter-spacing: 0.04em;
+}
+
+.ysca-invoice-preview__grid > dd.is-strong {
+    font-weight: 700;
+    font-size: var(--ysca-fs-md);
+    color: var(--ysca-primary-strong);
+}
+
+.ysca-invoice-preview__error {
+    margin-top: var(--ysca-space-3);
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+    border-radius: var(--ysca-radius);
+    background: var(--ysca-danger-soft);
+    color: var(--ysca-danger);
+    font-size: var(--ysca-fs-sm);
+    line-height: var(--ysca-line-base);
+}
+
+/* B2C 版型：grid 用 2 欄即可（沒有「公司 / 統編」對） */
+.ysca-invoice-preview[data-format="b2c"] .ysca-invoice-preview__grid {
+    grid-template-columns: 96px 1fr;
+}
+
+/* 折疊區：點開查看 raw fields */
+.ysca-invoice-detail-toggle {
+    margin-top: var(--ysca-space-4);
+    padding-top: var(--ysca-space-3);
+    border-top: 1px solid var(--ysca-line);
+}
+
+.ysca-invoice-detail-toggle > summary {
+    cursor: pointer;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-sm);
+    user-select: none;
+    list-style-position: inside;
+}
+
+.ysca-invoice-detail-toggle > summary:hover {
+    color: var(--ysca-text-body);
+}
+
+@media (max-width: 640px) {
+    .ysca-invoice-preview {
+        padding: var(--ysca-space-4);
+    }
+    .ysca-invoice-preview__grid {
+        /* 手機改 2 欄（label 上、value 下） */
+        grid-template-columns: 80px 1fr;
+    }
+}
+
+/* Legacy raw controls keep the default 44px rhythm; design-system classes own
+ * their own sizes so compact filter bars can remain genuinely compact. */
+.ysca-page-root :where(input[type="text"]:not(.ysca-input), input[type="email"]:not(.ysca-input), input[type="password"]:not(.ysca-input), input[type="number"]:not(.ysca-input), input[type="url"]:not(.ysca-input), input[type="date"]:not(.ysca-input), input[type="datetime-local"]:not(.ysca-input), select:not(.ysca-select)) {
+    min-height: var(--ysca-control-h);
+}
+
+.ysca-page-root :where(.ys-ec-select, select:not(.ysca-select)) {
+    line-height: 1.35;
+}
+
+/* v2.44.11 promo form primitives: shared choice-panel/mixbox/form-grid utilities. */
+.ysca-hidden-control {
+    display: none !important;
+}
+
+.ysca-modal--hidden {
+    display: none !important;
+}
+
+.ysca-demo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-demo-actions--loose {
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-demo-control--search {
+    max-width: 280px;
+}
+
+.ysca-demo-control--status {
+    max-width: 140px;
+}
+
+.ysca-demo-output {
+    max-height: 200px;
+    margin-top: var(--ysca-space-4, 16px);
+    overflow: auto;
+    font-family: var(--ysca-font-mono);
+    font-size: var(--ysca-fs-xs, 12px);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ysca-icon--xl {
+    width: 48px;
+    height: 48px;
+    font-size: 48px;
+}
+
+.ysca-type-sample {
+    margin-bottom: var(--ysca-space-1);
+    color: var(--ysca-text);
+    line-height: 1.4;
+}
+
+.ysca-type-sample--page-title {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-page-title);
+    font-weight: 700;
+    line-height: 1.18;
+}
+
+.ysca-type-sample--section {
+    font-size: var(--ysca-fs-section);
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.ysca-type-sample--subtitle {
+    font-size: var(--ysca-fs-subtitle);
+    font-weight: 500;
+}
+
+.ysca-type-sample--card-title {
+    font-size: var(--ysca-fs-card-title);
+    font-weight: 600;
+}
+
+.ysca-type-sample--price,
+.ysca-demo-price-cell {
+    font-size: var(--ysca-fs-price);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+}
+
+.ysca-type-sample--body {
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.ysca-type-sample--caption {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 400;
+}
+
+.ysca-type-sample__meta {
+    color: var(--ysca-muted);
+    font-family: var(--ysca-font-mono);
+}
+
+.ysca-token-heading {
+    margin: var(--ysca-space-4) 0 var(--ysca-space-2);
+    font-size: var(--ysca-fs-card-title);
+    font-weight: 600;
+}
+
+.ysca-token-heading--spaced {
+    margin-top: var(--ysca-space-6);
+}
+
+.ysca-token-table {
+    margin-top: var(--ysca-space-2);
+}
+
+.ysca-token-row--new {
+    background: var(--ysca-success-soft);
+}
+
+.ysca-token-swatch--primary { background: var(--ysca-primary); }
+.ysca-token-swatch--primary-strong { background: var(--ysca-primary-strong); }
+.ysca-token-swatch--primary-input-hover { background: var(--ysca-primary-input-hover); }
+.ysca-token-swatch--success { background: var(--ysca-success); }
+.ysca-token-swatch--warning { background: var(--ysca-warning); }
+.ysca-token-swatch--danger { background: var(--ysca-danger); }
+.ysca-token-swatch--info { background: var(--ysca-info); }
+.ysca-token-swatch--text-h1 { background: var(--ysca-text-h1); }
+.ysca-token-swatch--text { background: var(--ysca-text); }
+.ysca-token-swatch--text-body { background: var(--ysca-text-body); }
+.ysca-token-swatch--muted { background: var(--ysca-muted); }
+.ysca-token-swatch--placeholder { background: var(--ysca-placeholder); }
+.ysca-token-swatch--canvas { background: var(--ysca-canvas); }
+.ysca-token-swatch--bg { background: var(--ysca-bg); }
+
+.ysca-token-swatch--card {
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line);
+}
+
+.ysca-token-swatch--line-card {
+    background: #fff;
+    border: 1px solid var(--ysca-line-card);
+}
+
+.ysca-token-swatch--border {
+    background: #fff;
+    border: 1px solid var(--ysca-border);
+}
+
+.ysca-dashboard-chart {
+    height: 300px;
+}
+
+.ysca-action-auto {
+    margin-left: auto;
+}
+
+.ysca-help-toc__title {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-help-toc__body {
+    margin-top: var(--ysca-space-3, 12px);
+}
+
+.ysca-permission-description {
+    margin-top: 0;
+    line-height: 1.6;
+}
+
+.ysca-batch-result {
+    margin-top: var(--ysca-space-4);
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+    border: 1px solid var(--ysca-border);
+    border-radius: var(--ysca-radius-md);
+    font-weight: 600;
+}
+
+.ysca-batch-result--success {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.ysca-batch-result--error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.ysca-inline-cluster {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-check-list {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-check-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.ysca-check-line--strong,
+.ysca-field-label--strong {
+    font-weight: 600;
+}
+
+.ysca-check-line :where(input[type="checkbox"], input[type="radio"]) {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.ysca-form-section-title {
+    margin: 0 0 var(--ysca-space-2, 8px);
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ysca-line, #e5e7eb);
+    font-size: 14px;
+}
+
+.ysca-form-group-spaced {
+    margin-bottom: var(--ysca-space-4, 16px);
+}
+
+.ysca-form-group-spaced--lg {
+    margin-bottom: var(--ysca-space-5, 20px);
+}
+
+.ysca-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-form-row > .ysca-form-group,
+.ysca-form-row > .ys-ec-form-group {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+.ysca-form-group--amount,
+.ysca-form-group--date {
+    flex-basis: 180px;
+}
+
+.ysca-form-group--period,
+.ysca-form-group--status {
+    flex-basis: 140px;
+}
+
+.ysca-form-group--interval {
+    flex: 0 1 96px;
+}
+
+.ysca-form-label {
+    display: block;
+    margin-bottom: var(--ysca-space-1, 4px);
+    color: var(--ysca-text, #0f172a);
+    font-weight: 700;
+}
+
+.ysca-customer-empty {
+    padding: var(--ysca-space-3, 12px);
+    color: var(--ysca-muted, #64748b);
+    font-size: var(--ysca-fs-sm, 13px);
+}
+
+.ysca-page-root .ys-ec-picker-selected.ysca-picker-selected--visible {
+    display: inline-flex;
+}
+
+.ysca-page-root :where(.ysca-mixbox, .ys-ec-mixbox, .ysca-choice-panel) {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--ysca-line-strong, #d1d5db);
+    border-radius: var(--ysca-radius, 8px);
+    background: var(--ysca-card, #fff);
+}
+
+.ysca-page-root :where(.ysca-choice-panel__header, .ys-ec-mixbox-header) {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    padding: var(--ysca-space-3, 12px);
+    border-bottom: 1px solid var(--ysca-line, #e5e7eb);
+    background: var(--ysca-surface, #f9fafb);
+}
+
+.ysca-page-root :where(.ysca-choice-panel__search, .ys-ec-mixbox-search) {
+    flex: 1 1 auto;
+    min-width: 0;
+    /* v2.46.5 Tier 2: search input 對齊 control-h (44px) */
+    min-height: var(--ysca-control-h) !important;
+}
+
+.ysca-page-root :where(.ysca-choice-panel__count, .ys-ec-mixbox-count) {
+    flex: 0 0 auto;
+    color: var(--ysca-muted, #6b7280);
+    font-size: var(--ysca-fs-xs, 12px);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ysca-page-root :where(.ysca-choice-panel__count span, .ys-ec-mixbox-count span) {
+    color: var(--ysca-primary, #2563eb);
+}
+
+.ysca-page-root :where(.ysca-choice-panel__body, .ys-ec-mixbox-list) {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--ysca-space-2, 8px);
+}
+
+.ysca-page-root :where(.ysca-choice-panel__body.ysca-check-list--panel) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.ysca-page-root :where(.ysca-table-input) {
+    /* v2.46.5 Tier 2: 表格內 inline 輸入框用 sm control-h (32px) */
+    min-height: var(--ysca-control-h-sm);
+}
+
+@media (max-width: 640px) {
+    .ysca-page-root :where(.ysca-choice-panel__header, .ys-ec-mixbox-header) {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ysca-page-root :where(.ysca-choice-panel__count, .ys-ec-mixbox-count) {
+        align-self: flex-start;
+    }
+}
+
+/* v2.44.17 admin form/detail primitives for settings, shipping, and member tiers. */
+.ysca-editor-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    gap: var(--ysca-space-5, 20px);
+    align-items: start;
+}
+
+.ysca-actions-bar--wrap {
+    flex-wrap: wrap;
+}
+
+.ysca-input-row {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-inline-control {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-inline-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.ysca-warning-text {
+    color: var(--ysca-warning, #b45309);
+}
+
+.ysca-danger-action {
+    color: var(--ysca-danger, #dc2626);
+    border-color: color-mix(in srgb, var(--ysca-danger, #dc2626) 36%, white);
+    background: var(--ysca-danger-soft, #fef2f2);
+}
+
+.ysca-danger-action:hover {
+    color: #fff;
+    border-color: var(--ysca-danger, #dc2626);
+    background: var(--ysca-danger, #dc2626);
+}
+
+.ysca-media-preview__image {
+    display: block;
+    width: min(220px, 100%);
+    max-height: 96px;
+    object-fit: contain;
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius, 8px);
+    background: var(--ysca-surface, #f8fafc);
+}
+
+.ysca-tier-benefit-row {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+    padding: var(--ysca-space-3, 12px) 0;
+    border-bottom: 1px solid var(--ysca-line, #e5e7eb);
+}
+
+.ysca-tier-benefit-row--renew {
+    padding-top: 0;
+}
+
+.ysca-tier-benefit-row--last {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.ysca-tier-benefit-description {
+    margin: 0 0 0 24px;
+}
+
+.ysca-tier-benefit-control {
+    width: fit-content;
+    max-width: 100%;
+}
+
+.ysca-tier-icon-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-tier-icon-preview {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius, 8px);
+    background: var(--ysca-surface, #f8fafc);
+}
+
+.ysca-shipping-sortable {
+    display: grid;
+    gap: var(--ysca-space-3, 12px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ysca-shipping-sortable__item {
+    display: grid;
+    grid-template-columns: 24px 40px minmax(0, 1fr) 56px;
+    column-gap: var(--ysca-space-3, 12px);
+    row-gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    min-height: 72px;
+    padding: 12px 14px;
+    border: 1px solid var(--ysca-line, #e5e7eb);
+    border-radius: var(--ysca-radius-md, 10px);
+    background: var(--ysca-card);
+    box-sizing: border-box;
+}
+
+.ysca-shipping-drag-handle {
+    align-self: center;
+    justify-self: center;
+    color: var(--ysca-muted, #64748b);
+    cursor: grab;
+}
+
+.ysca-shipping-method-main {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) max-content minmax(280px, 360px);
+    align-items: center;
+    gap: var(--ysca-space-2, 8px) var(--ysca-space-3, 12px);
+    min-width: 0;
+}
+
+.ysca-shipping-method-main > strong {
+    min-width: 0;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm);
+    line-height: 1.35;
+}
+
+.ysca-shipping-method-icon {
+    display: inline-grid;
+    place-items: center;
+    justify-self: center;
+    width: 32px;
+    height: 32px;
+    color: var(--ysca-primary, #2563eb);
+    background: var(--ysca-primary-soft, #eff6ff);
+    border-radius: var(--ysca-radius-sm, 8px);
+    font-size: 18px;
+    line-height: 1;
+}
+
+.ysca-shipping-provider-badge {
+    width: fit-content;
+}
+
+.ysca-shipping-fee-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(132px, 160px));
+    align-items: end;
+    gap: var(--ysca-space-2, 8px);
+    min-width: 0;
+}
+
+.ysca-shipping-fee-field {
+    display: grid;
+    grid-template-columns: auto minmax(84px, 1fr);
+    align-items: center;
+    gap: 6px;
+    max-width: 160px;
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ysca-shipping-fee-field .ysca-field__hint {
+    grid-column: 2;
+    margin: 2px 0 0;
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.ysca-shipping-fee-field .ysca-table-input--sm {
+    width: 100%;
+    min-width: 0;
+}
+
+.ysca-shipping-toggle {
+    justify-self: end;
+    align-self: center;
+}
+
+.ysca-rule-toggle {
+    cursor: pointer;
+}
+
+.ysca-rule-form {
+    margin-top: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ysca-line, #e5e7eb);
+    border-radius: var(--ysca-radius-md, 10px);
+    background: var(--ysca-surface, #f8fafc);
+}
+
+.ysca-provider-settings-page {
+    gap: var(--ysca-space-4, 16px);
+}
+
+.ysca-provider-settings-page .ysca-section-card {
+    padding: var(--ysca-space-5, 20px);
+}
+
+.ysca-provider-rule-card .ysca-table-wrap {
+    margin-top: var(--ysca-space-3, 12px);
+}
+
+.ysca-country-picker {
+    position: relative;
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+    max-width: 560px;
+}
+
+.ysca-country-picker__trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--ysca-line, #dbe3ef);
+    border-radius: var(--ysca-radius-sm, 8px);
+    background: var(--ysca-card);
+    color: var(--ysca-text, #0f172a);
+    cursor: pointer;
+}
+
+.ysca-country-picker.is-open .ysca-country-picker__trigger {
+    border-color: var(--ysca-primary, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ysca-country-picker__dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding: var(--ysca-space-2, 8px);
+    border: 1px solid var(--ysca-line, #dbe3ef);
+    border-radius: var(--ysca-radius-md, 10px);
+    background: var(--ysca-card, #fff);
+    box-shadow: var(--ysca-shadow-lg, 0 16px 40px rgba(15, 23, 42, 0.12));
+}
+
+.ysca-country-picker.is-open .ysca-country-picker__dropdown {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-country-picker__search {
+    width: 100%;
+}
+
+.ysca-country-picker__list {
+    display: grid;
+    max-height: 240px;
+    overflow: auto;
+}
+
+.ysca-country-picker__item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    min-height: 34px;
+    padding: 5px 8px;
+    border-radius: var(--ysca-radius-sm, 8px);
+    cursor: pointer;
+}
+
+.ysca-country-picker__item:hover {
+    background: var(--ysca-primary-soft, #eff6ff);
+}
+
+.ysca-country-picker__item code {
+    color: var(--ysca-muted, #64748b);
+    font-size: var(--ysca-fs-xs, 12px);
+}
+
+@media (max-width: 960px) {
+    .ysca-editor-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .ysca-shipping-sortable__item {
+        grid-template-columns: 24px 36px minmax(0, 1fr);
+    }
+
+    .ysca-shipping-method-main {
+        grid-column: 1 / -1;
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-shipping-fee-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-shipping-toggle {
+        grid-column: 3;
+        grid-row: 1;
+    }
+
+    .ysca-shipping-fee-field,
+    .ysca-tier-benefit-control {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* ─── v2.45.40 Issue #5 — 會員詳細「客戶總覽」section ───
+ * 左 4 stat-card (2x2)、右 radar chart + legend。≤1024px 縮為單欄。
+ */
+.ysca-member-overview__layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.ysca-member-overview__stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 12px;
+}
+
+.ysca-member-overview__radar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+}
+
+.ysca-member-overview__title {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-lg, 16px);
+    font-weight: 700;
+    text-align: center;
+}
+
+.ysca-member-overview__chart-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 320px;
+}
+
+.ysca-member-overview__legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 12px;
+    font-size: 12px;
+    color: var(--ysca-muted);
+}
+
+.ysca-member-overview__legend li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ysca-member-overview__legend li strong {
+    margin-left: auto;
+    color: var(--ysca-text);
+    font-weight: 700;
+}
+
+@media (max-width: 1024px) {
+    .ysca-member-overview__layout {
+        grid-template-columns: 1fr;
+    }
+    .ysca-member-overview__legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  ADR-050 v2.46.8 Phase A: SaaS-grade primitives
+/* ═══════════════════════════════════════════════════ */
+/*
+ * 10 net-new primitive blocks per ADR-050 Phase A spec.
+ *   1. .ysca-toolbar (v2)        — grouped action toolbar (button group connected)
+ *   2. .ysca-kpi-card             — KPI metric card with trend + sparkline slot
+ *   3. .ysca-overview-card        — 會員等級 4-tier overview card
+ *   4. .ysca-wizard               — 匯入/匯出 step wizard (sidebar + panel)
+ *   5. .ysca-action-icon-bar      — table row trailing icon button group
+ *   6. .ysca-filter-toolbar (v2)  — 進階 filter bar (checkbox toggle + button group)
+ *   7. .ysca-skeleton             — loading placeholder w/ shimmer
+ *   8. .ysca-empty-state-v2       — improved empty state per spec
+ *   9. .ysca-tabs__indicator      — explicit active indicator (報表分析 fix)
+ *  10. .ysca-page-hero            — page title + breadcrumb + actions hero zone
+ *
+ * 規範: docs/plans/2026-05-23-design-system-v2-spec.md
+ * ADR : docs/plans/2026-05-23-adr-050-admin-ui-saas-grade-rollout.md
+ */
+
+/* ─── 1. .ysca-toolbar (v2) — grouped action toolbar ─── */
+/* v2.46.8: 新版 toolbar 以 card 容器呈現 (existing .ysca-toolbar 於 line 916 為
+   filter-bar 上方薄 strip、二者語意不同、本版以變體 .ysca-toolbar--v2 區隔)。 */
+.ysca-toolbar--v2 {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    margin-bottom: var(--ysca-space-4);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-toolbar--v2 .ysca-toolbar__left {
+    display: flex;
+    gap: var(--ysca-space-2);
+    flex: 1 1 auto;
+    align-items: center;
+}
+
+.ysca-toolbar--v2 .ysca-toolbar__right {
+    display: flex;
+    gap: var(--ysca-space-2);
+    margin-left: auto;
+    align-items: center;
+}
+
+.ysca-toolbar__group {
+    display: inline-flex;
+    gap: 1px;
+    background: var(--ysca-line);
+    border-radius: var(--ysca-radius-btn);
+    overflow: hidden;
+}
+
+.ysca-toolbar__group .ysca-btn {
+    border-radius: 0;
+    border-right: 0;
+}
+
+.ysca-toolbar__group .ysca-btn:first-child {
+    border-radius: var(--ysca-radius-btn) 0 0 var(--ysca-radius-btn);
+}
+
+.ysca-toolbar__group .ysca-btn:last-child {
+    border-radius: 0 var(--ysca-radius-btn) var(--ysca-radius-btn) 0;
+}
+
+.ysca-toolbar__group .ysca-btn:not(:first-child):not(:last-child) {
+    border-radius: 0;
+}
+
+@media (max-width: 690px) {
+    .ysca-toolbar--v2 {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ysca-toolbar--v2 .ysca-toolbar__left,
+    .ysca-toolbar--v2 .ysca-toolbar__right {
+        margin-left: 0;
+        flex-wrap: wrap;
+    }
+}
+
+/* ─── 2. .ysca-kpi-card — KPI metric card with trend ─── */
+.ysca-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ysca-space-4);
+    margin-bottom: var(--ysca-space-4);
+}
+
+.ysca-kpi-card {
+    padding: var(--ysca-space-4);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    background: var(--ysca-card);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--ysca-space-2);
+    box-shadow: var(--ysca-shadow-card);
+    transition: box-shadow var(--ysca-motion), border-color var(--ysca-motion);
+}
+
+.ysca-kpi-card:hover {
+    border-color: var(--ysca-line-strong);
+    box-shadow: var(--ysca-shadow-pop);
+}
+
+.ysca-kpi-card__label {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 500;
+    line-height: var(--ysca-line-tight);
+    grid-column: 1 / 2;
+}
+
+.ysca-kpi-card__value {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-price);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    grid-column: 1 / 2;
+}
+
+.ysca-kpi-card__change {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-1);
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    align-self: center;
+    font-size: var(--ysca-fs-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ysca-muted);
+}
+
+.ysca-kpi-card__change--positive {
+    color: var(--ysca-success);
+}
+
+.ysca-kpi-card__change--negative {
+    color: var(--ysca-danger);
+}
+
+.ysca-kpi-card__change--flat {
+    color: var(--ysca-muted);
+}
+
+.ysca-kpi-card__change-arrow {
+    width: var(--ysca-space-3);
+    height: var(--ysca-space-3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ysca-kpi-card__mini-chart {
+    grid-column: 1 / -1;
+    height: 36px;
+    opacity: 0.7;
+    margin-top: var(--ysca-space-2);
+    color: var(--ysca-primary);
+}
+
+.ysca-kpi-card__mini-chart svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+@media (max-width: 999px) {
+    .ysca-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ─── 3. .ysca-overview-card — 4-tier 會員等級 overview ─── */
+.ysca-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ysca-space-4);
+    margin-bottom: var(--ysca-space-5);
+}
+
+.ysca-overview-card {
+    padding: var(--ysca-space-5);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    background: var(--ysca-card);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: var(--ysca-space-2) var(--ysca-space-4);
+    align-items: center;
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-overview-card__icon {
+    width: calc(var(--ysca-space-6) * 2);
+    height: calc(var(--ysca-space-6) * 2);
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    grid-column: 1 / 2;
+    grid-row: 1 / 3;
+    flex-shrink: 0;
+}
+
+.ysca-overview-card__icon svg {
+    width: 50%;
+    height: 50%;
+}
+
+.ysca-overview-card__name {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-subtitle);
+    font-weight: 600;
+    line-height: var(--ysca-line-tight);
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+}
+
+.ysca-overview-card__count {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-price);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+}
+
+.ysca-overview-card__tier-label {
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    font-weight: 500;
+    margin-left: var(--ysca-space-2);
+}
+
+/* 4-tier variants — token-based soft bg / icon color */
+.ysca-overview-card--tier-0 .ysca-overview-card__icon {
+    background: var(--ysca-line);
+    color: var(--ysca-muted);
+}
+
+.ysca-overview-card--tier-1 .ysca-overview-card__icon {
+    background: var(--ysca-line-strong);
+    color: var(--ysca-text-body);
+}
+
+.ysca-overview-card--tier-2 .ysca-overview-card__icon {
+    background: var(--ysca-warning-soft);
+    color: var(--ysca-warning);
+}
+
+.ysca-overview-card--tier-3 .ysca-overview-card__icon {
+    background: var(--ysca-primary-soft);
+    color: var(--ysca-primary);
+}
+
+@media (max-width: 999px) {
+    .ysca-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-overview-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ─── 4. .ysca-wizard — import/export step wizard ─── */
+.ysca-wizard {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: var(--ysca-space-6);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    padding: var(--ysca-space-5);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-wizard__steps {
+    display: grid;
+    gap: var(--ysca-space-1);
+    align-content: start;
+    padding-right: var(--ysca-space-4);
+    border-right: 1px solid var(--ysca-line);
+}
+
+.ysca-wizard__step {
+    display: flex;
+    gap: var(--ysca-space-3);
+    padding: var(--ysca-space-3);
+    border-radius: var(--ysca-radius);
+    align-items: center;
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+    line-height: var(--ysca-line-base);
+    cursor: default;
+    transition: background var(--ysca-motion), color var(--ysca-motion);
+}
+
+.ysca-wizard__step.is-active {
+    background: var(--ysca-primary-soft);
+    color: var(--ysca-primary);
+}
+
+.ysca-wizard__step.is-done {
+    color: var(--ysca-success);
+}
+
+.ysca-wizard__step.is-pending {
+    color: var(--ysca-muted);
+}
+
+.ysca-wizard__step-number {
+    width: calc(var(--ysca-space-3) + var(--ysca-space-4));
+    height: calc(var(--ysca-space-3) + var(--ysca-space-4));
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--ysca-fs-caption);
+    font-weight: 700;
+    background: var(--ysca-line);
+    color: var(--ysca-text-body);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.ysca-wizard__step.is-active .ysca-wizard__step-number {
+    background: var(--ysca-primary);
+    color: var(--ysca-card);
+}
+
+.ysca-wizard__step.is-done .ysca-wizard__step-number {
+    background: var(--ysca-success);
+    color: var(--ysca-card);
+}
+
+.ysca-wizard__step-label {
+    flex: 1 1 auto;
+    font-weight: 500;
+}
+
+.ysca-wizard__panel {
+    display: grid;
+    gap: var(--ysca-space-4);
+    align-content: start;
+    min-width: 0;
+}
+
+.ysca-wizard__panel-title {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-section);
+    font-weight: 700;
+    line-height: var(--ysca-line-tight);
+    margin: 0;
+}
+
+.ysca-wizard__panel-body {
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+    line-height: var(--ysca-line-base);
+}
+
+.ysca-wizard__panel-actions {
+    display: flex;
+    gap: var(--ysca-space-2);
+    margin-top: var(--ysca-space-4);
+    padding-top: var(--ysca-space-4);
+    border-top: 1px solid var(--ysca-line);
+    justify-content: flex-end;
+}
+
+.ysca-wizard__panel-header {
+    display: grid;
+    gap: var(--ysca-space-2);
+    padding-bottom: var(--ysca-space-4);
+}
+
+.ysca-fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.ysca-fieldset__legend {
+    display: flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    width: 100%;
+    padding-bottom: var(--ysca-space-3);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-body);
+    font-weight: 800;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-step-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+    border-radius: var(--ysca-radius-pill);
+    font-size: var(--ysca-fs-xs);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.ysca-export-layout {
+    display: grid;
+    gap: var(--ysca-space-5);
+}
+
+.ysca-export-form {
+    display: grid;
+    gap: var(--ysca-space-5);
+}
+
+.ysca-export-controls {
+    padding-bottom: var(--ysca-space-2);
+}
+
+.ysca-export-controls__row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.35fr);
+    align-items: end;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-export-control--wide .ysca-select {
+    width: 100%;
+}
+
+.ysca-export-date-range__fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ysca-space-2);
+}
+
+.ysca-export-date-range__fields .ysca-input {
+    width: 100%;
+}
+
+.ysca-export-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ysca-space-4);
+}
+
+.ysca-product-list-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ysca-space-4);
+}
+
+.ysca-product-list-card__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+}
+
+.ysca-product-list-card__body {
+    min-width: 0;
+}
+
+.ysca-subscription-ops {
+    grid-template-columns: var(--ysca-select-search) auto auto var(--ysca-select-md) auto 1fr;
+}
+
+.ysca-subscription-ops__total {
+    grid-column: -2 / -1;
+    justify-self: end;
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-sm);
+    font-weight: 700;
+}
+
+@media (max-width: 999px) {
+    .ysca-wizard {
+        grid-template-columns: 1fr;
+        gap: var(--ysca-space-4);
+    }
+
+    .ysca-wizard__steps {
+        padding-right: 0;
+        border-right: 0;
+        padding-bottom: var(--ysca-space-3);
+        border-bottom: 1px solid var(--ysca-line);
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        overflow-x: auto;
+    }
+
+    .ysca-export-controls__row,
+    .ysca-export-preview-grid,
+    .ysca-subscription-ops {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ysca-subscription-ops__total {
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-wizard__steps {
+        grid-auto-flow: row;
+        grid-auto-columns: auto;
+    }
+
+    .ysca-wizard__panel-actions {
+        flex-direction: column;
+    }
+
+    .ysca-export-controls__row,
+    .ysca-export-date-range__fields,
+    .ysca-export-preview-grid,
+    .ysca-subscription-ops {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-product-list-card__head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ysca-product-list-card__actions {
+        justify-content: flex-start;
+    }
+}
+
+/* ─── 5. .ysca-action-icon-bar — table row trailing icons ─── */
+.ysca-action-icon-bar {
+    display: inline-flex;
+    gap: var(--ysca-space-1);
+    align-items: center;
+}
+
+/* Small inline icon button variant (28×28) — extends .ysca-btn--icon (40×40) */
+.ysca-btn--icon-sm {
+    width: calc(var(--ysca-space-6) + var(--ysca-space-1));
+    min-height: calc(var(--ysca-space-6) + var(--ysca-space-1));
+    height: calc(var(--ysca-space-6) + var(--ysca-space-1));
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ysca-action-icon-bar .ysca-btn--icon-sm {
+    color: var(--ysca-muted);
+    background: transparent;
+    border: 0;
+    transition: color var(--ysca-motion), background var(--ysca-motion);
+}
+
+.ysca-action-icon-bar .ysca-btn--icon-sm:hover,
+.ysca-action-icon-bar .ysca-btn--icon-sm:focus-visible {
+    color: var(--ysca-primary);
+    background: var(--ysca-primary-soft);
+}
+
+.ysca-action-icon-bar .ysca-btn--icon-sm[aria-disabled="true"],
+.ysca-action-icon-bar .ysca-btn--icon-sm:disabled {
+    color: var(--ysca-line-strong);
+    background: transparent;
+    cursor: not-allowed;
+}
+
+.ysca-action-icon-bar .ysca-btn--icon-sm svg {
+    width: var(--ysca-space-4);
+    height: var(--ysca-space-4);
+}
+
+/* ─── 6. .ysca-filter-toolbar (v2) — 進階 filter bar ─── */
+/* 繼承 .ysca-filter-bar 的 grid 思想、加入 checkbox toggle + 進階搜尋 button group。
+   grid-template: search 320 / select-md / select-md / select-sm / checkbox / button-group */
+.ysca-filter-toolbar {
+    display: grid;
+    grid-template-columns:
+        var(--ysca-select-search)
+        var(--ysca-select-md)
+        var(--ysca-select-md)
+        var(--ysca-select-sm)
+        auto
+        auto;
+    align-items: center;
+    gap: var(--ysca-space-3);
+    margin: 0 0 var(--ysca-space-4);
+    padding: var(--ysca-space-3) var(--ysca-space-4);
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line-card);
+    border-radius: var(--ysca-radius-card);
+    box-shadow: var(--ysca-shadow-card);
+}
+
+.ysca-filter-toolbar__check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ysca-filter-toolbar__check input[type="checkbox"] {
+    width: var(--ysca-space-4);
+    height: var(--ysca-space-4);
+    accent-color: var(--ysca-primary);
+    margin: 0;
+}
+
+.ysca-filter-toolbar__actions {
+    display: inline-flex;
+    gap: var(--ysca-space-2);
+    margin-left: auto;
+}
+
+@media (max-width: 999px) {
+    .ysca-filter-toolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ysca-filter-toolbar__actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-filter-toolbar {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ─── 7. .ysca-skeleton — loading placeholder w/ shimmer ─── */
+.ysca-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--ysca-line) 0%,
+        var(--ysca-line-strong) 50%,
+        var(--ysca-line) 100%
+    );
+    background-size: 200% 100%;
+    animation: ysca-skeleton-pulse 1.5s ease-in-out infinite;
+    border-radius: var(--ysca-radius);
+    display: block;
+    width: 100%;
+}
+
+.ysca-skeleton--text {
+    height: calc(var(--ysca-space-3) + 2px);
+    border-radius: var(--ysca-radius-sm);
+}
+
+.ysca-skeleton--mb-md {
+    margin-bottom: var(--ysca-space-3);
+}
+
+.ysca-skeleton--mb-sm {
+    margin-bottom: var(--ysca-space-2);
+}
+
+.ysca-skeleton--w-80 {
+    width: 80%;
+}
+
+.ysca-skeleton--w-60 {
+    width: 60%;
+}
+
+.ysca-skeleton--title {
+    height: var(--ysca-space-6);
+    border-radius: var(--ysca-radius-sm);
+    max-width: 60%;
+}
+
+.ysca-skeleton--card {
+    height: calc(var(--ysca-space-8) * 2 + var(--ysca-space-4));
+    border-radius: var(--ysca-radius-card);
+}
+
+.ysca-skeleton--avatar {
+    width: var(--ysca-control-h-icon);
+    height: var(--ysca-control-h-icon);
+    border-radius: 50%;
+}
+
+.ysca-skeleton--row {
+    height: var(--ysca-row-h);
+    border-radius: var(--ysca-radius);
+    margin-bottom: var(--ysca-space-2);
+}
+
+@keyframes ysca-skeleton-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* a11y: reduced motion stops shimmer to avoid distraction */
+@media (prefers-reduced-motion: reduce) {
+    .ysca-skeleton {
+        animation: none;
+        background: var(--ysca-line);
+    }
+}
+
+/* ─── 8. .ysca-empty-state-v2 — improved empty state ─── */
+.ysca-empty-state-v2 {
+    display: grid;
+    gap: var(--ysca-space-3);
+    justify-items: center;
+    padding: var(--ysca-space-8) var(--ysca-space-5);
+    text-align: center;
+    min-height: calc(var(--ysca-space-8) * 8 + var(--ysca-space-6));
+    align-content: center;
+    background: var(--ysca-card);
+    border: 1px dashed var(--ysca-line-strong);
+    border-radius: var(--ysca-radius-card);
+}
+
+.ysca-empty-state-v2__icon {
+    width: calc(var(--ysca-space-8) * 2);
+    height: calc(var(--ysca-space-8) * 2);
+    color: var(--ysca-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+}
+
+.ysca-empty-state-v2__icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.ysca-empty-state-v2__title {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-subtitle);
+    font-weight: 600;
+    line-height: var(--ysca-line-tight);
+    margin: 0;
+}
+
+.ysca-empty-state-v2__body {
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-body);
+    line-height: var(--ysca-line-base);
+    max-width: calc(var(--ysca-space-8) * 15);
+    margin: 0;
+}
+
+.ysca-empty-state-v2__actions {
+    display: inline-flex;
+    gap: var(--ysca-space-2);
+    margin-top: var(--ysca-space-2);
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+@media (max-width: 690px) {
+    .ysca-empty-state-v2 {
+        padding: var(--ysca-space-6) var(--ysca-space-4);
+        min-height: calc(var(--ysca-space-8) * 6);
+    }
+
+    .ysca-empty-state-v2__icon {
+        width: var(--ysca-space-8);
+        height: var(--ysca-space-8);
+    }
+}
+
+/* ─── 9. .ysca-tabs__indicator — explicit active indicator ─── */
+/* 規範: 報表分析 Tabs 缺 active indicator。既有 .ysca-tab[aria-selected="true"]::after
+   (line 2007) 已有 indicator、本版補強：確保 .ysca-tab 一律 position: relative，
+   並新增 .ysca-tabs--with-indicator 變體，提供更明顯的 indicator (適用報表頁)。 */
+.ysca-tabs--with-indicator .ysca-tab {
+    position: relative;
+}
+
+.ysca-tabs--with-indicator .ysca-tab[aria-selected="true"]::after,
+.ysca-tabs__indicator {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: var(--ysca-space-3);
+    right: var(--ysca-space-3);
+    height: 2px;
+    background: var(--ysca-primary);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.ysca-tabs--with-indicator .ysca-tab[aria-selected="true"]::after {
+    display: none;
+}
+
+/* Animated underline transition between tabs (when reduced motion is OK) */
+.ysca-tabs--with-indicator .ysca-tab[aria-selected="true"]::after {
+    transition: left var(--ysca-motion), right var(--ysca-motion), background var(--ysca-motion);
+}
+
+/* Stand-alone indicator span (for JS-managed underline that animates between tabs) */
+.ysca-tabs__indicator {
+    display: none;
+    transition: transform var(--ysca-motion), width var(--ysca-motion);
+}
+
+/* ─── 10. .ysca-page-hero — page title + breadcrumb + actions hero ─── */
+.ysca-page-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--ysca-space-4);
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 var(--ysca-admin-section-gap, var(--ysca-space-4));
+    padding: var(--ysca-admin-card-padding, var(--ysca-space-6));
+    background: var(--ysca-card);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-card, 12px);
+    box-shadow: 0 8px 20px rgba(22, 34, 51, 0.04);
+}
+
+.ysca-page-hero__title-block {
+    display: grid;
+    gap: var(--ysca-space-1);
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.ysca-page-hero__breadcrumb {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-1);
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+    line-height: var(--ysca-line-tight);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ysca-page-hero__breadcrumb a {
+    color: var(--ysca-muted);
+    text-decoration: none;
+    transition: color var(--ysca-motion);
+}
+
+.ysca-page-hero__breadcrumb a:hover,
+.ysca-page-hero__breadcrumb a:focus-visible {
+    color: var(--ysca-primary);
+}
+
+.ysca-page-hero__breadcrumb-sep {
+    color: var(--ysca-line-strong);
+    margin: 0 var(--ysca-space-1);
+}
+
+.ysca-page-hero__title {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-page-title);
+    font-weight: 700;
+    line-height: var(--ysca-line-tight);
+    margin: 0;
+}
+
+.ysca-page-hero__subtitle {
+    color: var(--ysca-text-body);
+    font-size: var(--ysca-fs-subtitle);
+    font-weight: 500;
+    line-height: var(--ysca-line-base);
+    margin: 0;
+}
+
+.ysca-page-hero__kpi-inline {
+    display: inline-flex;
+    gap: var(--ysca-space-4);
+    margin-top: var(--ysca-space-2);
+    flex-wrap: wrap;
+}
+
+.ysca-page-hero__kpi-inline-item {
+    display: inline-flex;
+    flex-direction: column;
+    gap: var(--ysca-space-1);
+    color: var(--ysca-muted);
+    font-size: var(--ysca-fs-caption);
+}
+
+.ysca-page-hero__kpi-inline-item strong {
+    color: var(--ysca-text-h1);
+    font-size: var(--ysca-fs-card-title);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: var(--ysca-line-tight);
+}
+
+.ysca-page-hero__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ysca-space-2);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 999px) {
+    .ysca-page-hero {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ysca-page-hero__actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 690px) {
+    .ysca-page-hero__kpi-inline {
+        gap: var(--ysca-space-3);
+    }
+
+    .ysca-page-hero__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+/* 2026-06-05 YS CART admin UI cleanup */
+.ysca-setting-list {
+    display: grid;
+    gap: var(--ysca-space-4, 16px);
+}
+
+.ysca-setting-list .ysca-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: var(--ysca-space-3, 12px);
+    min-height: auto;
+    padding: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-input, 12px);
+    background: var(--ysca-card);
+}
+
+.ysca-setting-row--stacked {
+    align-items: stretch;
+}
+
+.ysca-setting-row__label {
+    display: block;
+    margin: 0 0 var(--ysca-space-1, 4px);
+    color: var(--ysca-text);
+    font-size: var(--ysca-fs-sm, 13px);
+    font-weight: 700;
+}
+
+.ysca-setting-list .ysca-setting-row__control {
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+.ysca-setting-row__control--grid {
+    display: grid;
+    grid-template-columns: minmax(180px, max-content) minmax(220px, 520px);
+    gap: var(--ysca-space-3, 12px);
+    align-items: center;
+}
+
+.ysca-setting-row__control--inline {
+    display: inline-flex;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+}
+
+.ysca-check-line {
+    display: inline-flex;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    color: var(--ysca-text-body);
+    font-weight: 600;
+}
+
+.ysca-design-system-theme {
+    margin-bottom: var(--ysca-space-6, 24px);
+}
+
+.ysca-design-system-theme__form {
+    display: grid;
+    gap: var(--ysca-space-5, 20px);
+}
+
+.ysca-design-system-theme__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ysca-space-4, 16px);
+}
+
+.ysca-design-system-theme__group {
+    display: grid;
+    gap: var(--ysca-space-3, 12px);
+    margin: 0;
+    padding: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-card, 16px);
+    background: var(--ysca-bg);
+}
+
+.ysca-design-system-theme__group legend {
+    display: inline-flex;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    padding: 0 var(--ysca-space-2, 8px);
+    color: var(--ysca-primary);
+    font-weight: 800;
+}
+
+.ysca-design-system-theme__field {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+}
+
+.ysca-color-control {
+    display: grid;
+    grid-template-columns: 44px minmax(120px, 1fr) auto;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+}
+
+.ysca-color-control input[type="color"] {
+    width: 44px;
+    height: var(--ysca-control-h, 44px);
+    padding: 2px;
+    border: 1px solid var(--ysca-border);
+    border-radius: var(--ysca-radius-input, 12px);
+    background: var(--ysca-card);
+}
+
+.ysca-design-system-theme__preview {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+    gap: var(--ysca-space-4, 16px);
+    padding: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ys-ec-border, var(--ysca-line));
+    border-radius: var(--ysca-radius-card, 16px);
+    background: var(--ys-ec-body-bg, var(--ysca-bg));
+    color: var(--ys-ec-text, var(--ysca-text-body));
+}
+
+.ysca-design-system-theme__preview-card,
+.ysca-design-system-theme__preview-checkout {
+    display: grid;
+    gap: var(--ysca-space-3, 12px);
+    padding: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ys-ec-border-light, var(--ysca-line));
+    border-radius: 8px;
+    background: var(--ys-ec-card-bg, var(--ysca-card));
+    color: var(--ys-ec-text, var(--ysca-text-body));
+}
+
+.ysca-design-system-theme__preview-card h3,
+.ysca-design-system-theme__preview-checkout h3 {
+    margin: 0;
+    color: var(--ys-ec-heading-color, var(--ysca-text));
+}
+
+.ysca-design-system-theme__preview-card p {
+    margin: 0;
+    color: var(--ys-ec-text-muted, var(--ysca-muted));
+}
+
+.ysca-design-system-theme__preview-card strong,
+.ysca-design-system-theme__preview-checkout strong {
+    color: var(--ys-ec-price-color, var(--ysca-danger));
+    font-size: var(--ysca-fs-price, 20px);
+}
+
+.ysca-design-system-theme__preview .ysca-btn--primary {
+    border-color: var(--ys-ec-btn-color, var(--ysca-primary));
+    background: var(--ys-ec-btn-color, var(--ysca-primary));
+    color: var(--ysca-card);
+}
+
+.ysca-design-system-theme__preview-checkout div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-design-system-theme__preview-checkout hr {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--ys-ec-border-light, var(--ysca-line));
+}
+
+.ysca-design-system-theme__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2, 8px);
+    justify-content: flex-end;
+}
+
+.ysca-log-card__footer {
+    display: grid;
+    grid-template-columns: minmax(160px, max-content) minmax(0, 1fr) auto;
+    gap: var(--ysca-space-3, 12px);
+    align-items: center;
+}
+
+.ysca-log-card__count {
+    color: var(--ysca-muted);
+    font-weight: 700;
+}
+
+.ysca-log-card__pagination {
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+}
+
+.ysca-log-card__cleanup {
+    justify-content: flex-end;
+}
+
+.ysca-log-detail-row[hidden] {
+    display: none !important;
+}
+
+.ysca-log-detail-row td {
+    padding: 0 var(--ysca-space-4, 16px) var(--ysca-space-4, 16px) !important;
+    background: var(--ysca-bg);
+}
+
+.ysca-log-detail-row .ysca-detail-context {
+    max-width: 100%;
+    max-height: 420px;
+    margin: 0;
+    padding: var(--ysca-space-4, 16px);
+    border: 1px solid var(--ysca-line);
+    border-radius: var(--ysca-radius-input, 12px);
+    background: var(--ysca-card);
+    white-space: pre-wrap;
+    overflow: auto;
+}
+
+.ysca-print-settings-page,
+.ysca-print-settings-form {
+    display: grid;
+    gap: var(--ysca-space-5, 20px);
+}
+
+.ysca-print-settings-intro {
+    display: grid;
+    gap: var(--ysca-space-2, 8px);
+    color: var(--ysca-text-body);
+}
+
+.ysca-print-settings-intro p {
+    margin: 0;
+}
+
+.ysca-print-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ysca-help-page {
+    display: grid;
+    gap: var(--ysca-space-5, 20px);
+}
+
+.ysca-help-page .ysca-section-card {
+    padding: var(--ysca-space-5, 20px);
+}
+
+.ysca-help-page .ysca-section-card h3 {
+    display: flex;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    margin-top: 0;
+}
+
+.ysca-help-page .inside {
+    display: grid;
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ysca-help-page table {
+    width: 100%;
+}
+
+.ysca-help-page code {
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--ysca-bg);
+}
+
+@media (max-width: 960px) {
+    .ysca-design-system-theme__grid,
+    .ysca-design-system-theme__preview {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-log-card__footer {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .ysca-log-card__pagination,
+    .ysca-log-card__cleanup {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 782px) {
+    .ysca-setting-row__control--grid,
+    .ysca-color-control {
+        grid-template-columns: 1fr;
+    }
+
+    .ysca-color-control input[type="color"] {
+        width: 100%;
+    }
+
+    .ysca-design-system-theme__actions,
+    .ysca-print-settings-actions {
+        justify-content: stretch;
+    }
+
+    .ysca-design-system-theme__actions .ysca-btn,
+    .ysca-print-settings-actions .ysca-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}

@@ -1,0 +1,191 @@
+/**
+ * YS CART Admin — Design Tokens (v2 per ADR-049)
+ *
+ * 唯一的設計變數來源。新後台所有元件 / 頁面只能使用 var(--ysca-*)，
+ * 禁止寫死十六進位顏色。Legacy 頁面在 ys-cart-admin-legacy-bridge.css
+ * 也指向同一份 token，遷移期一改全改。
+ *
+ * v2.42.x: admin namespace unification — `ysca-*` 為唯一新前綴。
+ * v2.46.3: Design System v2 token rollout (Tier 1 of 4)、per User 規範
+ *   - 規範 source（現行）: docs/design-spec.md「Admin Design System v2（ysca-*）」章節
+ *   - 歷史 RD: 2026-05-23-design-system-v2-spec（ADR-049 規格原文；未隨本 repo docs/plans 收錄）
+ * v2.46.4: Tier 1 fine-tune — Page Title 36 → 24px per user LIVE 反饋
+ * v2.46.6: Tier 1.x fine-tune — 主標 700/#1f1f1f + 子標題 18/500 + 價格 20/500
+ *   - `--ysca-text-h1: #1f1f1f` (主標專用、避免動 --ysca-text 影響全站)
+ *   - `--ysca-fs-subtitle: 18px` (子標題、weight 500)
+ *   - `--ysca-fs-price: 20px` (價格類、weight 500、tabular-nums)
+ *
+ * @version 2.46.6
+ */
+
+:root {
+    /* ─── Surface（layered backgrounds） ─────────────────── */
+    --ysca-canvas:        #e9eef8;  /* 外層 viewport bg */
+    --ysca-bg:            #f8f9fb;  /* content scroll area */
+    --ysca-card:          #ffffff;  /* card / app shell */
+    --ysca-card-soft:     #fbfcff;  /* nested card / inset */
+    --ysca-line:          #edf0f6;  /* subtle border */
+    --ysca-line-strong:   #dfe5ef;  /* visible border */
+    /* v2.46.3 NEW per spec: card / form border / placeholder 對應規範指定 hex */
+    --ysca-line-card:     #EEF2F7;  /* Card border (規範: 1px solid #EEF2F7) */
+    --ysca-border:        #E5E7EB;  /* Form / Input border (規範: 1px solid #E5E7EB) */
+
+    /* ─── Text（hierarchy）— v2.30.1: WCAG 2.1 AA contrast ─── */
+    --ysca-text:          #09090a;  /* primary（強調 / body header） */
+    --ysca-text-h1:       #1f1f1f;  /* v2.46.6 NEW: 主標專用色 (user LIVE 指定) */
+    --ysca-text-body:     #4c505b;  /* body copy */
+    --ysca-muted:         #5f6773;  /* secondary label — 5.43:1 on content bg */
+    --ysca-soft:          #64748b;  /* tertiary label still AA — 4.52:1 on content bg */
+    /* v2.46.3 NEW: placeholder per spec #9CA3AF */
+    --ysca-placeholder:   #9CA3AF;
+
+    /* ─── Brand（primary blue per spec） ────────────────── */
+    --ysca-primary:       #1f5dcf;  /* primary action — AA with white text、規範保留 */
+    --ysca-primary-hover: #174fc7;
+    --ysca-primary-strong:#123f9c;
+    --ysca-primary-soft:  #eef5ff;  /* primary 反白底 / pill */
+    --ysca-primary-tint:  #dde9ff;  /* hover 反白 */
+    --ysca-accent:        #5da0f9;  /* accent gradient endpoint */
+    /* v2.46.3 NEW: Input hover border 規範指定 #2563EB（與 brand primary 不同的較亮藍） */
+    --ysca-primary-input-hover: #2563EB;
+
+    /* ─── Status colors（semantic）— v2.30.1: AA contrast on -soft bg ─── */
+    --ysca-success:       #0e7a5e;  /* v2.30.1: 4.71:1 on success-soft（was #20b486 = 2.89:1 fail） */
+    --ysca-success-soft:  #e9fbf5;
+    --ysca-warning:       #9a6500;  /* v2.30.1: 5.20:1 on warning-soft（was #b27600 = 4.39:1 fail） */
+    --ysca-warning-soft:  #fff7e8;
+    --ysca-danger:        #b80b0b;  /* 已 OK（5.5:1 on danger-soft） */
+    --ysca-danger-soft:   #fff0f0;
+    --ysca-info:          #1e88a3;  /* v2.30.1: AA on info-soft（was #4cc6dd） */
+    --ysca-info-soft:     #e6f7fb;
+
+    /* ─── Spacing（4px grid、v2 規範限定 4/8/12/16/20/24/32） ── */
+    --ysca-space-1:  4px;
+    --ysca-space-2:  8px;
+    --ysca-space-3:  12px;
+    --ysca-space-4:  16px;
+    --ysca-space-5:  20px;
+    --ysca-space-6:  24px;
+    --ysca-space-8:  32px;
+    /* v2.46.3 DEPRECATED: 規範禁止 40/48px、新規 PR 禁用、既有 ref 在 Tier 2/3 逐步移除 */
+    --ysca-space-10: 40px; /* @deprecated v2.46.3 — 不在 spec scale、Tier 3 page cleanup 後移除 */
+    --ysca-space-12: 48px; /* @deprecated v2.46.3 */
+
+    /* ─── Radius ─────────────────────────────────────── */
+    --ysca-radius-sm:    4px;
+    --ysca-radius:       8px;
+    --ysca-radius-card:  16px;   /* v2.46.3: 12 → 16 per spec */
+    --ysca-radius-pill:  999px;  /* 保留給 badge / 部分 legacy 使用 */
+    /* v2.46.3 NEW: input/select/btn 統一 radius 12px（取代 pill button） */
+    --ysca-radius-input: 12px;
+    --ysca-radius-btn:   12px;   /* 規範指定 button radius 12px、非 pill */
+
+    /* ─── Shadow ─────────────────────────────────────── */
+    /* v2.46.3: card shadow 改「非常淡」per spec、原 0 10px 28px 偏重 */
+    --ysca-shadow-card:  0 1px 2px rgba(15, 23, 42, 0.04);
+    --ysca-shadow-pop:   0 22px 60px rgba(22, 34, 51, 0.08);  /* 給 dropdown / modal 保留 */
+    --ysca-shadow-focus: 0 0 0 3px rgba(39, 114, 239, 0.18);
+
+    /* ─── Z-index scale ──────────────────────────────── */
+    --ysca-z-toast:    9000;
+    --ysca-z-modal:    8000;
+    --ysca-z-dropdown: 6000;
+    --ysca-z-sticky:   2000;
+    --ysca-z-wp-chrome-toggle: 100200;
+
+    /* ─── Layout ─────────────────────────────────────── */
+    --ysca-sidebar:    240px;  /* v2.46.3: 220 → 240 per spec */
+    --ysca-sidebar-collapsed: 64px;
+    --ysca-topbar:     64px;   /* v2.46.3: 58 → 64 per spec */
+    --ysca-content-max: 1480px;
+    --ysca-content-wide: 1680px;
+    --ysca-content-narrow: 1040px;
+
+    /* ─── Controls / Form / Button heights (v2.46.3 NEW per spec) ── */
+    --ysca-control-h:    44px;  /* Input / Select / DatePicker / Primary Button 統一高度 */
+    --ysca-control-h-sm: 32px;  /* small variant (內部使用) */
+    --ysca-control-h-icon: 40px; /* Icon button 40×40 per spec */
+
+    /* ─── Table row min-height (v2.46.3 NEW per spec) ──────── */
+    --ysca-row-h:        64px;  /* Table row min height per spec 64px+ */
+
+    /* ─── Select fixed widths (v2.46.3 NEW per spec) ───────── */
+    --ysca-select-sm:     140px;
+    --ysca-select-md:     180px;
+    --ysca-select-lg:     240px;
+    --ysca-select-search: 320px;  /* 搜尋 Select 320px+ */
+
+    /* Admin Visual Contract (v2.51.3)
+     * Stable aliases for admin page rhythm. New admin UI should use these
+     * instead of inventing local gap, padding, toolbar, or sidebar values. */
+    --ysca-admin-page-gap: var(--ysca-space-4);
+    --ysca-admin-page-top: var(--ysca-space-3);
+    --ysca-admin-card-padding: var(--ysca-space-6);
+    --ysca-admin-card-padding-compact: var(--ysca-space-4);
+    --ysca-admin-filter-padding: var(--ysca-space-4);
+    --ysca-admin-toolbar-gap: var(--ysca-space-3);
+    --ysca-admin-sidebar-item-h: 40px;
+    --ysca-admin-sidebar-subitem-h: 34px;
+
+    /* ─── Typography ─────────────────────────────────── */
+    --ysca-font-sans:  Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --ysca-font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    /* v2.46.4 規範 5 階 (Page Title fine-tune: 36 → 24px per user LIVE 反饋「字太大」):
+     *   Page 24 / Section 20 / Card 16 / Body 14 / Caption 12
+     */
+    --ysca-fs-xs:           11px;  /* @deprecated v2.46.3 — 不在 spec 5 階 */
+    --ysca-fs-sm:           12px;  /* alias of fs-caption */
+    --ysca-fs-base:         13px;  /* @deprecated v2.46.3 — 不在 spec 5 階、Tier 2 改用 fs-body */
+    --ysca-fs-md:           14px;  /* alias of fs-body */
+    --ysca-fs-lg:           16px;  /* alias of fs-card-title */
+    --ysca-fs-h1:           24px;  /* v2.46.4: 36 → 24 (user fine-tune Page Title) */
+    --ysca-fs-h2:           20px;  /* v2.46.3: 18 → 20 per spec Section Title */
+    --ysca-fs-h3:           16px;  /* v2.46.3: 15 → 16 per spec Card Title */
+    /* v2.46.3 NEW semantic aliases per spec — 推薦新代碼用 semantic name */
+    --ysca-fs-page-title:   24px;  /* v2.46.4: Page Title 24 / 700 / #1f1f1f (v2.46.6 color fine-tune) */
+    --ysca-fs-section:      20px;  /* Section Title 20 / 700 */
+    --ysca-fs-subtitle:     18px;  /* v2.46.6 NEW: 子標題 18 / 500 (Card 內部小標、列表 row 標題) */
+    --ysca-fs-card-title:   16px;  /* Card Title 16 / 600 */
+    --ysca-fs-price:        20px;  /* v2.46.6 NEW: 價格類 20 / 500 (tabular-nums、訂單 / 商品價格) */
+    --ysca-fs-body:         14px;  /* Body 14 / 500 */
+    --ysca-fs-caption:      12px;  /* Caption 12 / 400 */
+    --ysca-line-tight:      1.18;
+    --ysca-line-base:       1.5;   /* v2.46.3: 1.45 → 1.5 per spec */
+    --ysca-line-loose:      1.6;
+
+    /* ─── Motion ─────────────────────────────────────── */
+    --ysca-motion-fast: 120ms ease;
+    --ysca-motion:      180ms ease;
+    --ysca-motion-slow: 280ms ease;
+}
+
+/* ─── Reduced motion safeguard ────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --ysca-motion-fast: 1ms linear;
+        --ysca-motion:      1ms linear;
+        --ysca-motion-slow: 1ms linear;
+    }
+}
+
+/* ─── Forced colors（high-contrast mode）— v2.30.1 ────── */
+@media (forced-colors: active) {
+    /* 把 token 切回系統色，確保高對比模式下仍可見 */
+    .ysca-btn,
+    .ysca-btn--primary,
+    .ysca-btn--ghost,
+    .ysca-btn--danger {
+        forced-color-adjust: none;
+        border: 1px solid CanvasText;
+    }
+    .ysca-nav__link.is-active {
+        outline: 2px solid CanvasText;
+        outline-offset: -2px;
+    }
+    .ysca-badge {
+        border: 1px solid CanvasText;
+    }
+    .ysca-card {
+        border: 1px solid CanvasText;
+    }
+}
