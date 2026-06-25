@@ -130,7 +130,7 @@ class YSPermissionAdmin {
 		// 不共用 YS CART 樣式、避免污染 native pages）。不開 YSAdminApp shell、
 		// 不套 .ysca-page-root、用 WP-native .wrap + <h1>。
 		echo '<div class="wrap">';
-		echo '<h1>權限設置</h1>';
+		echo YSMenuPage::pagehead_html( 'menu-alt3', '選單與權限', '拖拉排序、角色可見、僅限本人、隱藏與個別使用者覆寫，全面掌控 wp-admin 選單。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
 
 		if ( 'user_overrides' === $tab ) {
 			self::render_user_overrides();

@@ -144,4 +144,16 @@ class YSMenuPage {
 		</style>
 		<?php
 	}
+
+	/**
+	 * 共用設定頁首列 HTML（三頁通用、indigo banner）。
+	 */
+	public static function pagehead_html( string $icon, string $title, string $sub ): string {
+		return sprintf(
+			'<div class="ys-am-pagehead"><span class="ys-am-pagehead__icon"><span class="dashicons dashicons-%s"></span></span><div class="ys-am-pagehead__text"><h1 class="ys-am-pagehead__title">%s</h1><p class="ys-am-pagehead__sub">%s</p></div></div><hr class="wp-header-end">',
+			esc_attr( $icon ),
+			esc_html( $title ),
+			esc_html( $sub )
+		);
+	}
 }

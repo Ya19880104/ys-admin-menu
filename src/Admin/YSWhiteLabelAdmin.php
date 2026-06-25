@@ -73,6 +73,9 @@ class YSWhiteLabelAdmin {
 		// 白牌設置以經典 admin-post PRG 表單儲存（自包含、不依賴 REST）。
 		add_action( 'admin_post_' . self::ADMIN_POST_ACTION, [ self::class, 'handle_save_settings' ] );
 
+		// 白牌頁啟用 indigo design system（body.ysca-wl-active 讓 whitelabel.css 生效）。
+		add_filter( 'admin_body_class', [ self::class, 'add_wl_body_class' ] );
+
 		// 隱藏 admin bar 左上角的 WordPress LOGO（白牌：前後台 admin bar 都移除）。
 		if ( self::get_hide_wp_logo() ) {
 			add_action( 'admin_bar_menu', [ self::class, 'remove_wp_logo_node' ], 999 );
@@ -117,6 +120,20 @@ class YSWhiteLabelAdmin {
 	 */
 	public static function get_hide_footer(): bool {
 		return 'yes' === get_option( self::OPTION_HIDE_FOOTER, 'no' );
+	}
+
+	/**
+	 * 在白牌設定頁的 body 加上 ysca-wl-active，啟用 indigo design system。
+	 *
+	 * @param string $classes 現有 body class 字串。
+	 * @return string
+	 */
+	public static function add_wl_body_class( $classes ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $screen && false !== strpos( (string) $screen->id, YSMenuPage::SLUG_SETTINGS ) ) {
+			$classes .= ' ysca-wl-active';
+		}
+		return $classes;
 	}
 
 	/**
@@ -204,7 +221,7 @@ class YSWhiteLabelAdmin {
 		// 不開 YSAdminApp shell、不套 .ysca-page-root、不加 .ysca-card class。
 		// is_ys_cart_admin_page() 排除這 3 page、YS CSS 不會載入、無樣式 cascade 風險。
 		echo '<div class="wrap">';
-		echo '<h1>白牌設置</h1>';
+		echo YSMenuPage::pagehead_html( 'admin-customizer', '白牌設定', 'LOGO、頁尾文字、隱藏 WordPress 標誌與後台背景色，打造專屬後台品牌。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
 
 		$template = YS_ADMIN_MENU_PLUGIN_DIR . 'templates/admin/whitelabel-settings.php';
 		if ( file_exists( $template ) ) {

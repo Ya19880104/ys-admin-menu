@@ -114,9 +114,12 @@ $settings_action = admin_url( 'admin-post.php' );
 				<h3 class="ysca-wl-card__title">後台頁尾</h3>
 			</div>
 			<div class="ysca-wl-card__body">
-				<label class="ysca-wl-field" style="display:flex;align-items:center;gap:8px;">
-					<input type="checkbox" name="hide_footer" value="yes" <?php checked( $hide_footer ); ?>>
-					<span>完全隱藏後台頁尾（「感謝使用 WordPress」與右側版本號）</span>
+				<label class="ys-am-toggle-field">
+					<span class="ys-am-toggle">
+						<input type="checkbox" name="hide_footer" value="yes" <?php checked( $hide_footer ); ?>>
+						<span class="ys-am-toggle__slider"></span>
+					</span>
+					<span class="ys-am-toggle-field__text"><strong>完全隱藏後台頁尾</strong>移除「感謝使用 WordPress」與右側版本號。</span>
 				</label>
 				<p class="ysca-wl-field__hint">勾選後整個 wp-admin 頁尾列都不顯示；此時上方「Footer 文字」不會出現。</p>
 			</div>
@@ -127,11 +130,14 @@ $settings_action = admin_url( 'admin-post.php' );
 				<h3 class="ysca-wl-card__title">介面外觀</h3>
 			</div>
 			<div class="ysca-wl-card__body">
-				<label class="ysca-wl-field" style="display:flex;align-items:center;gap:8px;">
-					<input type="checkbox" name="hide_wp_logo" value="yes" <?php checked( $hide_wp_logo ); ?>>
-					<span>隱藏左上角的 WordPress LOGO（含關於、官網、文件等子選單）</span>
+				<label class="ys-am-toggle-field">
+					<span class="ys-am-toggle">
+						<input type="checkbox" name="hide_wp_logo" value="yes" <?php checked( $hide_wp_logo ); ?>>
+						<span class="ys-am-toggle__slider"></span>
+					</span>
+					<span class="ys-am-toggle-field__text"><strong>隱藏左上角 WordPress LOGO</strong>含關於、官網、文件等子選單，前後台皆生效。</span>
 				</label>
-				<p class="ysca-wl-field__hint">勾選後 admin bar 左上角的 WordPress 標誌會完全移除（前後台皆生效）。</p>
+				<p class="ysca-wl-field__hint">勾選後 admin bar 左上角的 WordPress 標誌會完全移除。</p>
 
 				<div class="ysca-wl-field" style="margin-top:16px;">
 					<label for="ys-am-admin-bg-color" class="ysca-wl-field__label">整個後台背景色</label>

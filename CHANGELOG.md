@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.0.2] - 2026-06-18
+
+### 改進
+- **設定介面美化（三頁統一）**：選單與權限、原生選單樣式、白牌設定三頁套用統一的 indigo 品牌頁首列；白牌設定頁啟用完整 design system（卡片、按鈕、區塊標題色條），原生 checkbox 改為質感 toggle 開關。
+
 ## [1.0.1] - 2026-06-18
 
 ### 新增

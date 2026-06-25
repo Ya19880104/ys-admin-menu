@@ -104,10 +104,7 @@ $number_fields = [
 ];
 ?>
 <div class="wrap ys-ec-admin-theme-page">
-	<h1>
-		<span class="dashicons dashicons-admin-customizer"></span>
-		原生選單樣式
-	</h1>
+	<?php echo \YangSheep\AdminMenu\Admin\YSMenuPage::pagehead_html( 'admin-appearance', '原生選單樣式', '自訂側欄與 admin bar 的配色、字級與行高，含即時預覽與全站皮膚套用。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape ?>
 
 	<?php if ( ! empty( $saved_notice ) ) : ?>
 		<div class="notice notice-success is-dismissible">
