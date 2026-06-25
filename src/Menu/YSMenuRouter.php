@@ -45,8 +45,24 @@ class YSMenuRouter {
 		// admin_menu 預設 priority 為 10；此處用 9999 確保 AFTER 全部 add_menu_page
 		add_action( 'admin_menu', [ self::class, 'apply_config' ], 9999 );
 		add_action( 'admin_head', [ self::class, 'output_colors' ] );
+		add_action( 'admin_head', [ self::class, 'output_section_label_css' ] );
 		// v2.39.0 BATCH Q3：擋直接訪問 hidden slugs（非 super-admin）
 		add_action( 'admin_init', [ self::class, 'guard_hidden_pages' ] );
+	}
+
+	/**
+	 * 輸出「分組標籤」CSS（帶標題的分隔列）。
+	 *
+	 * 無條件輸出（不依賴原生選單樣式皮膚是否啟用），讓 .ys-am-section-label
+	 * 呈現為不可點的灰色分組小標，而非可點的選單項。
+	 */
+	public static function output_section_label_css(): void {
+		echo '<style id="ys-am-section-label">'
+			. '#adminmenu li.ys-am-section-label>a.menu-top{pointer-events:none;cursor:default;margin-top:10px;padding-top:7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.5;background:transparent;box-shadow:none;}'
+			. '#adminmenu li.ys-am-section-label>a.menu-top:hover,#adminmenu li.ys-am-section-label.opensub>a.menu-top{background:transparent;color:inherit;}'
+			. '#adminmenu li.ys-am-section-label .wp-menu-image,#adminmenu li.ys-am-section-label .wp-menu-arrow{display:none;}'
+			. '#adminmenu li.ys-am-section-label .wp-menu-name{padding-left:0;}'
+			. '</style>';
 	}
 
 	/**
@@ -116,6 +132,9 @@ class YSMenuRouter {
 			self::apply_hide_flags( $config );
 			self::filter_menus_by_current_access();
 		}
+
+		// 5.「僅限本人」：不分 super-admin，綁定特定帳號的選單只有該帳號的 sidebar 看得到
+		self::apply_self_only_filter( $config, $current_user_id );
 
 		// ─────────────────────────────────────────────
 		// 5. 重新排序 + 注入分隔列
@@ -271,11 +290,19 @@ class YSMenuRouter {
 			return true;
 		}
 
+		$config = self::get_config();
+
+		// 「僅限本人」優先於 super-admin bypass：選單若綁定特定帳號，只有該帳號可見
+		// （其他帳號含其他 super-admin 一律擋）；綁定者自己永遠可見＝不會鎖死自己。
+		$self_only_uid = self::self_only_uid_for_slug( $slug, $config );
+		if ( $self_only_uid > 0 ) {
+			return $self_only_uid === $user_id;
+		}
+
 		if ( is_super_admin( $user_id ) || user_can( $user_id, 'manage_network' ) ) {
 			return true;
 		}
 
-		$config = self::get_config();
 		if ( empty( $config ) ) {
 			return true;
 		}
@@ -397,6 +424,83 @@ class YSMenuRouter {
 					}
 					$slug = isset( $sub[2] ) ? (string) $sub[2] : '';
 					if ( '' !== $slug && ! self::current_user_can_access_admin_slug( $slug ) ) {
+						unset( $submenu[ $parent ][ $idx ] );
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * 查某 slug 是否被設為「僅限本人」，回傳綁定的 user id（0＝未設定）。
+	 */
+	private static function self_only_uid_for_slug( string $slug, array $config ): int {
+		$slug = self::normalize_admin_slug( $slug );
+		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
+			$items = $config[ $section ]['items'] ?? [];
+			if ( ! is_array( $items ) ) {
+				continue;
+			}
+			foreach ( $items as $item ) {
+				if ( ! is_array( $item ) || empty( $item['slug'] ) ) {
+					continue;
+				}
+				if ( self::normalize_admin_slug( (string) $item['slug'] ) === $slug ) {
+					return (int) ( $item['self_only_uid'] ?? 0 );
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * 套用「僅限本人」：綁定特定帳號的選單，從非綁定帳號（含其他 super-admin）的 sidebar 移除。
+	 */
+	private static function apply_self_only_filter( array $config, int $current_user_id ): void {
+		global $menu, $submenu;
+
+		$map = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
+			$items = $config[ $section ]['items'] ?? [];
+			if ( ! is_array( $items ) ) {
+				continue;
+			}
+			foreach ( $items as $item ) {
+				if ( ! is_array( $item ) || empty( $item['slug'] ) ) {
+					continue;
+				}
+				$uid = (int) ( $item['self_only_uid'] ?? 0 );
+				if ( $uid > 0 ) {
+					$map[ self::normalize_admin_slug( (string) $item['slug'] ) ] = $uid;
+				}
+			}
+		}
+		if ( empty( $map ) ) {
+			return;
+		}
+
+		if ( is_array( $menu ) ) {
+			foreach ( $menu as $position => $menu_item ) {
+				if ( ! is_array( $menu_item ) ) {
+					continue;
+				}
+				$slug = self::normalize_admin_slug( (string) ( $menu_item[2] ?? '' ) );
+				if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
+					unset( $menu[ $position ] );
+				}
+			}
+		}
+		if ( is_array( $submenu ) ) {
+			foreach ( $submenu as $parent => $rows ) {
+				if ( ! is_array( $rows ) ) {
+					continue;
+				}
+				foreach ( $rows as $idx => $sub ) {
+					if ( ! is_array( $sub ) ) {
+						continue;
+					}
+					$slug = self::normalize_admin_slug( (string) ( $sub[2] ?? '' ) );
+					if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}
@@ -546,6 +650,15 @@ class YSMenuRouter {
 			return;
 		}
 
+		// 「僅限本人」優先於 super-admin bypass：非綁定帳號（含其他 super-admin）直接擋直接訪問
+		$self_page = self::current_admin_request_slug();
+		if ( '' !== $self_page ) {
+			$self_uid = self::self_only_uid_for_slug( $self_page, self::get_config() );
+			if ( $self_uid > 0 && $self_uid !== get_current_user_id() ) {
+				self::deny_access( $self_page );
+			}
+		}
+
 		// super-admin bypass
 		if ( current_user_can( 'manage_network' ) || is_super_admin() ) {
 			return;
@@ -677,19 +790,25 @@ class YSMenuRouter {
 				continue;
 			}
 
-			// separator → 注入空白標題
+			// separator → 有標題＝分組標籤（sidebar 顯示文字）；無標題＝純視覺分隔線
 			if ( ! empty( $item['separator'] ) ) {
-				$title = isset( $item['title'] ) ? wp_strip_all_tags( (string) $item['title'] ) : '';
+				$title        = isset( $item['title'] ) ? wp_strip_all_tags( (string) $item['title'] ) : '';
 				$separator_id = 'ys-ec-sep-' . $position;
-				$new_menu[ $position ] = [
-					$title,                  // 0 menu_title
-					'read',                  // 1 capability（最低權限）
-					$separator_id,           // 2 menu_slug
-					'',                      // 3 page_title
-					'wp-menu-separator',     // 4 classes
-					$separator_id,           // 5 hookname
-					'',                      // 6 icon
-				];
+				if ( '' === $title ) {
+					// 無標題：WP 原生視覺分隔線
+					$new_menu[ $position ] = [ '', 'read', $separator_id, '', 'wp-menu-separator', $separator_id, '' ];
+				} else {
+					// 有標題：以 menu-top 結構承載標題，再由 output_section_label_css 樣式化為不可點分組小標。
+					$new_menu[ $position ] = [
+						$title,
+						'read',
+						$separator_id,
+						$title,
+						'menu-top ys-am-section-label',
+						$separator_id,
+						'',
+					];
+				}
 				$position += 2;
 				continue;
 			}

@@ -122,6 +122,29 @@ $settings_action = admin_url( 'admin-post.php' );
 			</div>
 		</div>
 
+		<div class="ysca-wl-card">
+			<div class="ysca-wl-card__header">
+				<h3 class="ysca-wl-card__title">介面外觀</h3>
+			</div>
+			<div class="ysca-wl-card__body">
+				<label class="ysca-wl-field" style="display:flex;align-items:center;gap:8px;">
+					<input type="checkbox" name="hide_wp_logo" value="yes" <?php checked( $hide_wp_logo ); ?>>
+					<span>隱藏左上角的 WordPress LOGO（含關於、官網、文件等子選單）</span>
+				</label>
+				<p class="ysca-wl-field__hint">勾選後 admin bar 左上角的 WordPress 標誌會完全移除（前後台皆生效）。</p>
+
+				<div class="ysca-wl-field" style="margin-top:16px;">
+					<label for="ys-am-admin-bg-color" class="ysca-wl-field__label">整個後台背景色</label>
+					<br>
+					<input type="text" id="ys-am-admin-bg-color" name="admin_bg_color"
+						value="<?php echo esc_attr( $admin_bg_color ); ?>"
+						class="ys-am-color-field" data-default-color=""
+						placeholder="#f0f0f1">
+					<p class="ysca-wl-field__hint">設定後立即套用到整個 wp-admin 背景（不需啟用主題皮膚）。留空則恢復 WordPress 預設色。</p>
+				</div>
+			</div>
+		</div>
+
 		<div class="ysca-wl-actions">
 			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設置</button>
 		</div>
@@ -172,5 +195,10 @@ jQuery(function ($) {
 			$('#ys-ec-logo-empty').prop('hidden', false);
 		}
 	});
+
+	// 後台背景色 — WP 內建 color picker
+	if ($.fn.wpColorPicker) {
+		$('.ys-am-color-field').wpColorPicker();
+	}
 });
 </script>

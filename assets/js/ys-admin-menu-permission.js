@@ -68,24 +68,29 @@
         }
         initSortable( tbody );
 
-        // 「+ 新增空白標題」 separator
+        // 「+ 新增空白標題」 separator — 直接插入一列可即時編輯的分隔列（不用 prompt）
         if ( addSepBtn ) {
             addSepBtn.addEventListener( 'click', function () {
-                var title = window.prompt( '請輸入分隔列標題（例如：— 內容管理 —）', '' );
-                if ( null === title ) {
-                    return;
-                }
-                title = title.replace( /^\s+|\s+$/g, '' );
-                if ( '' === title ) {
-                    window.alert( '標題不可為空' );
-                    return;
-                }
-                var rowCount = tbody.querySelectorAll( 'tr' ).length;
+                // 新分隔列 order 取目前最大值 + 10（排在最後，使用者可再拖拉到想要的位置）
+                var maxOrder = 0;
+                Array.prototype.forEach.call( tbody.querySelectorAll( '.ys-ec-order-input' ), function ( inp ) {
+                    var v = parseInt( inp.value || '0', 10 ) || 0;
+                    if ( v > maxOrder ) {
+                        maxOrder = v;
+                    }
+                } );
                 var temp = document.createElement( 'tbody' );
-                temp.innerHTML = renderSeparatorRow( title, ( rowCount + 1 ) * 10, tab );
+                temp.innerHTML = renderSeparatorRow( '', maxOrder + 10, tab );
                 var newRow = temp.firstElementChild;
                 if ( newRow ) {
                     tbody.appendChild( newRow );
+                    var titleInput = newRow.querySelector( '.ys-ec-separator-title' );
+                    if ( titleInput ) {
+                        titleInput.focus();
+                    }
+                    if ( newRow.scrollIntoView ) {
+                        newRow.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+                    }
                 }
             } );
         }
@@ -128,6 +133,9 @@
                     var colorEl = row.querySelector( '.ys-ec-color-picker' );
                     var titleEl = row.querySelector( '.ys-ec-title-override' );
                     var hideCb  = row.querySelector( '.ys-ec-hide-checkbox' );
+                    var selfCb  = row.querySelector( '.ys-ec-self-only' );
+                    var existingSelfUid = parseInt( row.getAttribute( 'data-self-uid' ) || '0', 10 ) || 0;
+                    var selfOnlyUid = ( selfCb && selfCb.checked ) ? ( existingSelfUid || ( cfg.currentUserId | 0 ) ) : 0;
 
                     return {
                         slug:           row.getAttribute( 'data-slug' ),
@@ -137,7 +145,8 @@
                         title_override: titleEl ? titleEl.value : '',
                         level:          row.getAttribute( 'data-level' ) || 'top',
                         parent_slug:    row.getAttribute( 'data-parent' ) || null,
-                        hide:           hideCb ? !!hideCb.checked : false
+                        hide:           hideCb ? !!hideCb.checked : false,
+                        self_only_uid:  selfOnlyUid
                     };
                 } );
 

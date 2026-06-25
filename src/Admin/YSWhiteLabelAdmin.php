@@ -60,12 +60,28 @@ class YSWhiteLabelAdmin {
 	/** wp_options key — 是否隱藏後台原生頁尾 */
 	public const OPTION_HIDE_FOOTER = 'ys_admin_menu_hide_footer';
 
+	/** wp_options key — 是否隱藏 admin bar 左上角 WordPress LOGO */
+	public const OPTION_HIDE_WP_LOGO = 'ys_admin_menu_hide_wp_logo';
+
+	/** wp_options key — 整個後台背景色（空字串＝不套用、維持 WP 預設） */
+	public const OPTION_ADMIN_BG_COLOR = 'ys_admin_menu_admin_bg_color';
+
 	/**
 	 * 註冊 hook
 	 */
 	public static function register(): void {
 		// 白牌設置以經典 admin-post PRG 表單儲存（自包含、不依賴 REST）。
 		add_action( 'admin_post_' . self::ADMIN_POST_ACTION, [ self::class, 'handle_save_settings' ] );
+
+		// 隱藏 admin bar 左上角的 WordPress LOGO（白牌：前後台 admin bar 都移除）。
+		if ( self::get_hide_wp_logo() ) {
+			add_action( 'admin_bar_menu', [ self::class, 'remove_wp_logo_node' ], 999 );
+		}
+
+		// 整個後台背景色（有設定才輸出，無條件套用、不需啟用主題皮膚）。
+		if ( '' !== self::get_admin_bg_color() ) {
+			add_action( 'admin_head', [ self::class, 'print_admin_bg_style' ] );
+		}
 
 		if ( self::get_hide_footer() ) {
 			// 完全隱藏後台頁尾（左側謝詞 + 右側版本號 + 容器）。
@@ -104,6 +120,43 @@ class YSWhiteLabelAdmin {
 	}
 
 	/**
+	 * 是否隱藏 admin bar 左上角 WordPress LOGO。
+	 */
+	public static function get_hide_wp_logo(): bool {
+		return 'yes' === get_option( self::OPTION_HIDE_WP_LOGO, 'no' );
+	}
+
+	/**
+	 * 取得整個後台背景色（已 sanitize 的 hex；空字串＝未設定）。
+	 */
+	public static function get_admin_bg_color(): string {
+		$color = sanitize_hex_color( (string) get_option( self::OPTION_ADMIN_BG_COLOR, '' ) );
+		return is_string( $color ) ? $color : '';
+	}
+
+	/**
+	 * 從 admin bar 移除 WP LOGO 節點（含其 about / 官網 / 文件等子項）。
+	 *
+	 * @param \WP_Admin_Bar $wp_admin_bar
+	 */
+	public static function remove_wp_logo_node( $wp_admin_bar ): void {
+		if ( is_object( $wp_admin_bar ) && method_exists( $wp_admin_bar, 'remove_node' ) ) {
+			$wp_admin_bar->remove_node( 'wp-logo' );
+		}
+	}
+
+	/**
+	 * 輸出整個後台背景色 CSS（套用於 body.wp-admin，無條件、不需主題皮膚）。
+	 */
+	public static function print_admin_bg_style(): void {
+		$color = self::get_admin_bg_color();
+		if ( '' === $color ) {
+			return;
+		}
+		echo '<style id="ys-admin-menu-admin-bg">body.wp-admin{background-color:' . esc_attr( $color ) . ' !important;}</style>';
+	}
+
+	/**
 	 * 取得目前 LOGO URL（給其他模組讀取，例：YSAdminApp 渲染 brand）
 	 */
 	public static function get_logo_url(): string {
@@ -132,9 +185,15 @@ class YSWhiteLabelAdmin {
 		// 為 logo upload 載入 WP media library（v2.45.20：在 shell 內 modal 仍正常）
 		wp_enqueue_media();
 
-		$logo_url    = self::get_logo_url();
-		$footer_text = self::get_footer_text();
-		$hide_footer = self::get_hide_footer();
+		// 後台背景色用 WP 內建 color picker（屬 WP core，不違反白牌頁純 native UI 原則）。
+		wp_enqueue_style( 'wp-color-picker' );
+		wp_enqueue_script( 'wp-color-picker' );
+
+		$logo_url     = self::get_logo_url();
+		$footer_text  = self::get_footer_text();
+		$hide_footer  = self::get_hide_footer();
+		$hide_wp_logo = self::get_hide_wp_logo();
+		$admin_bg_color = self::get_admin_bg_color();
 		$notice      = '';
 		if ( ! empty( $_GET['ys_ec_wl_saved'] ) ) {
 			$notice = '白牌設置已儲存。';
@@ -188,6 +247,15 @@ class YSWhiteLabelAdmin {
 		// 隱藏後台原生頁尾開關。
 		$hide_footer = isset( $_POST['hide_footer'] ) ? 'yes' : 'no';
 		update_option( self::OPTION_HIDE_FOOTER, $hide_footer, true );
+
+		// 隱藏 admin bar 左上角 WP LOGO 開關。
+		$hide_wp_logo = isset( $_POST['hide_wp_logo'] ) ? 'yes' : 'no';
+		update_option( self::OPTION_HIDE_WP_LOGO, $hide_wp_logo, true );
+
+		// 整個後台背景色（空字串＝清除、恢復 WP 預設）。
+		$raw_bg    = (string) ( $_POST['admin_bg_color'] ?? '' );
+		$bg_color  = '' !== trim( $raw_bg ) ? sanitize_hex_color( trim( $raw_bg ) ) : '';
+		update_option( self::OPTION_ADMIN_BG_COLOR, is_string( $bg_color ) ? $bg_color : '', true );
 
 		wp_safe_redirect(
 			add_query_arg(

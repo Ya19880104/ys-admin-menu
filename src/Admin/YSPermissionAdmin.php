@@ -177,6 +177,7 @@ class YSPermissionAdmin {
 			'restUrl'    => esc_url_raw( rest_url( 'ys-admin-menu/v1/admin/permissions' ) ),
 			'usersUrl'   => esc_url_raw( rest_url( 'wp/v2/users' ) ),
 			'nonce'      => wp_create_nonce( 'wp_rest' ),
+			'currentUserId' => get_current_user_id(),
 		] );
 
 		wp_enqueue_style(
@@ -321,25 +322,47 @@ class YSPermissionAdmin {
 								</tr>
 								<?php
 							else :
-								$idx = 0;
+								// 合併「選單項」與「分隔列」成單一清單，依 order 統一排序後輸出，
+								// 與前台 YSMenuRouter::reorder_and_insert_separators 的排序邏輯一致，
+								// 確保設定頁顯示順序 == 實際側欄順序（含分隔列位置）。
+								$render_list = [];
+								$idx         = 0;
 								foreach ( $items as $item ) :
 									$idx++;
-									$slug  = (string) ( $item['slug'] ?? '' );
+									$slug = (string) ( $item['slug'] ?? '' );
 									if ( '' === $slug ) {
 										continue;
 									}
-									$saved = $saved_by_slug[ $slug ] ?? [];
-									$order = isset( $saved['order'] ) ? (int) $saved['order'] : ( $idx * 10 );
-									self::render_item_row( $tab, $item, $saved, $order );
+									$saved         = $saved_by_slug[ $slug ] ?? [];
+									$render_list[] = [
+										'kind'  => 'item',
+										'order' => isset( $saved['order'] ) ? (int) $saved['order'] : ( $idx * 10 ),
+										'item'  => $item,
+										'saved' => $saved,
+									];
+								endforeach;
+								foreach ( $saved_separators as $sep ) :
+									$render_list[] = [
+										'kind'  => 'separator',
+										'order' => (int) ( $sep['order'] ?? 0 ),
+										'title' => (string) ( $sep['title'] ?? '' ),
+									];
 								endforeach;
 
-								// 已存 separator 接尾巴（user 拖拉到適當位置 / 儲存後保持順序）
-								foreach ( $saved_separators as $sep ) :
-									self::render_separator_row(
-										$tab,
-										(string) ( $sep['title'] ?? '' ),
-										(int) ( $sep['order'] ?? 0 )
-									);
+								// PHP 8 的 usort 為穩定排序：同 order 維持原相對順序。
+								usort(
+									$render_list,
+									static function ( $a, $b ) {
+										return $a['order'] <=> $b['order'];
+									}
+								);
+
+								foreach ( $render_list as $entry ) :
+									if ( 'separator' === $entry['kind'] ) {
+										self::render_separator_row( $tab, $entry['title'], $entry['order'] );
+									} else {
+										self::render_item_row( $tab, $entry['item'], $entry['saved'], $entry['order'] );
+									}
 								endforeach;
 							endif;
 							?>
@@ -374,6 +397,7 @@ class YSPermissionAdmin {
 		$color          = (string) ( $saved['color'] ?? '' );
 		$title_override = (string) ( $saved['title_override'] ?? '' );
 		$hide           = ! empty( $saved['hide'] );
+		$self_only_uid  = (int) ( $saved['self_only_uid'] ?? 0 );
 
 		$role_options = [
 			'administrator' => 'Admin',
@@ -387,7 +411,7 @@ class YSPermissionAdmin {
 
 		$is_sub = ( 'sub' === $level );
 		?>
-		<tr data-slug="<?php echo esc_attr( $slug ); ?>" data-level="<?php echo esc_attr( $level ); ?>"<?php echo $parent_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped above ?>>
+		<tr data-slug="<?php echo esc_attr( $slug ); ?>" data-level="<?php echo esc_attr( $level ); ?>" data-self-uid="<?php echo (int) $self_only_uid; ?>"<?php echo $parent_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped above ?>>
 			<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>
 			<td>
 				<input type="number" class="ys-ec-order-input" value="<?php echo esc_attr( (string) $order ); ?>"
@@ -417,6 +441,10 @@ class YSPermissionAdmin {
 						</label>
 					<?php endforeach; ?>
 				</div>
+					<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）">
+						<input type="checkbox" class="ys-ec-self-only" <?php checked( $self_only_uid > 0 ); ?>>
+						僅限本人
+					</label>
 			</td>
 			<?php if ( 'wp_native' === $tab ) : ?>
 				<td>

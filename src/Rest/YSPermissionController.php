@@ -262,6 +262,10 @@ class YSPermissionController {
 			if ( false !== strpos( $classes, 'wp-menu-separator' ) ) {
 				continue;
 			}
+			// 跳過本外掛注入的分組標籤（帶標題的分隔列），避免被當成真實選單重複列出
+			if ( 0 === strpos( $slug, 'ys-ec-sep-' ) || false !== strpos( $classes, 'ys-am-section-label' ) ) {
+				continue;
+			}
 
 			$out[] = [
 				'slug'     => $slug,
@@ -305,6 +309,10 @@ class YSPermissionController {
 			}
 			$classes = isset( $item[4] ) ? (string) $item[4] : '';
 			if ( false !== strpos( $classes, 'wp-menu-separator' ) ) {
+				continue;
+			}
+			// 跳過本外掛注入的分組標籤（帶標題的分隔列），避免被當成真實選單重複列出
+			if ( 0 === strpos( $slug, 'ys-ec-sep-' ) || false !== strpos( $classes, 'ys-am-section-label' ) ) {
 				continue;
 			}
 
@@ -398,6 +406,7 @@ class YSPermissionController {
 				'color'          => $color ?: null,
 				'roles'          => $roles,
 				'hide'           => $hide,
+				'self_only_uid'  => isset( $row['self_only_uid'] ) ? absint( $row['self_only_uid'] ) : 0,
 			];
 		}
 		return $out;
@@ -453,6 +462,7 @@ class YSPermissionController {
 				'level'       => in_array( $level, [ 'top', 'sub' ], true ) ? $level : 'top',
 				'parent_slug' => $parent_slug,
 				'hide'        => $hide,
+				'self_only_uid'  => isset( $row['self_only_uid'] ) ? absint( $row['self_only_uid'] ) : 0,
 			];
 		}
 		return $out;
