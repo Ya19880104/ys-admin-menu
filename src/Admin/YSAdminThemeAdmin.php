@@ -132,6 +132,7 @@ class YSAdminThemeAdmin {
 		$cfg['submenu_font_size']   = self::post_float( 'submenu_font_size', (float) $defaults['submenu_font_size'], 10.0, 18.0 );
 		$cfg['menu_line_height']    = self::post_float( 'menu_line_height', (float) $defaults['menu_line_height'], 1.0, 2.5 );
 		$cfg['submenu_line_height'] = self::post_float( 'submenu_line_height', (float) $defaults['submenu_line_height'], 1.0, 2.5 );
+		$cfg['submenu_font_weight'] = (int) self::post_float( 'submenu_font_weight', 500.0, 100.0, 900.0 );
 
 		// 分組標籤樣式（顏色允許清空＝繼承／透明）。
 		$slc = isset( $_POST['section_label_color'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['section_label_color'] ) ) ) : '';

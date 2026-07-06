@@ -93,24 +93,6 @@ $number_fields = [
 		'suffix'      => '',
 		'description' => '建議 1.4-1.6。',
 	],
-	[
-		'key'         => 'submenu_font_size',
-		'label'       => '子選單字級',
-		'min'         => '10',
-		'max'         => '18',
-		'step'        => '1',
-		'suffix'      => 'px',
-		'description' => '建議 12-14px。',
-	],
-	[
-		'key'         => 'submenu_line_height',
-		'label'       => '子選單行高',
-		'min'         => '1.0',
-		'max'         => '2.5',
-		'step'        => '0.1',
-		'suffix'      => '',
-		'description' => '建議 1.3-1.5。',
-	],
 ];
 ?>
 <div class="wrap ys-ec-admin-theme-page">
@@ -186,11 +168,11 @@ $number_fields = [
 		<div class="ys-ec-card ysca-card-spaced">
 			<h3>
 				<span class="dashicons dashicons-editor-textcolor"></span>
-				文字大小
+				文字大小（主選單）
 			</h3>
 			<div class="inside">
 				<p class="description ysca-description-flush">
-					此區只調整文字大小與行高，不調整 WordPress 原生選單寬度。
+					此區調整主選單的文字大小與行高；子選單項的字級／粗細／行高請至下方「子選單項」區塊調整。
 				</p>
 
 				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
@@ -337,12 +319,29 @@ $number_fields = [
 			</h3>
 			<div class="inside">
 				<p class="description ysca-description-flush">
-					調整展開子選單內各選項的留白與 hover 背景色；子選單整體「背景色」請用上方「顏色」區的「子選單背景色」。
+					調整展開子選單內各選項的文字大小、粗細、行高、留白與 hover 背景色；子選單整體「背景色」與「文字顏色」請用上方「顏色」區。
 				</p>
 				<div class="ys-ec-form-group">
 					<label for="submenu_hover_bg">子選項 hover 背景色</label>
 					<input type="text" id="submenu_hover_bg" name="submenu_hover_bg" value="<?php echo esc_attr( (string) ( $cfg['submenu_hover_bg'] ?? '' ) ); ?>" class="ys-ec-color-picker" data-default-color="">
 					<p class="description">滑鼠移到子選項時的背景色；留空＝無 hover 效果。</p>
+				</div>
+				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
+				<div class="ys-ec-form-group">
+					<label for="submenu_font_size">字級</label>
+					<input type="number" id="submenu_font_size" name="submenu_font_size" value="<?php echo esc_attr( (string) ( $cfg['submenu_font_size'] ?? 14 ) ); ?>" min="10" max="18" step="1" class="ysca-field--xs">
+					<p class="description">px，建議 12-14。</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_font_weight">粗細</label>
+					<input type="number" id="submenu_font_weight" name="submenu_font_weight" value="<?php echo esc_attr( (string) ( $cfg['submenu_font_weight'] ?? 500 ) ); ?>" min="100" max="900" step="100" class="ysca-field--xs">
+					<p class="description">100–900，預設 500。</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_line_height">行高</label>
+					<input type="number" id="submenu_line_height" name="submenu_line_height" value="<?php echo esc_attr( (string) ( $cfg['submenu_line_height'] ?? 1.45 ) ); ?>" min="1.0" max="2.5" step="0.1" class="ysca-field--xs">
+					<p class="description">建議 1.3-1.5。</p>
+				</div>
 				</div>
 				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
 				<div class="ys-ec-form-group">

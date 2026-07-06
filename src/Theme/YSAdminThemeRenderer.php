@@ -51,6 +51,7 @@ class YSAdminThemeRenderer {
 		$m_lh   = self::clamp_float( $cfg['menu_line_height'] ?? 1.5, 1.0, 2.5 );
 		$s_size = self::clamp_float( $cfg['submenu_font_size'] ?? 13, 10.0, 18.0 );
 		$s_lh   = self::clamp_float( $cfg['submenu_line_height'] ?? 1.4, 1.0, 2.5 );
+		$s_fw   = (int) self::clamp_float( $cfg['submenu_font_weight'] ?? 500, 100.0, 900.0 );
 
 		$mp_t = (int) self::clamp_float( $cfg['menu_item_padding_top'] ?? 0, 0.0, 40.0 );
 		$mp_r = (int) self::clamp_float( $cfg['menu_item_padding_right'] ?? 10, 0.0, 60.0 );
@@ -82,6 +83,7 @@ class YSAdminThemeRenderer {
     --ys-theme-menu-line-height: <?php echo esc_attr( (string) $m_lh ); ?>;
     --ys-theme-submenu-font-size: <?php echo esc_attr( (string) $s_size ); ?>px;
     --ys-theme-submenu-line-height: <?php echo esc_attr( (string) $s_lh ); ?>;
+    --ys-theme-submenu-font-weight: <?php echo esc_attr( (string) $s_fw ); ?>;
     --ys-theme-menu-width: 300px;
     --ys-theme-menu-drawer-width: 340px;
     --ys-theme-menu-item-height: 36px;
@@ -193,6 +195,7 @@ class YSAdminThemeRenderer {
 			'submenu_item_padding_right'  => 12,
 			'submenu_item_padding_bottom' => 6,
 			'submenu_item_padding_left'   => 12,
+			'submenu_font_weight'         => 500,
 			'submenu_hover_bg'            => '',
 			'opensub_bg'                 => '',
 			'current_bg'                 => '',

@@ -139,7 +139,7 @@ body.ys-theme-active #adminmenu .wp-submenu a {
     border-radius: var( --ys-theme-menu-item-radius );
     box-sizing: border-box;
     color: var( --ys-theme-submenu-text );
-    font-weight: 500;
+    font-weight: var( --ys-theme-submenu-font-weight );
     font-size: var( --ys-theme-submenu-font-size );
     line-height: var( --ys-theme-submenu-line-height );
 }
