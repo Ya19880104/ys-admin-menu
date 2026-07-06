@@ -163,7 +163,8 @@ body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu-wrap {
     top: auto;
     width: auto;
     min-width: 0;
-    margin: 2px 0 6px;
+    /* !important：防 WP common.js adjustSubmenu 注入 inline 負 margin-top 造成子選單跳動。 */
+    margin: 2px 0 6px !important;
     padding: 2px 0 7px var( --ys-theme-submenu-indent );
     border-radius: 0 0 var( --ys-theme-menu-item-radius ) var( --ys-theme-menu-item-radius );
     box-shadow: none;
@@ -180,8 +181,8 @@ body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > .wp-subm
     display: block;
 }
 
-body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open) > .wp-submenu,
-body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open) > .wp-submenu-wrap {
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu,
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu-wrap {
     display: none;
 }
 

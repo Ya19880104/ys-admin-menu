@@ -45,6 +45,11 @@
 	apply();
 
 	// 點頂層選單列最右側箭頭區（約 44px）→ 收放子選單；其餘區域維持原生導航。
+	// 觸控環境（'ontouchstart' in window，含觸控螢幕筆電／桌機）WP common.js 會對
+	// a.wp-has-submenu 綁 click 攔截（wp-mobile-hover）：第一次點擊 preventDefault
+	// 只加 .opensub 並以 adjustSubmenu 注入負 margin（畫面跳一下、不導航），點第二次
+	// 才放行。本監聽器在 capture 階段先執行，名稱區點擊以 stopPropagation 阻斷該攔截
+	//（不呼叫 preventDefault，預設導航照常進行）。
 	menu.addEventListener( 'click', function ( event ) {
 		var a = ( event.target && event.target.closest ) ? event.target.closest( 'a.menu-top' ) : null;
 		if ( ! a ) {
@@ -54,9 +59,13 @@
 		if ( ! li || ! li.classList || ! li.classList.contains( 'wp-has-submenu' ) ) {
 			return;
 		}
+		if ( document.body.classList.contains( 'folded' ) ) {
+			return; // 收合（folded）模式不介入，維持 WP 原生行為。
+		}
 		var rect = a.getBoundingClientRect();
 		if ( event.clientX < rect.right - 44 ) {
-			return; // 非箭頭區 → 放行原生導航
+			event.stopPropagation(); // 名稱／圖示區 → 放行原生導航，僅阻斷觸控首擊攔截。
+			return;
 		}
 		event.preventDefault();
 		event.stopPropagation();
