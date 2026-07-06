@@ -342,6 +342,11 @@ $number_fields = [
 					<input type="number" id="submenu_line_height" name="submenu_line_height" value="<?php echo esc_attr( (string) ( $cfg['submenu_line_height'] ?? 1.45 ) ); ?>" min="1.0" max="2.5" step="0.1" class="ysca-field--xs">
 					<p class="description">建議 1.3-1.5。</p>
 				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_indent">面板左縮排</label>
+					<input type="number" id="submenu_indent" name="submenu_indent" value="<?php echo esc_attr( (string) ( $cfg['submenu_indent'] ?? 42 ) ); ?>" min="0" max="80" step="1" class="ysca-field--xs">
+					<p class="description">px，整個子選單面板相對主選單的左縮排（預設 42）；各選項自身的左留白用下方「左留白」。</p>
+				</div>
 				</div>
 				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
 				<div class="ys-ec-form-group">
