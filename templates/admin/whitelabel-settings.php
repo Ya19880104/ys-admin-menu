@@ -151,6 +151,22 @@ $settings_action = admin_url( 'admin-post.php' );
 			</div>
 		</div>
 
+		<div class="ysca-wl-card">
+			<div class="ysca-wl-card__header">
+				<h3 class="ysca-wl-card__title">資料清除</h3>
+			</div>
+			<div class="ysca-wl-card__body">
+				<label class="ys-am-toggle-field">
+					<span class="ys-am-toggle">
+						<input type="checkbox" name="purge_on_uninstall" value="yes" <?php checked( $purge_on_uninstall ); ?>>
+						<span class="ys-am-toggle__slider"></span>
+					</span>
+					<span class="ys-am-toggle-field__text"><strong>刪除外掛時一併清除所有設定</strong>預設不勾＝刪除外掛會保留所有設定、重新安裝即沿用；勾選後刪除外掛才會一併清除。</span>
+				</label>
+				<p class="ysca-wl-field__hint">建議保持不勾，避免誤刪外掛時遺失所有選單與樣式設定。</p>
+			</div>
+		</div>
+
 		<div class="ysca-wl-actions">
 			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設置</button>
 		</div>

@@ -66,6 +66,9 @@ class YSWhiteLabelAdmin {
 	/** wp_options key — 整個後台背景色（空字串＝不套用、維持 WP 預設） */
 	public const OPTION_ADMIN_BG_COLOR = 'ys_admin_menu_admin_bg_color';
 
+	/** wp_options key — 刪除外掛時是否一併清除所有設定（預設否＝保留設定） */
+	public const OPTION_PURGE_ON_UNINSTALL = 'ys_admin_menu_purge_on_uninstall';
+
 	/**
 	 * 註冊 hook
 	 */
@@ -120,6 +123,13 @@ class YSWhiteLabelAdmin {
 	 */
 	public static function get_hide_footer(): bool {
 		return 'yes' === get_option( self::OPTION_HIDE_FOOTER, 'no' );
+	}
+
+	/**
+	 * 刪除外掛時是否一併清除所有設定（預設否＝保留）。
+	 */
+	public static function get_purge_on_uninstall(): bool {
+		return 'yes' === get_option( self::OPTION_PURGE_ON_UNINSTALL, 'no' );
 	}
 
 	/**
@@ -211,6 +221,7 @@ class YSWhiteLabelAdmin {
 		$hide_footer  = self::get_hide_footer();
 		$hide_wp_logo = self::get_hide_wp_logo();
 		$admin_bg_color = self::get_admin_bg_color();
+		$purge_on_uninstall = self::get_purge_on_uninstall();
 		$notice      = '';
 		if ( ! empty( $_GET['ys_ec_wl_saved'] ) ) {
 			$notice = '白牌設置已儲存。';
@@ -273,6 +284,10 @@ class YSWhiteLabelAdmin {
 		$raw_bg    = (string) ( $_POST['admin_bg_color'] ?? '' );
 		$bg_color  = '' !== trim( $raw_bg ) ? sanitize_hex_color( trim( $raw_bg ) ) : '';
 		update_option( self::OPTION_ADMIN_BG_COLOR, is_string( $bg_color ) ? $bg_color : '', true );
+
+		// 刪除外掛時是否一併清除所有設定（預設否＝保留）。
+		$purge = isset( $_POST['purge_on_uninstall'] ) ? 'yes' : 'no';
+		update_option( self::OPTION_PURGE_ON_UNINSTALL, $purge, true );
 
 		wp_safe_redirect(
 			add_query_arg(
