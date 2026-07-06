@@ -41,7 +41,7 @@ body.ys-theme-active #adminmenu li.menu-top > a {
     align-items: center;
     min-height: var( --ys-theme-menu-item-height );
     gap: var( --ys-theme-menu-item-gap );
-    padding: 0 var( --ys-theme-menu-item-x );
+    padding: var( --ys-theme-menu-item-pt ) var( --ys-theme-menu-item-pr ) var( --ys-theme-menu-item-pb ) var( --ys-theme-menu-item-pl );
     border-radius: var( --ys-theme-menu-item-radius );
     box-sizing: border-box;
     text-decoration: none;
@@ -135,7 +135,7 @@ body.ys-theme-active #adminmenu .wp-submenu a {
     display: flex;
     align-items: center;
     min-height: 32px;
-    padding: 0 var( --ys-theme-menu-item-x );
+    padding: var( --ys-theme-submenu-item-pt ) var( --ys-theme-submenu-item-pr ) var( --ys-theme-submenu-item-pb ) var( --ys-theme-submenu-item-pl );
     border-radius: var( --ys-theme-menu-item-radius );
     box-sizing: border-box;
     color: var( --ys-theme-submenu-text );
@@ -146,6 +146,12 @@ body.ys-theme-active #adminmenu .wp-submenu a {
 
 body.ys-theme-active #adminmenu .wp-submenu li {
     margin: 0;
+}
+
+/* 子選單項 hover / focus 背景（可控；未設定＝transparent 無效果） */
+body.ys-theme-active #adminmenu .wp-submenu a:hover,
+body.ys-theme-active #adminmenu .wp-submenu a:focus {
+    background: var( --ys-theme-submenu-hover-bg );
 }
 
 /* Native accordion submenu panels. */
@@ -198,28 +204,37 @@ body.ys-theme-active #wpadminbar > #wp-toolbar span.noticon {
     color: var( --ys-theme-admin-bar-text );
 }
 
-/* hover / opensub：只有整列 a 變背景色，文字與圖示僅變色（不再各疊一層獨立色塊）。 */
+/* hover：只有整列 a 變背景色（淡色），文字與圖示僅變色。 */
 body.ys-theme-active #adminmenu li.menu-top:hover > a,
-body.ys-theme-active #adminmenu li.menu-top.opensub > a,
-body.ys-theme-active #adminmenu li.wp-has-submenu.opensub > a.menu-top,
 body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li:hover > .ab-item,
 body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li > .ab-item:focus,
 body.ys-theme-active #wpadminbar:not(.mobile) .ab-top-menu > li.hover > .ab-item {
     background: color-mix(in srgb, var( --ys-theme-hover-bg ) 22%, transparent);
     color: var( --ys-theme-hover-text );
 }
+
+/* 展開態：手動展開（accordion .ys-am-open）或 hover 展開（.opensub）→ 展開選單背景色。 */
+body.ys-theme-active #adminmenu li.menu-top.ys-am-open > a.menu-top,
+body.ys-theme-active #adminmenu li.wp-has-submenu.ys-am-open > a.menu-top,
+body.ys-theme-active #adminmenu li.menu-top.opensub > a,
+body.ys-theme-active #adminmenu li.wp-has-submenu.opensub > a.menu-top {
+    background: var( --ys-theme-opensub-bg );
+    color: var( --ys-theme-hover-text );
+}
 body.ys-theme-active #adminmenu li.menu-top:hover .wp-menu-name,
 body.ys-theme-active #adminmenu li.menu-top:hover .wp-menu-image::before,
+body.ys-theme-active #adminmenu li.menu-top.ys-am-open .wp-menu-name,
+body.ys-theme-active #adminmenu li.menu-top.ys-am-open .wp-menu-image::before,
 body.ys-theme-active #adminmenu li.menu-top.opensub .wp-menu-name,
 body.ys-theme-active #adminmenu li.menu-top.opensub .wp-menu-image::before {
     background: transparent;
     color: var( --ys-theme-hover-text );
 }
 
-/* current（當前頁所屬選單）：只有整列 a 變背景色，文字圖示僅變色。 */
+/* 運作中（current 當前頁所屬選單）：獨立的「運作中選單背景色」，與展開態不同色以資區隔。!important 確保勝過展開規則。 */
 body.ys-theme-active #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu,
 body.ys-theme-active #adminmenu li.current > a.menu-top {
-    background: var( --ys-theme-hover-bg );
+    background: var( --ys-theme-current-bg ) !important;
     color: var( --ys-theme-hover-text );
 }
 body.ys-theme-active #adminmenu li.menu-top.current .wp-menu-image::before,

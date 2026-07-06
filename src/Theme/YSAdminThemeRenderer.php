@@ -51,6 +51,18 @@ class YSAdminThemeRenderer {
 		$m_lh   = self::clamp_float( $cfg['menu_line_height'] ?? 1.5, 1.0, 2.5 );
 		$s_size = self::clamp_float( $cfg['submenu_font_size'] ?? 13, 10.0, 18.0 );
 		$s_lh   = self::clamp_float( $cfg['submenu_line_height'] ?? 1.4, 1.0, 2.5 );
+
+		$mp_t = (int) self::clamp_float( $cfg['menu_item_padding_top'] ?? 0, 0.0, 40.0 );
+		$mp_r = (int) self::clamp_float( $cfg['menu_item_padding_right'] ?? 10, 0.0, 60.0 );
+		$mp_b = (int) self::clamp_float( $cfg['menu_item_padding_bottom'] ?? 0, 0.0, 40.0 );
+		$mp_l = (int) self::clamp_float( $cfg['menu_item_padding_left'] ?? 10, 0.0, 60.0 );
+		$smp_t = (int) self::clamp_float( $cfg['submenu_item_padding_top'] ?? 6, 0.0, 40.0 );
+		$smp_r = (int) self::clamp_float( $cfg['submenu_item_padding_right'] ?? 12, 0.0, 60.0 );
+		$smp_b = (int) self::clamp_float( $cfg['submenu_item_padding_bottom'] ?? 6, 0.0, 40.0 );
+		$smp_l = (int) self::clamp_float( $cfg['submenu_item_padding_left'] ?? 12, 0.0, 60.0 );
+		$sub_hover = self::sanitize_color_or_empty( $cfg['submenu_hover_bg'] ?? '' );
+		$opensub_bg = self::sanitize_color_or_empty( $cfg['opensub_bg'] ?? '' );
+		$current_bg = self::sanitize_color_or_empty( $cfg['current_bg'] ?? '' );
 		?>
 <style id="ys-admin-menu-theme">
 :root {
@@ -63,6 +75,8 @@ class YSAdminThemeRenderer {
     --ys-theme-submenu-bg: <?php echo esc_attr( $submenu_bg ); ?>;
     --ys-theme-submenu-text: <?php echo esc_attr( $submenu_color ); ?>;
     --ys-theme-hover-bg: <?php echo esc_attr( $hover_bg ); ?>;
+    --ys-theme-opensub-bg: <?php echo esc_attr( '' !== $opensub_bg ? $opensub_bg : $hover_bg ); ?>;
+    --ys-theme-current-bg: <?php echo esc_attr( '' !== $current_bg ? $current_bg : $hover_bg ); ?>;
     --ys-theme-hover-text: <?php echo esc_attr( $hover_color ); ?>;
     --ys-theme-menu-font-size: <?php echo esc_attr( (string) $m_size ); ?>px;
     --ys-theme-menu-line-height: <?php echo esc_attr( (string) $m_lh ); ?>;
@@ -74,6 +88,15 @@ class YSAdminThemeRenderer {
     --ys-theme-menu-item-radius: 7px;
     --ys-theme-menu-item-gap: 12px;
     --ys-theme-menu-item-x: 10px;
+    --ys-theme-menu-item-pt: <?php echo esc_attr( (string) $mp_t ); ?>px;
+    --ys-theme-menu-item-pr: <?php echo esc_attr( (string) $mp_r ); ?>px;
+    --ys-theme-menu-item-pb: <?php echo esc_attr( (string) $mp_b ); ?>px;
+    --ys-theme-menu-item-pl: <?php echo esc_attr( (string) $mp_l ); ?>px;
+    --ys-theme-submenu-item-pt: <?php echo esc_attr( (string) $smp_t ); ?>px;
+    --ys-theme-submenu-item-pr: <?php echo esc_attr( (string) $smp_r ); ?>px;
+    --ys-theme-submenu-item-pb: <?php echo esc_attr( (string) $smp_b ); ?>px;
+    --ys-theme-submenu-item-pl: <?php echo esc_attr( (string) $smp_l ); ?>px;
+    --ys-theme-submenu-hover-bg: <?php echo esc_attr( '' !== $sub_hover ? $sub_hover : 'transparent' ); ?>;
     --ys-theme-submenu-indent: 42px;
 }
 </style>
@@ -150,7 +173,57 @@ class YSAdminThemeRenderer {
 			'submenu_line_height'   => 1.45,
 			'menu_hover_bg'         => '#2563eb',
 			'menu_hover_text_color' => '#ffffff',
+			'section_label_color'       => '',
+			'section_label_bg'          => '',
+			'section_label_font_size'   => 11,
+			'section_label_font_weight' => 700,
+			'section_label_padding_top'    => 7,
+			'section_label_padding_right'  => 12,
+			'section_label_padding_bottom' => 7,
+			'section_label_padding_left'   => 12,
+			'menu_item_padding_top'    => 0,
+			'menu_item_padding_right'  => 10,
+			'menu_item_padding_bottom' => 0,
+			'menu_item_padding_left'   => 10,
+			'submenu_item_padding_top'    => 6,
+			'submenu_item_padding_right'  => 12,
+			'submenu_item_padding_bottom' => 6,
+			'submenu_item_padding_left'   => 12,
+			'submenu_hover_bg'            => '',
+			'opensub_bg'                 => '',
+			'current_bg'                 => '',
 		];
+	}
+
+	/**
+	 * 分組標籤（帶標題分隔列）樣式，供 YSMenuRouter::output_section_label_css 套用。
+	 * 無條件可讀（不依賴皮膚 enabled）。
+	 *
+	 * @return array{color:string,bg:string,font_size:int,font_weight:int,padding_y:int,padding_x:int}
+	 */
+	public static function get_section_label_style(): array {
+		$cfg = self::get_config();
+		return [
+			'color'       => self::sanitize_color_or_empty( $cfg['section_label_color'] ?? '' ),
+			'bg'          => self::sanitize_color_or_empty( $cfg['section_label_bg'] ?? '' ),
+			'font_size'   => (int) self::clamp_float( $cfg['section_label_font_size'] ?? 11, 8.0, 24.0 ),
+			'font_weight' => (int) self::clamp_float( $cfg['section_label_font_weight'] ?? 700, 100.0, 900.0 ),
+			'padding_top'    => (int) self::clamp_float( $cfg['section_label_padding_top'] ?? 7, 0.0, 40.0 ),
+			'padding_right'  => (int) self::clamp_float( $cfg['section_label_padding_right'] ?? 12, 0.0, 60.0 ),
+			'padding_bottom' => (int) self::clamp_float( $cfg['section_label_padding_bottom'] ?? 7, 0.0, 40.0 ),
+			'padding_left'   => (int) self::clamp_float( $cfg['section_label_padding_left'] ?? 12, 0.0, 60.0 ),
+		];
+	}
+
+	/**
+	 * Sanitize a hex color but allow empty string (empty = inherit / transparent).
+	 */
+	private static function sanitize_color_or_empty( $value ): string {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return '';
+		}
+		$clean = sanitize_hex_color( trim( $value ) );
+		return is_string( $clean ) ? $clean : '';
 	}
 
 	private static function sanitize_color( $value, string $default ): string {

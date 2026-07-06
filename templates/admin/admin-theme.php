@@ -62,6 +62,16 @@ $color_fields = [
 		'label'       => 'Hover 文字顏色',
 		'description' => '選單項目 hover、focus 與目前選取狀態文字顏色。',
 	],
+	[
+		'key'         => 'opensub_bg',
+		'label'       => '展開選單背景色',
+		'description' => '手動展開某個主選單時，該選單那一整列的背景色；留空＝使用上方 Hover 背景色。',
+	],
+	[
+		'key'         => 'current_bg',
+		'label'       => '運作中選單背景色',
+		'description' => '目前所在頁面對應的選單（運作中）那一列的背景色，可設成與「展開選單背景色」不同以資區隔；留空＝使用上方 Hover 背景色。',
+	],
 ];
 
 $number_fields = [
@@ -205,6 +215,133 @@ $number_fields = [
 							</p>
 						</div>
 					<?php endforeach; ?>
+				</div>
+			</div>
+		</div>
+
+		<div class="ys-ec-card ysca-card-spaced">
+			<h3>
+				<span class="dashicons dashicons-tag"></span>
+				分組標籤樣式
+			</h3>
+			<div class="inside">
+				<p class="description ysca-description-flush">
+					「分組標籤」＝在選單排序頁插入的「帶標題分隔列」，會在側欄顯示為不可點的區塊小標；此區可調整其外觀，且不套用 hover 效果。
+				</p>
+				<div class="ys-ec-form-group">
+					<label for="section_label_color">標籤文字顏色</label>
+					<input type="text" id="section_label_color" name="section_label_color" value="<?php echo esc_attr( (string) ( $cfg['section_label_color'] ?? '' ) ); ?>" class="ys-ec-color-picker" data-default-color="">
+					<p class="description">留空＝繼承選單文字色並淡化。</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_bg">標籤背景顏色</label>
+					<input type="text" id="section_label_bg" name="section_label_bg" value="<?php echo esc_attr( (string) ( $cfg['section_label_bg'] ?? '' ) ); ?>" class="ys-ec-color-picker" data-default-color="">
+					<p class="description">留空＝透明。</p>
+				</div>
+				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
+				<div class="ys-ec-form-group">
+					<label for="section_label_font_size">字級</label>
+					<input type="number" id="section_label_font_size" name="section_label_font_size" value="<?php echo esc_attr( (string) ( $cfg['section_label_font_size'] ?? 11 ) ); ?>" min="8" max="24" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_font_weight">粗細</label>
+					<input type="number" id="section_label_font_weight" name="section_label_font_weight" value="<?php echo esc_attr( (string) ( $cfg['section_label_font_weight'] ?? 700 ) ); ?>" min="100" max="900" step="100" class="ysca-field--xs">
+					<p class="description">100–900</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_padding_top">上留白</label>
+					<input type="number" id="section_label_padding_top" name="section_label_padding_top" value="<?php echo esc_attr( (string) ( $cfg['section_label_padding_top'] ?? 7 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_padding_right">右留白</label>
+					<input type="number" id="section_label_padding_right" name="section_label_padding_right" value="<?php echo esc_attr( (string) ( $cfg['section_label_padding_right'] ?? 12 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_padding_bottom">下留白</label>
+					<input type="number" id="section_label_padding_bottom" name="section_label_padding_bottom" value="<?php echo esc_attr( (string) ( $cfg['section_label_padding_bottom'] ?? 7 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_padding_left">左留白</label>
+					<input type="number" id="section_label_padding_left" name="section_label_padding_left" value="<?php echo esc_attr( (string) ( $cfg['section_label_padding_left'] ?? 12 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="ys-ec-card ysca-card-spaced">
+			<h3>
+				<span class="dashicons dashicons-menu"></span>
+				選單項留白（間距）
+			</h3>
+			<div class="inside">
+				<p class="description ysca-description-flush">
+					調整左側一般選單項（非分組標籤）的內距上下左右，套用於啟用皮膚時；預設上下 0、左右 10。
+				</p>
+				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
+				<div class="ys-ec-form-group">
+					<label for="menu_item_padding_top">上留白</label>
+					<input type="number" id="menu_item_padding_top" name="menu_item_padding_top" value="<?php echo esc_attr( (string) ( $cfg['menu_item_padding_top'] ?? 0 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="menu_item_padding_right">右留白</label>
+					<input type="number" id="menu_item_padding_right" name="menu_item_padding_right" value="<?php echo esc_attr( (string) ( $cfg['menu_item_padding_right'] ?? 10 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="menu_item_padding_bottom">下留白</label>
+					<input type="number" id="menu_item_padding_bottom" name="menu_item_padding_bottom" value="<?php echo esc_attr( (string) ( $cfg['menu_item_padding_bottom'] ?? 0 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="menu_item_padding_left">左留白</label>
+					<input type="number" id="menu_item_padding_left" name="menu_item_padding_left" value="<?php echo esc_attr( (string) ( $cfg['menu_item_padding_left'] ?? 10 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="ys-ec-card ysca-card-spaced">
+			<h3>
+				<span class="dashicons dashicons-editor-ul"></span>
+				子選單項（展開後的選項）
+			</h3>
+			<div class="inside">
+				<p class="description ysca-description-flush">
+					調整展開子選單內各選項的留白與 hover 背景色；子選單整體「背景色」請用上方「顏色」區的「子選單背景色」。
+				</p>
+				<div class="ys-ec-form-group">
+					<label for="submenu_hover_bg">子選項 hover 背景色</label>
+					<input type="text" id="submenu_hover_bg" name="submenu_hover_bg" value="<?php echo esc_attr( (string) ( $cfg['submenu_hover_bg'] ?? '' ) ); ?>" class="ys-ec-color-picker" data-default-color="">
+					<p class="description">滑鼠移到子選項時的背景色；留空＝無 hover 效果。</p>
+				</div>
+				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
+				<div class="ys-ec-form-group">
+					<label for="submenu_item_padding_top">上留白</label>
+					<input type="number" id="submenu_item_padding_top" name="submenu_item_padding_top" value="<?php echo esc_attr( (string) ( $cfg['submenu_item_padding_top'] ?? 6 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_item_padding_right">右留白</label>
+					<input type="number" id="submenu_item_padding_right" name="submenu_item_padding_right" value="<?php echo esc_attr( (string) ( $cfg['submenu_item_padding_right'] ?? 12 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_item_padding_bottom">下留白</label>
+					<input type="number" id="submenu_item_padding_bottom" name="submenu_item_padding_bottom" value="<?php echo esc_attr( (string) ( $cfg['submenu_item_padding_bottom'] ?? 6 ) ); ?>" min="0" max="40" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="submenu_item_padding_left">左留白</label>
+					<input type="number" id="submenu_item_padding_left" name="submenu_item_padding_left" value="<?php echo esc_attr( (string) ( $cfg['submenu_item_padding_left'] ?? 12 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
 				</div>
 			</div>
 		</div>

@@ -133,6 +133,32 @@ class YSAdminThemeAdmin {
 		$cfg['menu_line_height']    = self::post_float( 'menu_line_height', (float) $defaults['menu_line_height'], 1.0, 2.5 );
 		$cfg['submenu_line_height'] = self::post_float( 'submenu_line_height', (float) $defaults['submenu_line_height'], 1.0, 2.5 );
 
+		// 分組標籤樣式（顏色允許清空＝繼承／透明）。
+		$slc = isset( $_POST['section_label_color'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['section_label_color'] ) ) ) : '';
+		$slb = isset( $_POST['section_label_bg'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['section_label_bg'] ) ) ) : '';
+		$cfg['section_label_color']       = is_string( $slc ) ? $slc : '';
+		$cfg['section_label_bg']          = is_string( $slb ) ? $slb : '';
+		$cfg['section_label_font_size']   = (int) self::post_float( 'section_label_font_size', 11.0, 8.0, 24.0 );
+		$cfg['section_label_font_weight'] = (int) self::post_float( 'section_label_font_weight', 700.0, 100.0, 900.0 );
+		$cfg['section_label_padding_top']    = (int) self::post_float( 'section_label_padding_top', 7.0, 0.0, 40.0 );
+		$cfg['section_label_padding_right']  = (int) self::post_float( 'section_label_padding_right', 12.0, 0.0, 60.0 );
+		$cfg['section_label_padding_bottom'] = (int) self::post_float( 'section_label_padding_bottom', 7.0, 0.0, 40.0 );
+		$cfg['section_label_padding_left']   = (int) self::post_float( 'section_label_padding_left', 12.0, 0.0, 60.0 );
+		$cfg['menu_item_padding_top']    = (int) self::post_float( 'menu_item_padding_top', 0.0, 0.0, 40.0 );
+		$cfg['menu_item_padding_right']  = (int) self::post_float( 'menu_item_padding_right', 10.0, 0.0, 60.0 );
+		$cfg['menu_item_padding_bottom'] = (int) self::post_float( 'menu_item_padding_bottom', 0.0, 0.0, 40.0 );
+		$cfg['menu_item_padding_left']   = (int) self::post_float( 'menu_item_padding_left', 10.0, 0.0, 60.0 );
+		$cfg['submenu_item_padding_top']    = (int) self::post_float( 'submenu_item_padding_top', 6.0, 0.0, 40.0 );
+		$cfg['submenu_item_padding_right']  = (int) self::post_float( 'submenu_item_padding_right', 12.0, 0.0, 60.0 );
+		$cfg['submenu_item_padding_bottom'] = (int) self::post_float( 'submenu_item_padding_bottom', 6.0, 0.0, 40.0 );
+		$cfg['submenu_item_padding_left']   = (int) self::post_float( 'submenu_item_padding_left', 12.0, 0.0, 60.0 );
+		$slh = isset( $_POST['submenu_hover_bg'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['submenu_hover_bg'] ) ) ) : '';
+		$cfg['submenu_hover_bg'] = is_string( $slh ) ? $slh : '';
+		$osb = isset( $_POST['opensub_bg'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['opensub_bg'] ) ) ) : '';
+		$cfg['opensub_bg'] = is_string( $osb ) ? $osb : '';
+		$curb = isset( $_POST['current_bg'] ) ? sanitize_hex_color( sanitize_text_field( wp_unslash( (string) $_POST['current_bg'] ) ) ) : '';
+		$cfg['current_bg'] = is_string( $curb ) ? $curb : '';
+
 		update_option( YSAdminThemeRenderer::OPTION_KEY, $cfg, true );
 
 		// Remove stale layout option. Native menu width is intentionally no

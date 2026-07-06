@@ -57,9 +57,36 @@ class YSMenuRouter {
 	 * 呈現為不可點的灰色分組小標，而非可點的選單項。
 	 */
 	public static function output_section_label_css(): void {
+		$s     = \YangSheep\AdminMenu\Theme\YSAdminThemeRenderer::get_section_label_style();
+		$fs    = $s['font_size'];
+		$fw    = $s['font_weight'];
+		$pt    = $s['padding_top'];
+		$pr    = $s['padding_right'];
+		$pb    = $s['padding_bottom'];
+		$pl    = $s['padding_left'];
+		$color = $s['color'];
+		$bg    = $s['bg'];
+
+		// 文字色：有設定＝該色不透明；未設定＝繼承選單色並淡化。
+		$color_rule = '' !== $color ? 'color:' . $color . ' !important;opacity:1 !important;' : 'opacity:.5 !important;';
+		$bg_rule    = '' !== $bg ? 'background:' . $bg . ' !important;' : 'background:transparent !important;';
+		// hover / focus / opensub 固定回非 hover 外觀（!important 蓋皮膚 runtime hover-bg）。
+		$hover_bg  = '' !== $bg ? $bg : 'transparent';
+		$hover_col = '' !== $color ? $color : 'inherit';
+
 		echo '<style id="ys-am-section-label">'
-			. '#adminmenu li.ys-am-section-label>a.menu-top{pointer-events:none;cursor:default;margin-top:10px;padding-top:7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.5;background:transparent;box-shadow:none;}'
-			. '#adminmenu li.ys-am-section-label>a.menu-top:hover,#adminmenu li.ys-am-section-label.opensub>a.menu-top{background:transparent;color:inherit;}'
+			. '#adminmenu li.ys-am-section-label>a.menu-top{'
+			. 'pointer-events:none;cursor:default;margin-top:10px;min-height:0 !important;height:auto !important;align-items:flex-start;'
+			. 'padding:' . $pt . 'px ' . $pr . 'px ' . $pb . 'px ' . $pl . 'px !important;'
+			. 'font-size:' . $fs . 'px !important;font-weight:' . $fw . ' !important;letter-spacing:.06em;text-transform:uppercase;'
+			. $color_rule . $bg_rule . 'box-shadow:none !important;}'
+			. '#adminmenu li.ys-am-section-label>a.menu-top .wp-menu-name{' . $color_rule . '}'
+			. '#adminmenu li.ys-am-section-label>a.menu-top:hover,'
+			. '#adminmenu li.ys-am-section-label>a.menu-top:focus,'
+			. '#adminmenu li.ys-am-section-label.opensub>a.menu-top,'
+			. 'body.ys-theme-active #adminmenu li.ys-am-section-label>a.menu-top:hover,'
+			. 'body.ys-theme-active #adminmenu li.ys-am-section-label>a.menu-top:focus{'
+			. 'background:' . $hover_bg . ' !important;color:' . $hover_col . ' !important;box-shadow:none !important;}'
 			. '#adminmenu li.ys-am-section-label .wp-menu-image,#adminmenu li.ys-am-section-label .wp-menu-arrow{display:none;}'
 			. '#adminmenu li.ys-am-section-label .wp-menu-name{padding-left:0;}'
 			. '</style>';
