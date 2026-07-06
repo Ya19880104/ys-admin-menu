@@ -144,6 +144,10 @@ class YSAdminThemeAdmin {
 		$cfg['section_label_padding_right']  = (int) self::post_float( 'section_label_padding_right', 12.0, 0.0, 60.0 );
 		$cfg['section_label_padding_bottom'] = (int) self::post_float( 'section_label_padding_bottom', 7.0, 0.0, 40.0 );
 		$cfg['section_label_padding_left']   = (int) self::post_float( 'section_label_padding_left', 12.0, 0.0, 60.0 );
+		$cfg['section_label_margin_top']    = (int) self::post_float( 'section_label_margin_top', 10.0, 0.0, 80.0 );
+		$cfg['section_label_margin_right']  = (int) self::post_float( 'section_label_margin_right', 0.0, 0.0, 60.0 );
+		$cfg['section_label_margin_bottom'] = (int) self::post_float( 'section_label_margin_bottom', 4.0, 0.0, 80.0 );
+		$cfg['section_label_margin_left']   = (int) self::post_float( 'section_label_margin_left', 0.0, 0.0, 60.0 );
 		$cfg['menu_item_padding_top']    = (int) self::post_float( 'menu_item_padding_top', 0.0, 0.0, 40.0 );
 		$cfg['menu_item_padding_right']  = (int) self::post_float( 'menu_item_padding_right', 10.0, 0.0, 60.0 );
 		$cfg['menu_item_padding_bottom'] = (int) self::post_float( 'menu_item_padding_bottom', 0.0, 0.0, 40.0 );

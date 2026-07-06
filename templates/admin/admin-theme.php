@@ -270,6 +270,29 @@ $number_fields = [
 					<p class="description">px</p>
 				</div>
 				</div>
+				<p class="description ysca-description-flush" style="margin-top:4px;">外距（與相鄰選單項的間隔，上下常用）</p>
+				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
+				<div class="ys-ec-form-group">
+					<label for="section_label_margin_top">上外距</label>
+					<input type="number" id="section_label_margin_top" name="section_label_margin_top" value="<?php echo esc_attr( (string) ( $cfg['section_label_margin_top'] ?? 10 ) ); ?>" min="0" max="80" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_margin_right">右外距</label>
+					<input type="number" id="section_label_margin_right" name="section_label_margin_right" value="<?php echo esc_attr( (string) ( $cfg['section_label_margin_right'] ?? 0 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_margin_bottom">下外距</label>
+					<input type="number" id="section_label_margin_bottom" name="section_label_margin_bottom" value="<?php echo esc_attr( (string) ( $cfg['section_label_margin_bottom'] ?? 4 ) ); ?>" min="0" max="80" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				<div class="ys-ec-form-group">
+					<label for="section_label_margin_left">左外距</label>
+					<input type="number" id="section_label_margin_left" name="section_label_margin_left" value="<?php echo esc_attr( (string) ( $cfg['section_label_margin_left'] ?? 0 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
+					<p class="description">px</p>
+				</div>
+				</div>
 			</div>
 		</div>
 

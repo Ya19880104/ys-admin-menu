@@ -64,6 +64,10 @@ class YSMenuRouter {
 		$pr    = $s['padding_right'];
 		$pb    = $s['padding_bottom'];
 		$pl    = $s['padding_left'];
+		$mt    = $s['margin_top'];
+		$mr    = $s['margin_right'];
+		$mb    = $s['margin_bottom'];
+		$ml    = $s['margin_left'];
 		$color = $s['color'];
 		$bg    = $s['bg'];
 
@@ -76,7 +80,7 @@ class YSMenuRouter {
 
 		echo '<style id="ys-am-section-label">'
 			. '#adminmenu li.ys-am-section-label>a.menu-top{'
-			. 'pointer-events:none;cursor:default;margin-top:10px;min-height:0 !important;height:auto !important;align-items:flex-start;'
+			. 'pointer-events:none;cursor:default;margin:' . $mt . 'px ' . $mr . 'px ' . $mb . 'px ' . $ml . 'px !important;min-height:0 !important;height:auto !important;align-items:flex-start;'
 			. 'padding:' . $pt . 'px ' . $pr . 'px ' . $pb . 'px ' . $pl . 'px !important;'
 			. 'font-size:' . $fs . 'px !important;font-weight:' . $fw . ' !important;letter-spacing:.06em;text-transform:uppercase;'
 			. $color_rule . $bg_rule . 'box-shadow:none !important;}'

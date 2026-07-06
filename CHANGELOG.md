@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.0.4] - 2026-07-06
+
+### 新增
+- **分組標籤外距（margin）**：分組標籤可設定上／右／下／左外距，調整與相鄰選單項的間隔。
+
 ## [1.0.3] - 2026-06-18
 
 ### 新增

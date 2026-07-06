@@ -181,6 +181,10 @@ class YSAdminThemeRenderer {
 			'section_label_padding_right'  => 12,
 			'section_label_padding_bottom' => 7,
 			'section_label_padding_left'   => 12,
+			'section_label_margin_top'    => 10,
+			'section_label_margin_right'  => 0,
+			'section_label_margin_bottom' => 4,
+			'section_label_margin_left'   => 0,
 			'menu_item_padding_top'    => 0,
 			'menu_item_padding_right'  => 10,
 			'menu_item_padding_bottom' => 0,
@@ -212,6 +216,10 @@ class YSAdminThemeRenderer {
 			'padding_right'  => (int) self::clamp_float( $cfg['section_label_padding_right'] ?? 12, 0.0, 60.0 ),
 			'padding_bottom' => (int) self::clamp_float( $cfg['section_label_padding_bottom'] ?? 7, 0.0, 40.0 ),
 			'padding_left'   => (int) self::clamp_float( $cfg['section_label_padding_left'] ?? 12, 0.0, 60.0 ),
+			'margin_top'    => (int) self::clamp_float( $cfg['section_label_margin_top'] ?? 10, 0.0, 80.0 ),
+			'margin_right'  => (int) self::clamp_float( $cfg['section_label_margin_right'] ?? 0, 0.0, 60.0 ),
+			'margin_bottom' => (int) self::clamp_float( $cfg['section_label_margin_bottom'] ?? 4, 0.0, 80.0 ),
+			'margin_left'   => (int) self::clamp_float( $cfg['section_label_margin_left'] ?? 0, 0.0, 60.0 ),
 		];
 	}
 
