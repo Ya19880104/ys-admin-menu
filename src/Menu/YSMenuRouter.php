@@ -188,12 +188,15 @@ class YSMenuRouter {
 	/**
 	 * 依 ys_cart.items[] 中 level=sub 項目的 order，重排各父選單底下的子選單。
 	 *
-	 * WordPress 以 $submenu[$parent] 的陣列順序決定側欄子選單顯示順序；本方法
-	 * 針對每個在設定中有排序資料的 parent，把「有設定 order 的子項」依 order 升冪
-	 * 重排，並填回它們原本佔用的位置；「未列入設定的子項」（例如父選單自身項——
-	 * 如『設定 → 一般』與父同 slug、enumeration 會略過——或稍後才安裝的外掛子頁）
-	 * **留在原本的絕對位置不動**。如此既套用使用者排序、又不會把未列入的項擠到尾巴。
-	 * 重建為 0 起始連續索引，確保不論 WP 以 foreach 或 ksort 渲染都維持正確順序。
+	 * WordPress 以 $submenu[$parent] 的陣列順序決定側欄子選單顯示順序。每個子項
+	 * 依下列排序鍵升冪重排（穩定排序，同鍵維持原相對順序）：
+	 *   - 父選單自身項（slug 與 parent 相同，如『設定 → 一般』，enumeration 會略過
+	 *     故永遠未列入設定）→ 置頂（維持 WordPress 慣例的首位）。
+	 *   - 有設定 order 的子項 → 依該 order。
+	 *   - 未列入設定的子項（稍後才安裝的外掛子頁等）→ 排在最後。
+	 * 如此不論使用者設定是否涵蓋全部子項，結果都可預測：已排序的照設定、父項置頂、
+	 * 尚未排序的新項沉到底部。重建為 0 起始連續索引，確保 WP 以 foreach 或 ksort
+	 * 渲染都維持正確順序。
 	 *
 	 * @param array<int, array<string, mixed>> $ys_cart_items ys_cart.items[]
 	 */
@@ -229,40 +232,41 @@ class YSMenuRouter {
 				continue;
 			}
 
-			$rows = array_values( $submenu[ $parent ] );
-
-			// 收集「有設定 order」的子項並穩定排序（PHP 8 usort 為穩定排序）。
-			$tracked = [];
-			foreach ( $rows as $sub ) {
+			$rows        = array_values( $submenu[ $parent ] );
+			$needs_sort  = false;
+			$decorated   = [];
+			foreach ( $rows as $idx => $sub ) {
 				$slug = is_array( $sub ) && isset( $sub[2] ) ? (string) $sub[2] : '';
-				if ( isset( $child_orders[ $slug ] ) ) {
-					$tracked[] = [ 'order' => $child_orders[ $slug ], 'sub' => $sub ];
+				if ( $slug === $parent ) {
+					$key = PHP_INT_MIN; // 父選單自身項（如 設定→一般）永遠置頂。
+				} elseif ( isset( $child_orders[ $slug ] ) ) {
+					$key        = $child_orders[ $slug ];
+					$needs_sort = true;
+				} else {
+					$key = PHP_INT_MAX; // 未列入設定的子項排在最後。
 				}
+				$decorated[] = [ 'key' => $key, 'idx' => $idx, 'sub' => $sub ];
 			}
-			if ( empty( $tracked ) ) {
+
+			// 該 parent 沒有任何「有設定 order」的子項 → 無需重排，避免無意義變動。
+			if ( ! $needs_sort ) {
 				continue;
 			}
+
+			// 穩定排序：主要依 key，key 相同時退回原始索引（保留原相對順序）。
 			usort(
-				$tracked,
+				$decorated,
 				static function ( $a, $b ) {
-					return $a['order'] <=> $b['order'];
+					return ( $a['key'] <=> $b['key'] ) ?: ( $a['idx'] <=> $b['idx'] );
 				}
 			);
 
-			// 重建：未追蹤項留原位；已追蹤項依排序後結果，依序填回原本被追蹤項佔用的位置。
-			$result       = [];
-			$tracked_idx  = 0;
-			foreach ( $rows as $sub ) {
-				$slug = is_array( $sub ) && isset( $sub[2] ) ? (string) $sub[2] : '';
-				if ( isset( $child_orders[ $slug ] ) ) {
-					$result[] = $tracked[ $tracked_idx ]['sub'];
-					$tracked_idx++;
-				} else {
-					$result[] = $sub;
-				}
-			}
-
-			$submenu[ $parent ] = $result;
+			$submenu[ $parent ] = array_map(
+				static function ( $entry ) {
+					return $entry['sub'];
+				},
+				$decorated
+			);
 		}
 	}
 
