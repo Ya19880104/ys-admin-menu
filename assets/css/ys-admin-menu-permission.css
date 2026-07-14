@@ -506,3 +506,110 @@
     position: absolute; z-index: 50; right: 0; margin-top: 4px; padding: 6px;
     background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * v1.0.9 — 分頁 tabs 明確化 + 主/子選單層級對比（可讀性）
+ *
+ * 註：本頁不套 body.ysca-wl-active，whitelabel.css 的 .ysca-wl-tab 樣式
+ *     全數失效 → tabs 會退化成純文字連結。故此處自帶完整 tab 樣式。
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 分頁 tabs：分段膠囊按鈕（灰底軌道 + 作用中 indigo 實心） ── */
+.ys-ec-permission-admin .ysca-wl-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 0 0 22px;
+    padding: 5px;
+    background: #eef0f4;
+    border: 1px solid #e2e5ec;
+    border-radius: 11px;
+}
+
+.ys-ec-permission-admin .ysca-wl-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 18px;
+    color: #4b5563;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ys-ec-permission-admin .ysca-wl-tab:hover {
+    color: #4338ca;
+    background: #ffffff;
+    border-color: #e0e7ff;
+}
+
+.ys-ec-permission-admin .ysca-wl-tab:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
+.ys-ec-permission-admin .ysca-wl-tab--active,
+.ys-ec-permission-admin .ysca-wl-tab[aria-selected="true"] {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: #4f46e5;
+    box-shadow: 0 2px 6px -1px rgba(79, 70, 229, 0.45);
+}
+
+.ys-ec-permission-admin .ysca-wl-tab--active::after,
+.ys-ec-permission-admin .ysca-wl-tab[aria-selected="true"]::after {
+    content: none; /* 覆蓋 whitelabel.css 的底線指示器（此處用實心膠囊） */
+}
+
+/* ── 頂層 row：作為群組錨點，標題粗黑、上緣分隔線區隔群組 ── */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="top"] .menu-line strong {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="top"]:not(:first-child) > td {
+    border-top: 1px solid #eceef2;
+}
+
+/* ── 子頁 row：縮排 + 樹狀連接線 + 淡化，明顯從屬於上方頂層 ── */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] > td {
+    background: #fbfcfe;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] > td:nth-child(3) {
+    position: relative;
+    padding-left: 36px;
+}
+
+/* 樹狀 elbow 連接線（└），取代原本不明顯的 ↳ inline 字元 */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] > td:nth-child(3)::before {
+    content: "";
+    position: absolute;
+    left: 16px;
+    top: -3px;
+    bottom: 50%;
+    width: 9px;
+    border-left: 1.5px solid #c3c9d6;
+    border-bottom: 1.5px solid #c3c9d6;
+    border-bottom-left-radius: 5px;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-indent {
+    display: none; /* 改用 CSS elbow 連接線 */
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-line strong {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #475569;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-line code {
+    color: #94a3b8;
+}
