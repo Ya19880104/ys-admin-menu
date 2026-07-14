@@ -168,10 +168,81 @@ class YSMenuRouter {
 		self::apply_self_only_filter( $config, $current_user_id );
 
 		// ─────────────────────────────────────────────
-		// 5. 重新排序 + 注入分隔列
+		// 5. 重新排序頂層 + 注入分隔列
 		// ─────────────────────────────────────────────
 		if ( ! empty( $wp_native_items ) ) {
 			self::reorder_and_insert_separators( $wp_native_items );
+		}
+
+		// ─────────────────────────────────────────────
+		// 6. 重新排序子選單（sub-page）— 依「全部選單（含子選單）」tab
+		//    儲存的 ys_cart.items[] 中 level=sub 項目的 order。
+		//    與頂層排序獨立，即使未使用頂層 tab 也會生效。
+		// ─────────────────────────────────────────────
+		$ys_cart_items = (array) ( $config['ys_cart']['items'] ?? [] );
+		if ( ! empty( $ys_cart_items ) ) {
+			self::reorder_submenus( $ys_cart_items );
+		}
+	}
+
+	/**
+	 * 依 ys_cart.items[] 中 level=sub 項目的 order，重排各父選單底下的子選單。
+	 *
+	 * WordPress 以 $submenu[$parent] 的陣列順序決定側欄子選單顯示順序；本方法
+	 * 針對每個在設定中有排序資料的 parent，把其子項依儲存的 order 升冪重排。
+	 * 未列入設定的子項（例如稍後才安裝的外掛新增的子頁）給最大排序值，保留原
+	 * 相對順序並接在後面。排序完以 array_values 重新索引，確保不論 WP 以 foreach
+	 * 或 ksort 渲染都維持正確順序。
+	 *
+	 * @param array<int, array<string, mixed>> $ys_cart_items ys_cart.items[]
+	 */
+	private static function reorder_submenus( array $ys_cart_items ): void {
+		global $submenu;
+		if ( ! is_array( $submenu ) || empty( $submenu ) ) {
+			return;
+		}
+
+		// parent_slug => [ child_slug => order ]
+		$order_map = [];
+		foreach ( $ys_cart_items as $item ) {
+			if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
+				continue;
+			}
+			if ( 'sub' !== (string) ( $item['level'] ?? 'top' ) ) {
+				continue;
+			}
+			$slug   = (string) ( $item['slug'] ?? '' );
+			$parent = (string) ( $item['parent_slug'] ?? '' );
+			if ( '' === $slug || '' === $parent ) {
+				continue;
+			}
+			$order_map[ $parent ][ $slug ] = (int) ( $item['order'] ?? 0 );
+		}
+
+		if ( empty( $order_map ) ) {
+			return;
+		}
+
+		foreach ( $order_map as $parent => $child_orders ) {
+			if ( empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+				continue;
+			}
+
+			// 穩定排序（PHP 8 usort 為穩定排序）：有設定 order 的依 order 升冪；
+			// 未列入設定的子項給 PHP_INT_MAX → 保留原相對順序、排在最後。
+			$rows = $submenu[ $parent ];
+			usort(
+				$rows,
+				static function ( $a, $b ) use ( $child_orders ) {
+					$slug_a = is_array( $a ) && isset( $a[2] ) ? (string) $a[2] : '';
+					$slug_b = is_array( $b ) && isset( $b[2] ) ? (string) $b[2] : '';
+					$order_a = $child_orders[ $slug_a ] ?? PHP_INT_MAX;
+					$order_b = $child_orders[ $slug_b ] ?? PHP_INT_MAX;
+					return $order_a <=> $order_b;
+				}
+			);
+
+			$submenu[ $parent ] = array_values( $rows );
 		}
 	}
 
