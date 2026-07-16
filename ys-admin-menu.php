@@ -3,7 +3,7 @@
  * Plugin Name: YS Admin Menu
  * Plugin URI:  https://yangsheep.com.tw
  * Description: 後台選單管理工具 — wp-admin 原生選單的拖拉排序、隱藏、重新命名、改色、角色權限、個別使用者覆寫、直接網址防護，外加原生選單樣式美化與白牌。從 YS CART 抽離的獨立工具。
- * Version:     1.0.13
+ * Version:     1.0.14
  * Author:      YANGSHEEP DESIGN
  * Author URI:  https://yangsheep.com.tw
  * License:     GPL-2.0-or-later
@@ -20,11 +20,12 @@ defined( 'ABSPATH' ) || exit;
 /* ──────────────────────────────────────────────
  * 常數定義
  * ────────────────────────────────────────────── */
-define( 'YS_ADMIN_MENU_VERSION', '1.0.13' );
+define( 'YS_ADMIN_MENU_VERSION', '1.0.14' );
 define( 'YS_ADMIN_MENU_PLUGIN_FILE', __FILE__ );
 define( 'YS_ADMIN_MENU_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'YS_ADMIN_MENU_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'YS_ADMIN_MENU_BASENAME', plugin_basename( __FILE__ ) );
+define( 'YS_ADMIN_MENU_OWNS_MENU_ROUTING', true );
 
 /* ──────────────────────────────────────────────
  * Hub Client（內嵌子外掛，自帶 PSR-4 autoloader 與初始化）
@@ -54,6 +55,15 @@ spl_autoload_register( function ( $class ) {
 		require_once $file;
 	}
 } );
+
+register_activation_hook(
+	__FILE__,
+	[ \YangSheep\AdminMenu\Menu\YSMenuConfigBridge::class, 'activate' ]
+);
+register_deactivation_hook(
+	__FILE__,
+	[ \YangSheep\AdminMenu\Menu\YSMenuConfigBridge::class, 'deactivate' ]
+);
 
 /* ──────────────────────────────────────────────
  * Hub Client 註冊（priority 5，比主外掛早）

@@ -14,6 +14,7 @@
 
 namespace YangSheep\AdminMenu;
 
+use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
 use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 use YangSheep\AdminMenu\Rest\YSRouteRegistrar;
@@ -47,6 +48,8 @@ final class YSAdminMenuPlugin {
 	}
 
 	private function init(): void {
+		YSMenuConfigBridge::register();
+
 		// 1. 選單路由引擎 — 套用排序/隱藏/重命名/改色/role/per-user/URL guard
 		YSMenuRouter::register();
 

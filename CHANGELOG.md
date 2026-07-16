@@ -4,6 +4,14 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.0.14] - 2026-07-16
+
+### Fixed
+- Become the exclusive menu-router and permission-settings owner when YS CART is also active, while continuing to let YS CART own the admin-theme runtime.
+- Import the legacy core menu config only when the standalone option does not exist, mirror every authoritative save back to the core fallback option, and perform a final mirror on deactivation.
+- Prevent an intentionally empty standalone config from being replaced by stale core data.
+- Preserve the existing "YS CART only" user restriction by delegating core route classification when YS CART is active and falling back to configured YS CART menu items otherwise.
+
 ## [1.0.13] - 2026-07-16
 
 ### Fixed

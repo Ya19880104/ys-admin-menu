@@ -3,7 +3,7 @@
  * 後台選單路由器（v2.39.0 BATCH Q3）
  *
  * 在 admin_menu hook（priority 9999，AFTER all add_menu_page 呼叫）讀取
- * `ys_ec_menu_config` JSON option，套用於 WordPress 全域 $menu / $submenu：
+ * `ys_admin_menu_config` JSON option，套用於 WordPress 全域 $menu / $submenu：
  *
  *   1. 若使用者 ID 在 ys_cart.hide_for_user_ids → 移除所有 ys-* 開頭的頂層選單
  *   2. 套用 wp_native.items 的 role-based 過濾
@@ -445,6 +445,13 @@ class YSMenuRouter {
 			return false;
 		}
 
+		if (
+			class_exists( \YangSheep\Ecommerce\Permission\YSMenuRouter::class )
+			&& \YangSheep\Ecommerce\Permission\YSMenuRouter::is_ys_cart_admin_slug( $slug )
+		) {
+			return true;
+		}
+
 		if ( self::is_ys_cart_namespace_slug( $slug ) ) {
 			return true;
 		}
@@ -638,11 +645,18 @@ class YSMenuRouter {
 	 * @return array<string,bool>
 	 */
 	private static function ys_cart_admin_slug_map(): array {
-		// 本外掛自己的設定頁面 slug（「受保護管理選單」集合的基底）。
 		$slugs = [ 'ys-admin-menu' ];
 
-		// 第三方可透過 filter 把自家 slug 加入受保護集合
-		// （影響 per-user「僅允許指定後台」模式下哪些 slug 仍可見）。
+		$config = self::get_config();
+		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $item ) {
+			if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
+				continue;
+			}
+
+			$slugs[] = (string) ( $item['slug'] ?? '' );
+			$slugs[] = (string) ( $item['parent_slug'] ?? '' );
+		}
+
 		$slugs = array_merge(
 			$slugs,
 			array_filter(

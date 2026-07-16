@@ -29,6 +29,7 @@ namespace YangSheep\AdminMenu\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
 
 class YSPermissionController {
@@ -80,7 +81,7 @@ class YSPermissionController {
 	/**
 	 * GET /admin/permissions/menu-config
 	 *
-	 * 回傳完整 ys_ec_menu_config（讓 JS 把已存項目套回 UI）
+	 * 回傳完整 ys_admin_menu_config（讓 JS 把已存項目套回 UI）
 	 */
 	public static function get_menu_config( \WP_REST_Request $request ): \WP_REST_Response {
 		$config = YSMenuRouter::get_config();
@@ -165,7 +166,7 @@ class YSPermissionController {
 			$existing['wp_native']['user_overrides'] = $legacy_map;
 		}
 
-		update_option( YSMenuRouter::OPTION_KEY, $existing, true );
+		YSMenuConfigBridge::save_authoritative( $existing );
 
 		return new \WP_REST_Response(
 			[ 'success' => true, 'saved_at' => time() ],
