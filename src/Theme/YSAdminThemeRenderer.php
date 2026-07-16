@@ -20,9 +20,43 @@ class YSAdminThemeRenderer {
 	 * 註冊 hook：在所有 wp-admin 頁面套用皮膚。
 	 */
 	public static function register(): void {
+		if ( self::should_stand_down() ) {
+			self::log_stand_down_once();
+			return;
+		}
+
 		add_action( 'admin_head', [ self::class, 'output' ] );
 		add_action( 'admin_enqueue_scripts', [ self::class, 'enqueue_runtime_css' ] );
 		add_filter( 'admin_body_class', [ self::class, 'add_body_class' ] );
+	}
+
+	/**
+	 * YS CART owns the native-canvas runtime whenever both products are active.
+	 *
+	 * Menu routing, permissions, settings, and white-label modules remain
+	 * active; only this duplicate theme renderer stands down.
+	 */
+	private static function should_stand_down(): bool {
+		return defined( 'YS_ECOMMERCE_VERSION' )
+			&& class_exists( \YangSheep\Ecommerce\Frontend\YSAdminThemeRenderer::class );
+	}
+
+	/**
+	 * Record the ownership decision once per standalone version.
+	 */
+	private static function log_stand_down_once(): void {
+		$version    = defined( 'YS_ADMIN_MENU_VERSION' ) ? (string) YS_ADMIN_MENU_VERSION : 'unknown';
+		$option_key = 'ys_admin_menu_theme_stand_down_logged_version';
+
+		if ( function_exists( 'get_option' ) && $version === (string) get_option( $option_key, '' ) ) {
+			return;
+		}
+
+		if ( function_exists( 'update_option' ) ) {
+			update_option( $option_key, $version, false );
+		}
+
+		error_log( '[YS Admin Menu] Theme renderer stood down because YS CART owns the admin theme runtime. Version: ' . $version ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 
 	/**

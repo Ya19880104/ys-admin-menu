@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.0.13] - 2026-07-16
+
+### Fixed
+- When YS CART and YS Admin Menu are both active, YS CART exclusively owns the admin theme runtime. Menu routing, permissions, settings, and white-label modules remain active without duplicate theme CSS/JS injection.
+
 ## [1.0.12] - 2026-07-06
 
 ### 修正
