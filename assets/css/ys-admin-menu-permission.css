@@ -159,6 +159,23 @@
     color: #92400e;
 }
 
+/* v1.1.0：「已提升」badge（頂層 tab 標示由子頁提升而來的項目） */
+.ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge.level-promoted {
+    background: #dcfce7;
+    color: #166534;
+}
+
+/* v1.1.0：升頂層 checkbox 欄 */
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-promote-cell {
+    text-align: center;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-promote-cb {
+    cursor: pointer;
+    margin: 0;
+    transform: scale(1.1);
+}
+
 .ys-ec-permission-admin .ys-ec-permission-table .menu-line .menu-indent {
     color: #9ca3af;
     margin-right: 4px;

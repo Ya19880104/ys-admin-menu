@@ -134,6 +134,7 @@
                     var titleEl = row.querySelector( '.ys-ec-title-override' );
                     var hideCb  = row.querySelector( '.ys-ec-hide-checkbox' );
                     var selfCb  = row.querySelector( '.ys-ec-self-only' );
+                    var promoteCb = row.querySelector( '.ys-ec-promote-cb' );
                     var existingSelfUid = parseInt( row.getAttribute( 'data-self-uid' ) || '0', 10 ) || 0;
                     var selfOnlyUid = ( selfCb && selfCb.checked ) ? ( existingSelfUid || ( cfg.currentUserId | 0 ) ) : 0;
 
@@ -146,7 +147,8 @@
                         level:          row.getAttribute( 'data-level' ) || 'top',
                         parent_slug:    row.getAttribute( 'data-parent' ) || null,
                         hide:           hideCb ? !!hideCb.checked : false,
-                        self_only_uid:  selfOnlyUid
+                        self_only_uid:  selfOnlyUid,
+                        promote_to_top: promoteCb ? !!promoteCb.checked : false
                     };
                 } );
 
@@ -197,11 +199,11 @@
 
     /**
      * Separator row HTML — 客戶端動態新增用
-     * v2.39.0：colspan 對齊新 7 欄結構（wp_native: drag/order/menu/role/color/hide/del = 7；
-     * ys_cart 沒 color = 6）。separator 主 cell colspan = wp_native:4 / ys_cart:3
+     * v1.1.0：兩 tab 皆 7 欄（wp_native: drag/order/menu/role/color/hide/del；
+     * ys_cart: drag/order/menu/role/升頂層/hide/del）。separator 主 cell colspan = 4。
      */
     function renderSeparatorRow( title, order, tab ) {
-        var colspan = ( 'wp_native' === tab ) ? 4 : 3;
+        var colspan = 4;
         return '<tr data-separator="1" class="ys-ec-separator-row">'
             + '<td class="ys-ec-drag-handle" title="拖拉以排序">⋮⋮</td>'
             + '<td><input type="number" class="ys-ec-order-input" value="' + escapeAttr( String( order ) )

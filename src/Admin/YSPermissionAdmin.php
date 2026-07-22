@@ -241,6 +241,17 @@ class YSPermissionAdmin {
 		$saved_slice  = (array) ( $saved_config[ $tab ] ?? [] );
 		$saved_items  = (array) ( $saved_slice['items'] ?? [] );
 
+		// v1.1.0：頂層 tab 標記「已提升」的項目（promoted 項的 $menu[2] = promoted URL）。
+		$promoted_urls = [];
+		if ( 'wp_native' === $tab ) {
+			foreach ( (array) ( $saved_config['ys_cart']['items'] ?? [] ) as $pi ) {
+				if ( is_array( $pi ) && ! empty( $pi['promote_to_top'] )
+					&& 'sub' === (string) ( $pi['level'] ?? '' ) && ! empty( $pi['slug'] ) ) {
+					$promoted_urls[ YSMenuRouter::promoted_menu_url( (string) $pi['slug'], (string) ( $pi['parent_slug'] ?? '' ) ) ] = true;
+				}
+			}
+		}
+
 		// Index saved items by slug + 收集 separator
 		$saved_by_slug    = [];
 		$saved_separators = [];
@@ -304,6 +315,8 @@ class YSPermissionAdmin {
 								<th class="ysca-table__roles">角色可見</th>
 								<?php if ( 'wp_native' === $tab ) : ?>
 									<th class="ysca-table__color">顏色</th>
+								<?php else : ?>
+									<th class="ysca-table__state ysca-text-center" title="把子選單提升為 wp-admin 頂層選單（原位置移除；連結沿用原生網址，頁面功能不受影響）">升頂層</th>
 								<?php endif; ?>
 								<th class="ysca-table__state ysca-text-center">隱藏</th>
 								<th class="ysca-table__actions">操作</th>
@@ -312,7 +325,7 @@ class YSPermissionAdmin {
 						<tbody id="ys-ec-permission-rows">
 							<?php
 							if ( empty( $items ) ) :
-								$colspan = ( 'wp_native' === $tab ) ? 7 : 6;
+								$colspan = 7;
 								?>
 								<tr>
 									<td colspan="<?php echo (int) $colspan; ?>"
@@ -361,7 +374,7 @@ class YSPermissionAdmin {
 									if ( 'separator' === $entry['kind'] ) {
 										self::render_separator_row( $tab, $entry['title'], $entry['order'] );
 									} else {
-										self::render_item_row( $tab, $entry['item'], $entry['saved'], $entry['order'] );
+										self::render_item_row( $tab, $entry['item'], $entry['saved'], $entry['order'], $promoted_urls );
 									}
 								endforeach;
 							endif;
@@ -381,12 +394,13 @@ class YSPermissionAdmin {
 	 * 結構（單行 ~38px 高）：
 	 *   | drag | order | menu-line(strong+code+badge) + title-override-inline | roles | [color?] | hide | × |
 	 *
-	 * @param string               $tab    'wp_native' | 'ys_cart'
-	 * @param array<string, mixed> $item   enumeration item（slug / title / level / parent_slug / icon）
-	 * @param array<string, mixed> $saved  該 slug 的已存設定（color / roles / title_override / hide）
-	 * @param int                  $order  最終要寫入 input 的 order 值
+	 * @param string               $tab           'wp_native' | 'ys_cart'
+	 * @param array<string, mixed> $item          enumeration item（slug / title / level / parent_slug / icon）
+	 * @param array<string, mixed> $saved         該 slug 的已存設定（color / roles / title_override / hide / promote_to_top）
+	 * @param int                  $order         最終要寫入 input 的 order 值
+	 * @param array<string, bool>  $promoted_urls （wp_native tab）promoted URL => true，用於標示「已提升」badge
 	 */
-	private static function render_item_row( string $tab, array $item, array $saved, int $order ): void {
+	private static function render_item_row( string $tab, array $item, array $saved, int $order, array $promoted_urls = [] ): void {
 		$slug           = (string) ( $item['slug'] ?? '' );
 		$title          = (string) ( $item['title'] ?? $slug );
 		$level          = (string) ( $item['level'] ?? 'top' );
@@ -398,6 +412,8 @@ class YSPermissionAdmin {
 		$title_override = (string) ( $saved['title_override'] ?? '' );
 		$hide           = ! empty( $saved['hide'] );
 		$self_only_uid  = (int) ( $saved['self_only_uid'] ?? 0 );
+		$promoted       = ! empty( $saved['promote_to_top'] );
+		$is_promoted_top = ( 'wp_native' === $tab ) && isset( $promoted_urls[ $slug ] );
 
 		$role_options = [
 			'administrator' => 'Admin',
@@ -425,6 +441,9 @@ class YSPermissionAdmin {
 					<strong><?php echo esc_html( $title ); ?></strong>
 					<code><?php echo esc_html( $slug ); ?></code>
 					<span class="level-badge<?php echo $is_sub ? ' level-sub' : ''; ?>"><?php echo $is_sub ? '子頁' : '頂層'; ?></span>
+					<?php if ( $is_promoted_top ) : ?>
+						<span class="level-badge level-promoted" title="此項由「全部選單（含子選單）」的子頁提升而來；到該分頁取消勾選「升頂層」即可還原">已提升</span>
+					<?php endif; ?>
 				</div>
 				<input type="text" class="title-override-inline ys-ec-title-override"
 					value="<?php echo esc_attr( $title_override ); ?>"
@@ -453,6 +472,16 @@ class YSPermissionAdmin {
 						data-default-color=""
 						placeholder="#0073aa" maxlength="7">
 				</td>
+			<?php else : ?>
+				<td class="ys-ec-promote-cell ysca-text-center">
+					<?php if ( $is_sub ) : ?>
+						<input type="checkbox" class="ys-ec-promote-cb"
+							title="提升為頂層選單（原位置移除；連結沿用原生網址，功能不受影響；可到「主選單（頂層）」分頁排序）"
+							<?php checked( $promoted ); ?>>
+					<?php else : ?>
+						<span class="ysca-text-muted" aria-hidden="true">—</span>
+					<?php endif; ?>
+				</td>
 			<?php endif; ?>
 			<td class="ys-ec-hide-cb">
 				<input type="checkbox" class="ys-ec-hide-checkbox" title="勾選後完全隱藏（含 sidebar + 直接訪問）"
@@ -469,9 +498,10 @@ class YSPermissionAdmin {
 	 * 渲染 separator row（v2.39.0：與 main row colspan 對齊）
 	 */
 	private static function render_separator_row( string $tab, string $title, int $order ): void {
-		// 主 row column 數：wp_native = 7（drag/order/menu/role/color/hide/del），ys_cart = 6（無 color）
-		// separator 的 colspan = main 中間欄（menu+role+color+hide）= wp_native:4 / ys_cart:3
-		$colspan = ( 'wp_native' === $tab ) ? 4 : 3;
+		// 主 row column 數：兩 tab 皆 7（wp_native: drag/order/menu/role/color/hide/del；
+		// ys_cart: drag/order/menu/role/升頂層/hide/del）
+		// separator 的 colspan = main 中間欄（menu+role+color|promote+hide）= 4
+		$colspan = 4;
 		?>
 		<tr data-separator="1" class="ys-ec-separator-row ysca-separator-row">
 			<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>

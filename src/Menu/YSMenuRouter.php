@@ -48,6 +48,8 @@ class YSMenuRouter {
 		add_action( 'admin_head', [ self::class, 'output_section_label_css' ] );
 		// v2.39.0 BATCH Q3：擋直接訪問 hidden slugs（非 super-admin）
 		add_action( 'admin_init', [ self::class, 'guard_hidden_pages' ] );
+		// v1.1.0：造訪「已提升至頂層」的頁面時，把側欄高亮指到提升後的頂層項。
+		add_filter( 'parent_file', [ self::class, 'fix_promoted_highlight' ] );
 	}
 
 	/**
@@ -139,6 +141,16 @@ class YSMenuRouter {
 		$user_roles = array_map( 'sanitize_key', (array) $user->roles );
 
 		// ─────────────────────────────────────────────
+		// 1.5 v1.1.0：子選單提升至頂層（promote_to_top）
+		//     放在所有過濾/排序之前，讓 roles / hide / 僅限本人 /
+		//     頂層排序等既有機制對提升後的頂層項一體適用。
+		// ─────────────────────────────────────────────
+		$ys_cart_items = (array) ( $config['ys_cart']['items'] ?? [] );
+		if ( ! empty( $ys_cart_items ) ) {
+			self::promote_submenus_to_top( $ys_cart_items );
+		}
+
+		// ─────────────────────────────────────────────
 		// 2. WP 原生選單 — role-based 過濾
 		// ─────────────────────────────────────────────
 		$wp_native_items = (array) ( $config['wp_native']['items'] ?? [] );
@@ -179,10 +191,140 @@ class YSMenuRouter {
 		//    儲存的 ys_cart.items[] 中 level=sub 項目的 order。
 		//    與頂層排序獨立，即使未使用頂層 tab 也會生效。
 		// ─────────────────────────────────────────────
-		$ys_cart_items = (array) ( $config['ys_cart']['items'] ?? [] );
 		if ( ! empty( $ys_cart_items ) ) {
 			self::reorder_submenus( $ys_cart_items );
 		}
+	}
+
+	/**
+	 * v1.1.0：把勾選「升頂層」的子選單提升為頂層選單。
+	 *
+	 * 策略（參考 Admin Menu Editor 的 original-parent URL 作法）：搬移的只是
+	 * 「顯示位置」——從 $submenu[parent] 移除該列、在 $menu 尾端插入一筆頂層項，
+	 * 但頂層項的連結一律以「原生註冊時的父層」組合（promoted_menu_url）。
+	 * WordPress 的 page hook 名稱依請求 URL 的父層檔案推導，保持原生組合即代表
+	 * callback、capability、載入流程全部照舊命中，頁面不會因搬移而失效。
+	 *
+	 * 提升後的頂層項會出現在「主選單（頂層）」設定清單中（enumeration 讀 live
+	 * $menu），可如一般頂層項排序、套色、限制角色。
+	 *
+	 * @param array<int, array<string, mixed>> $ys_cart_items ys_cart.items[]
+	 */
+	private static function promote_submenus_to_top( array $ys_cart_items ): void {
+		global $menu, $submenu;
+		if ( ! is_array( $menu ) ) {
+			return;
+		}
+
+		foreach ( $ys_cart_items as $item ) {
+			if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) ) {
+				continue;
+			}
+			if ( 'sub' !== (string) ( $item['level'] ?? 'top' ) ) {
+				continue;
+			}
+			$slug   = (string) ( $item['slug'] ?? '' );
+			$parent = (string) ( $item['parent_slug'] ?? '' );
+			if ( '' === $slug || '' === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+				continue;
+			}
+
+			// 從原父層子選單取出該列
+			$row = null;
+			foreach ( $submenu[ $parent ] as $idx => $sub ) {
+				if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
+					$row = $sub;
+					unset( $submenu[ $parent ][ $idx ] );
+					break;
+				}
+			}
+			if ( null === $row ) {
+				continue;
+			}
+			$submenu[ $parent ] = array_values( $submenu[ $parent ] );
+
+			// 頂層 icon：沿用原父層選單的 icon，找不到用預設。
+			$icon = 'dashicons-admin-generic';
+			foreach ( $menu as $m ) {
+				if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $parent && ! empty( $m[6] ) ) {
+					$icon = (string) $m[6];
+					break;
+				}
+			}
+
+			$title   = (string) ( $row[0] ?? $slug );
+			$id_base = sanitize_html_class( str_replace( [ '.php', '?', '=', '&' ], '-', $slug ) );
+
+			// PHP 自動 max-int-key+1 append；之後 reorder_and_insert_separators 可依
+			// 「主選單（頂層）」tab 設定的 order 重排此項。
+			$menu[] = [
+				$title,
+				(string) ( $row[1] ?? 'read' ),
+				self::promoted_menu_url( $slug, $parent ),
+				(string) ( $row[3] ?? $title ),
+				'menu-top ys-am-promoted menu-top-' . $id_base,
+				'ys-am-promoted-' . $id_base,
+				$icon,
+			];
+		}
+	}
+
+	/**
+	 * v1.1.0：組合「已提升子選單」作為頂層項時使用的連結。
+	 *
+	 * - slug 含 .php（wp-admin 檔案或含 query 的 .php）→ 直接使用 slug 本身。
+	 * - hook 型 slug（外掛頁）→ 以「原生父層」組 URL：父層是 .php 檔用
+	 *   `{parent}?page={slug}`，否則退回 `admin.php?page={slug}`。
+	 *   page hook 依此父層推導，維持原生組合＝callback 照舊命中。
+	 */
+	public static function promoted_menu_url( string $slug, string $parent ): string {
+		if ( false !== strpos( $slug, '.php' ) ) {
+			return $slug;
+		}
+		$base = ( false !== strpos( $parent, '.php' ) ) ? $parent : 'admin.php';
+		return $base . ( ( false === strpos( $base, '?' ) ) ? '?' : '&' ) . 'page=' . $slug;
+	}
+
+	/**
+	 * v1.1.0：造訪已提升頁面時，讓側欄高亮落在提升後的頂層項。
+	 *
+	 * WordPress 以 $parent_file 與 $menu[2] 比對決定哪個頂層項高亮；已提升頁的
+	 * 請求父層仍是原生父層（original-parent URL 策略），WP 會誤高亮原父層選單。
+	 * 此 filter 偵測目前請求對應某個 promoted slug 時，回傳提升項的選單 URL。
+	 *
+	 * @param string $parent_file WP 推導的父層檔案。
+	 */
+	public static function fix_promoted_highlight( $parent_file ) {
+		$config = self::get_config();
+		$items  = (array) ( $config['ys_cart']['items'] ?? [] );
+		if ( empty( $items ) ) {
+			return $parent_file;
+		}
+
+		$current = self::current_admin_request_slug();
+		if ( '' === $current ) {
+			return $parent_file;
+		}
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) ) {
+				continue;
+			}
+			if ( 'sub' !== (string) ( $item['level'] ?? 'top' ) ) {
+				continue;
+			}
+			$slug = (string) ( $item['slug'] ?? '' );
+			if ( '' === $slug || $slug !== $current ) {
+				continue;
+			}
+
+			global $submenu_file;
+			$submenu_file = null; // 提升項無子選單，不高亮任何子項。
+
+			return self::promoted_menu_url( $slug, (string) ( $item['parent_slug'] ?? '' ) );
+		}
+
+		return $parent_file;
 	}
 
 	/**

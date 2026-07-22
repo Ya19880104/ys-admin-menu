@@ -345,6 +345,92 @@ class YSPermissionController {
 			}
 		}
 
+		return self::append_promoted_endpoints( $out );
+	}
+
+	/**
+	 * v1.1.0：把「已提升至頂層」的子頁補回列舉清單。
+	 *
+	 * 已提升的子頁在 router 執行後不存在於 $submenu（被搬去 $menu 頂層），
+	 * 直接列舉會漏掉它們 → 設定頁看不到該列、也就無法取消「升頂層」。
+	 * 此處從設定讀出 promoted 項，補回其原父層群組尾端（維持 level=sub、
+	 * parent_slug 原值，checkbox 才能對回既有設定）。
+	 *
+	 * @param array<int, array{slug:string,title:string,level:string,parent_slug:?string}> $out
+	 * @return array<int, array{slug:string,title:string,level:string,parent_slug:?string}>
+	 */
+	private static function append_promoted_endpoints( array $out ): array {
+		global $menu;
+
+		$cfg_items = (array) ( \YangSheep\AdminMenu\Menu\YSMenuRouter::get_config()['ys_cart']['items'] ?? [] );
+		if ( empty( $cfg_items ) ) {
+			return $out;
+		}
+
+		$listed = [];
+		foreach ( $out as $row ) {
+			$listed[ (string) $row['slug'] ] = true;
+		}
+
+		// parent_slug => 補回列
+		$insertions = [];
+		foreach ( $cfg_items as $ci ) {
+			if ( ! is_array( $ci ) || empty( $ci['promote_to_top'] ) || 'sub' !== (string) ( $ci['level'] ?? '' ) ) {
+				continue;
+			}
+			$slug   = (string) ( $ci['slug'] ?? '' );
+			$parent = (string) ( $ci['parent_slug'] ?? '' );
+			if ( '' === $slug || '' === $parent || isset( $listed[ $slug ] ) ) {
+				continue;
+			}
+
+			// title：從提升後的頂層項（classes 含 ys-am-promoted）以 URL 對照取回。
+			$title        = $slug;
+			$promoted_url = \YangSheep\AdminMenu\Menu\YSMenuRouter::promoted_menu_url( $slug, $parent );
+			foreach ( (array) $menu as $m ) {
+				if ( is_array( $m )
+					&& false !== strpos( (string) ( $m[4] ?? '' ), 'ys-am-promoted' )
+					&& (string) ( $m[2] ?? '' ) === $promoted_url ) {
+					$title = wp_strip_all_tags( (string) ( $m[0] ?? $slug ) );
+					break;
+				}
+			}
+
+			$insertions[ $parent ][] = [
+				'slug'        => $slug,
+				'title'       => $title,
+				'level'       => 'sub',
+				'parent_slug' => $parent,
+			];
+			$listed[ $slug ] = true;
+		}
+
+		if ( empty( $insertions ) ) {
+			return $out;
+		}
+
+		// 找每個 parent 群組（top 列 + 其 sub 列）在清單中的最後 index，插到群組尾端。
+		$last_index_for_parent = [];
+		foreach ( $out as $i => $row ) {
+			$p = ( 'sub' === (string) $row['level'] ) ? (string) $row['parent_slug'] : (string) $row['slug'];
+			$last_index_for_parent[ $p ] = $i;
+		}
+
+		$splices = [];
+		foreach ( $insertions as $parent => $rows ) {
+			$at        = isset( $last_index_for_parent[ $parent ] ) ? $last_index_for_parent[ $parent ] + 1 : count( $out );
+			$splices[] = [ $at, $rows ];
+		}
+		usort(
+			$splices,
+			static function ( $a, $b ) {
+				return $b[0] <=> $a[0]; // 由後往前插，避免 index 位移。
+			}
+		);
+		foreach ( $splices as $splice ) {
+			array_splice( $out, $splice[0], 0, $splice[1] );
+		}
+
 		return $out;
 	}
 
@@ -464,6 +550,8 @@ class YSPermissionController {
 				'parent_slug' => $parent_slug,
 				'hide'        => $hide,
 				'self_only_uid'  => isset( $row['self_only_uid'] ) ? absint( $row['self_only_uid'] ) : 0,
+				// v1.1.0：升頂層（僅 sub 項有效）
+				'promote_to_top' => ( 'sub' === $level ) && ! empty( $row['promote_to_top'] ),
 			];
 		}
 		return $out;
