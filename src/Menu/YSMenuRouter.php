@@ -147,11 +147,19 @@ class YSMenuRouter {
 		$user_roles = array_map( 'sanitize_key', (array) $user->roles );
 
 		// ─────────────────────────────────────────────
+		// 1.4 v1.2.0：套用「全部選單」tab 的自訂顯示名稱
+		//     在 promote 之前執行 → 提升後的頂層項自動帶自訂名。
+		// ─────────────────────────────────────────────
+		$ys_cart_items = (array) ( $config['ys_cart']['items'] ?? [] );
+		if ( ! empty( $ys_cart_items ) ) {
+			self::apply_ys_cart_title_overrides( $ys_cart_items );
+		}
+
+		// ─────────────────────────────────────────────
 		// 1.5 v1.1.0：子選單提升至頂層（promote_to_top）
 		//     放在所有過濾/排序之前，讓 roles / hide / 僅限本人 /
 		//     頂層排序等既有機制對提升後的頂層項一體適用。
 		// ─────────────────────────────────────────────
-		$ys_cart_items = (array) ( $config['ys_cart']['items'] ?? [] );
 		if ( ! empty( $ys_cart_items ) ) {
 			self::promote_submenus_to_top( $ys_cart_items );
 		}
@@ -199,6 +207,51 @@ class YSMenuRouter {
 		// ─────────────────────────────────────────────
 		if ( ! empty( $ys_cart_items ) ) {
 			self::reorder_submenus( $ys_cart_items );
+		}
+	}
+
+	/**
+	 * v1.2.0：套用「全部選單（含子選單）」tab 的自訂顯示名稱（title_override）。
+	 *
+	 * 頂層項改 $menu[i][0]；子項改 $submenu[parent][i][0]。在 promote 與
+	 * wp_native 重排之前執行：提升後的頂層項會帶著自訂名，而若「主選單（頂層）」
+	 * tab 對同一頂層 slug 另設了 title_override，稍後 reorder_and_insert_separators
+	 * 會以該值覆蓋（頂層 tab 為頂層命名的權威）。
+	 *
+	 * @param array<int, array<string, mixed>> $ys_cart_items ys_cart.items[]
+	 */
+	private static function apply_ys_cart_title_overrides( array $ys_cart_items ): void {
+		global $menu, $submenu;
+
+		foreach ( $ys_cart_items as $item ) {
+			if ( ! is_array( $item ) || empty( $item['title_override'] ) ) {
+				continue;
+			}
+			$slug = (string) ( $item['slug'] ?? '' );
+			$name = wp_strip_all_tags( (string) $item['title_override'] );
+			if ( '' === $slug || '' === $name ) {
+				continue;
+			}
+
+			if ( 'sub' === (string) ( $item['level'] ?? 'top' ) ) {
+				$parent = (string) ( $item['parent_slug'] ?? '' );
+				if ( '' === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+					continue;
+				}
+				foreach ( $submenu[ $parent ] as $i => $sub ) {
+					if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
+						$submenu[ $parent ][ $i ][0] = $name;
+						break;
+					}
+				}
+			} elseif ( is_array( $menu ) ) {
+				foreach ( $menu as $i => $m ) {
+					if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $slug ) {
+						$menu[ $i ][0] = $name;
+						break;
+					}
+				}
+			}
 		}
 	}
 

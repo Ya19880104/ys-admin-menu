@@ -170,6 +170,108 @@
                     } );
             } );
         }
+
+        // 匯出 / 匯入設定（全站設定備份還原，不限當前 tab）
+        var exportBtn = document.getElementById( 'ys-ec-export-config' );
+        var importBtn = document.getElementById( 'ys-ec-import-config' );
+        var importFile = document.getElementById( 'ys-ec-import-file' );
+
+        if ( exportBtn ) {
+            exportBtn.addEventListener( 'click', function () {
+                exportConfig( saveStatus );
+            } );
+        }
+        if ( importBtn && importFile ) {
+            importBtn.addEventListener( 'click', function () {
+                importFile.value = '';
+                importFile.click();
+            } );
+            importFile.addEventListener( 'change', function () {
+                var file = importFile.files && importFile.files[ 0 ];
+                if ( file ) {
+                    importConfig( file, saveStatus );
+                }
+            } );
+        }
+    }
+
+    // ═════════════════════════════════════════════
+    // 匯出 / 匯入設定
+    // ═════════════════════════════════════════════
+    function exportConfig( statusEl ) {
+        setStatus( statusEl, '匯出中…', '#6b7280' );
+        fetch( cfg.restUrl + '/export', {
+            credentials: 'same-origin',
+            headers: { 'X-WP-Nonce': cfg.nonce, 'Accept': 'application/json' }
+        } )
+            .then( function ( r ) { return r.json(); } )
+            .then( function ( bundle ) {
+                if ( ! bundle || bundle._type !== 'ys-admin-menu-export' ) {
+                    throw new Error( '伺服器回應格式不符' );
+                }
+                var blob = new Blob( [ JSON.stringify( bundle, null, 2 ) ], { type: 'application/json' } );
+                var url  = URL.createObjectURL( blob );
+                var a    = document.createElement( 'a' );
+                var stamp = new Date().toISOString().slice( 0, 10 ).replace( /-/g, '' );
+                a.href = url;
+                a.download = 'ys-admin-menu-settings-' + stamp + '.json';
+                document.body.appendChild( a );
+                a.click();
+                document.body.removeChild( a );
+                setTimeout( function () { URL.revokeObjectURL( url ); }, 1000 );
+                setStatus( statusEl, '已匯出 ✓', '#16a34a', 3000 );
+            } )
+            .catch( function ( err ) {
+                setStatus( statusEl, '匯出失敗：' + err.message, '#dc2626' );
+            } );
+    }
+
+    function importConfig( file, statusEl ) {
+        var reader = new FileReader();
+        reader.onload = function () {
+            var parsed;
+            try {
+                parsed = JSON.parse( String( reader.result ) );
+            } catch ( e ) {
+                setStatus( statusEl, '匯入失敗：檔案不是有效的 JSON', '#dc2626' );
+                return;
+            }
+            if ( ! parsed || typeof parsed !== 'object' || parsed._type !== 'ys-admin-menu-export' ) {
+                setStatus( statusEl, '匯入失敗：這不是本外掛的設定匯出檔', '#dc2626' );
+                return;
+            }
+            if ( ! window.confirm( '匯入將以此檔案的內容「覆蓋」目前全部的選單、權限與樣式設定，確定要繼續嗎？\n（建議先按「匯出設定」備份目前設定）' ) ) {
+                return;
+            }
+            setStatus( statusEl, '匯入中…', '#6b7280' );
+            fetch( cfg.restUrl + '/import', {
+                method:      'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'X-WP-Nonce':   cfg.nonce,
+                    'Content-Type': 'application/json',
+                    'Accept':       'application/json'
+                },
+                body: JSON.stringify( parsed )
+            } )
+                .then( function ( r ) { return r.json().then( function ( d ) { return { ok: r.ok, data: d }; } ); } )
+                .then( function ( res ) {
+                    if ( res.ok && res.data && res.data.success ) {
+                        setStatus( statusEl, '已匯入 ✓ 重新載入中…', '#16a34a' );
+                        setTimeout( function () { window.location.reload(); }, 800 );
+                    } else {
+                        var msg = ( res.data && ( res.data.error || res.data.message ) ) || '未知錯誤';
+                        setStatus( statusEl, '匯入失敗：' + msg, '#dc2626' );
+                    }
+                } )
+                .catch( function ( err ) {
+                    setStatus( statusEl, '匯入失敗：' + err.message, '#dc2626' );
+                } );
+        };
+        reader.onerror = function () {
+            setStatus( statusEl, '匯入失敗：無法讀取檔案', '#dc2626' );
+        };
+        reader.readAsText( file );
     }
 
     // ─────────────────────────────────────────────

@@ -294,6 +294,11 @@ class YSPermissionAdmin {
 						<?php echo wp_kses_post( $tab_desc ); ?>
 					</p>
 
+					<p class="ys-ec-toolbar-hint description">
+						<span class="dashicons dashicons-move ysca-icon-align-middle"></span>
+						可拖拉每列最左側的 <code>⋮⋮</code> 圖示調整順序，或直接修改「順序」數字；調整後記得按「儲存設定」。
+					</p>
+
 					<p>
 						<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-add-separator">
 							<span class="dashicons dashicons-plus ysca-icon-align-middle"></span>
@@ -302,6 +307,16 @@ class YSPermissionAdmin {
 						<button type="button" class="ysca-btn ysca-btn--primary ysca-btn--sm" id="ys-ec-save-permissions">
 							儲存設定
 						</button>
+						<span class="ys-ec-toolbar-spacer"></span>
+						<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-export-config" title="把目前全部選單／權限／樣式設定匯出成 JSON 檔備份">
+							<span class="dashicons dashicons-download ysca-icon-align-middle"></span>
+							匯出設定
+						</button>
+						<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-import-config" title="從先前匯出的 JSON 檔還原全部設定（會覆蓋目前設定）">
+							<span class="dashicons dashicons-upload ysca-icon-align-middle"></span>
+							匯入設定
+						</button>
+						<input type="file" id="ys-ec-import-file" accept="application/json,.json" style="display:none">
 						<span id="ys-ec-save-status" aria-live="polite"></span>
 					</p>
 

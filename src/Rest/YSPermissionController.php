@@ -61,6 +61,194 @@ class YSPermissionController {
 			'callback'            => [ self::class, 'enumerate_menus' ],
 			'permission_callback' => [ YSRestAuth::class, 'permission_admin' ],
 		] );
+
+		// v1.2.0：匯出（GET）／匯入（POST）全部設定（選單+權限、樣式、白牌）
+		register_rest_route( self::NAMESPACE_NAME, '/admin/permissions/export', [
+			'methods'             => 'GET',
+			'callback'            => [ self::class, 'export_settings' ],
+			'permission_callback' => [ YSRestAuth::class, 'permission_admin' ],
+		] );
+		register_rest_route( self::NAMESPACE_NAME, '/admin/permissions/import', [
+			'methods'             => 'POST',
+			'callback'            => [ self::class, 'import_settings' ],
+			'permission_callback' => [ YSRestAuth::class, 'permission_admin' ],
+		] );
+	}
+
+	/**
+	 * v1.2.0：匯出的 option key 清單（選單設定除外，選單走 YSMenuRouter::OPTION_KEY）。
+	 *
+	 * @return array<int, string>
+	 */
+	private static function exportable_whitelabel_option_keys(): array {
+		return [
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_LOGO_URL,
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_FOOTER_TEXT,
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_HIDE_FOOTER,
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_HIDE_WP_LOGO,
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_ADMIN_BG_COLOR,
+			\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::OPTION_PURGE_ON_UNINSTALL,
+		];
+	}
+
+	/**
+	 * GET /admin/permissions/export
+	 *
+	 * 打包全部設定為可下載 bundle：選單+權限（menu）、原生選單樣式（theme）、白牌（whitelabel）。
+	 */
+	public static function export_settings(): \WP_REST_Response {
+		$whitelabel = [];
+		foreach ( self::exportable_whitelabel_option_keys() as $key ) {
+			$value = get_option( $key, null );
+			if ( null !== $value ) {
+				$whitelabel[ $key ] = $value;
+			}
+		}
+
+		$bundle = [
+			'_type'       => 'ys-admin-menu-export',
+			'version'     => defined( 'YS_ADMIN_MENU_VERSION' ) ? YS_ADMIN_MENU_VERSION : '',
+			'site'        => get_site_url(),
+			'exported_at' => gmdate( 'c' ),
+			'menu'        => (array) get_option( YSMenuRouter::OPTION_KEY, [] ),
+			'theme'       => (array) get_option( \YangSheep\AdminMenu\Theme\YSAdminThemeRenderer::OPTION_KEY, [] ),
+			'whitelabel'  => $whitelabel,
+		];
+
+		return new \WP_REST_Response( $bundle, 200 );
+	}
+
+	/**
+	 * POST /admin/permissions/import
+	 *
+	 * 以匯出 bundle 覆蓋目前設定。每部分都重新 sanitize：
+	 *   - menu：走 save_menu_config 相同的 per-slice sanitize + YSMenuConfigBridge。
+	 *   - theme：白名單鍵；顏色 sanitize_hex_color、數值 clamp、其餘忽略（renderer 另會於輸出再 sanitize）。
+	 *   - whitelabel：逐鍵 sanitize（URL / kses / bool）。
+	 */
+	public static function import_settings( \WP_REST_Request $request ): \WP_REST_Response {
+		$payload = $request->get_json_params();
+		if ( ! is_array( $payload ) || ( ( $payload['_type'] ?? '' ) !== 'ys-admin-menu-export' ) ) {
+			return new \WP_REST_Response( [ 'success' => false, 'error' => '檔案不是有效的設定匯出檔' ], 400 );
+		}
+
+		// 1. menu（選單+權限）
+		if ( isset( $payload['menu'] ) && is_array( $payload['menu'] ) ) {
+			$menu     = $payload['menu'];
+			$existing = [];
+			$existing['wp_native']['items'] = self::sanitize_native_items( (array) ( $menu['wp_native']['items'] ?? [] ) );
+			$existing['ys_cart']['items']   = self::sanitize_ys_cart_items( (array) ( $menu['ys_cart']['items'] ?? [] ) );
+			if ( isset( $menu['ys_cart']['hide_for_user_ids'] ) ) {
+				$existing['ys_cart']['hide_for_user_ids'] = self::sanitize_user_id_list( $menu['ys_cart']['hide_for_user_ids'] );
+			}
+			$existing['user_overrides']['items'] = self::sanitize_user_override_items( (array) ( $menu['user_overrides']['items'] ?? [] ) );
+
+			// 維持 v2.37.1 legacy fallback（與 save_menu_config 一致）
+			$legacy_map = [];
+			foreach ( $existing['user_overrides']['items'] as $row ) {
+				$uid = (int) ( $row['user_id'] ?? 0 );
+				if ( $uid > 0 && ! empty( $row['visible_slugs'] ) ) {
+					$legacy_map[ (string) $uid ] = [ 'visible_slugs' => $row['visible_slugs'] ];
+				}
+			}
+			$existing['wp_native']['user_overrides'] = $legacy_map;
+
+			YSMenuConfigBridge::save_authoritative( $existing );
+		}
+
+		// 2. theme（原生選單樣式）
+		if ( isset( $payload['theme'] ) && is_array( $payload['theme'] ) ) {
+			update_option(
+				\YangSheep\AdminMenu\Theme\YSAdminThemeRenderer::OPTION_KEY,
+				self::sanitize_theme_config( $payload['theme'] ),
+				true
+			);
+		}
+
+		// 3. whitelabel（白牌）
+		if ( isset( $payload['whitelabel'] ) && is_array( $payload['whitelabel'] ) ) {
+			self::import_whitelabel_options( $payload['whitelabel'] );
+		}
+
+		return new \WP_REST_Response( [ 'success' => true, 'imported_at' => time() ], 200 );
+	}
+
+	/**
+	 * v1.2.0：sanitize 匯入的原生選單樣式 config（白名單鍵 + 型別）。
+	 *
+	 * @param array<string, mixed> $raw
+	 * @return array<string, mixed>
+	 */
+	private static function sanitize_theme_config( array $raw ): array {
+		$out = [];
+
+		$out['enabled'] = ! empty( $raw['enabled'] );
+
+		$color_keys = [
+			'admin_main_bg', 'menu_bg', 'menu_text_color', 'menu_icon_color', 'admin_bar_bg',
+			'admin_bar_text_color', 'submenu_bg', 'submenu_text_color', 'menu_hover_bg', 'menu_hover_text_color',
+		];
+		foreach ( $color_keys as $key ) {
+			if ( isset( $raw[ $key ] ) ) {
+				$clean = sanitize_hex_color( (string) $raw[ $key ] );
+				if ( $clean ) {
+					$out[ $key ] = $clean;
+				}
+			}
+		}
+
+		// 允許留空（繼承/透明）的顏色
+		$optional_color_keys = [ 'section_label_color', 'section_label_bg', 'submenu_hover_bg', 'opensub_bg', 'current_bg' ];
+		foreach ( $optional_color_keys as $key ) {
+			if ( isset( $raw[ $key ] ) ) {
+				$clean = sanitize_hex_color( (string) $raw[ $key ] );
+				$out[ $key ] = is_string( $clean ) ? $clean : '';
+			}
+		}
+
+		// 數值鍵：直接吸收為 float/int（renderer 於輸出時 clamp，故此處只需為數值）
+		$numeric_keys = [
+			'menu_font_size', 'menu_line_height', 'submenu_font_size', 'submenu_line_height', 'submenu_font_weight',
+			'submenu_indent', 'section_label_font_size', 'section_label_font_weight',
+			'section_label_padding_top', 'section_label_padding_right', 'section_label_padding_bottom', 'section_label_padding_left',
+			'section_label_margin_top', 'section_label_margin_right', 'section_label_margin_bottom', 'section_label_margin_left',
+			'menu_item_padding_top', 'menu_item_padding_right', 'menu_item_padding_bottom', 'menu_item_padding_left',
+			'submenu_item_padding_top', 'submenu_item_padding_right', 'submenu_item_padding_bottom', 'submenu_item_padding_left',
+		];
+		foreach ( $numeric_keys as $key ) {
+			if ( isset( $raw[ $key ] ) && is_numeric( $raw[ $key ] ) ) {
+				$out[ $key ] = 0 + $raw[ $key ];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * v1.2.0：sanitize + 儲存匯入的白牌 options。
+	 *
+	 * @param array<string, mixed> $raw
+	 */
+	private static function import_whitelabel_options( array $raw ): void {
+		$wl = '\YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin';
+
+		if ( isset( $raw[ $wl::OPTION_LOGO_URL ] ) ) {
+			update_option( $wl::OPTION_LOGO_URL, esc_url_raw( (string) $raw[ $wl::OPTION_LOGO_URL ] ), true );
+		}
+		if ( isset( $raw[ $wl::OPTION_FOOTER_TEXT ] ) ) {
+			update_option( $wl::OPTION_FOOTER_TEXT, wp_kses_post( (string) $raw[ $wl::OPTION_FOOTER_TEXT ] ), true );
+		}
+		if ( isset( $raw[ $wl::OPTION_ADMIN_BG_COLOR ] ) ) {
+			$clean = sanitize_hex_color( (string) $raw[ $wl::OPTION_ADMIN_BG_COLOR ] );
+			update_option( $wl::OPTION_ADMIN_BG_COLOR, is_string( $clean ) ? $clean : '', true );
+		}
+		foreach ( [ $wl::OPTION_HIDE_FOOTER, $wl::OPTION_HIDE_WP_LOGO, $wl::OPTION_PURGE_ON_UNINSTALL ] as $bool_key ) {
+			if ( isset( $raw[ $bool_key ] ) ) {
+				$val = $raw[ $bool_key ];
+				$on  = ( 'yes' === $val ) || ( true === $val ) || ( 1 === $val ) || ( '1' === $val );
+				update_option( $bool_key, $on ? 'yes' : 'no', true );
+			}
+		}
 	}
 
 	/**
@@ -548,6 +736,11 @@ class YSPermissionController {
 			// v2.39.0 BATCH Q3：hide flag（boolean）
 			$hide = ! empty( $row['hide'] );
 
+			// v1.2.0：自訂顯示名稱（先前 ys_cart 遺漏此欄位 → 使用者填了必被清空）
+			$title_override = isset( $row['title_override'] )
+				? wp_strip_all_tags( (string) $row['title_override'] )
+				: '';
+
 			$out[] = [
 				'slug'        => $slug,
 				'order'       => $order,
@@ -558,6 +751,7 @@ class YSPermissionController {
 				'self_only_uid'  => isset( $row['self_only_uid'] ) ? absint( $row['self_only_uid'] ) : 0,
 				// v1.1.0：升頂層（僅 sub 項有效）
 				'promote_to_top' => ( 'sub' === $level ) && ! empty( $row['promote_to_top'] ),
+				'title_override' => '' !== $title_override ? $title_override : null,
 			];
 		}
 		return $out;
