@@ -50,7 +50,13 @@ class YSMenuRouter {
 		add_action( 'admin_init', [ self::class, 'guard_hidden_pages' ] );
 		// v1.1.0：造訪「已提升至頂層」的頁面時，把側欄高亮指到提升後的頂層項。
 		add_filter( 'parent_file', [ self::class, 'fix_promoted_highlight' ] );
+		// v1.1.1：hook 型提升頁，WP 核心以 $self（請求檔名）比對仍會讓原父層帶
+		// current/展開 class（繞過 parent_file filter）→ footer 收斂殘留 class。
+		add_action( 'admin_footer', [ self::class, 'print_promoted_highlight_fix' ], 5 );
 	}
+
+	/** 目前請求是否為「已提升」頁（由 fix_promoted_highlight 判定後設定）。 */
+	private static bool $current_is_promoted = false;
 
 	/**
 	 * 輸出「分組標籤」CSS（帶標題的分隔列）。
@@ -321,10 +327,32 @@ class YSMenuRouter {
 			global $submenu_file;
 			$submenu_file = null; // 提升項無子選單，不高亮任何子項。
 
+			self::$current_is_promoted = true;
+
 			return self::promoted_menu_url( $slug, (string) ( $item['parent_slug'] ?? '' ) );
 		}
 
 		return $parent_file;
+	}
+
+	/**
+	 * v1.1.1：造訪提升頁時，收斂原父層殘留的 current／展開 class。
+	 *
+	 * WP core menu-header 對頂層項有一條 `$self == $item[2]` 判定（請求檔名直接
+	 * 比對），不經過 parent_file filter——hook 型提升頁（原生 URL 為
+	 * parent.php?page=slug）會因此讓原父層同時帶 wp-has-current-submenu／
+	 * wp-menu-open。此處於 footer（priority 5，早於 footer scripts）移除殘留，
+	 * 高亮唯一落在提升項；亦避免 accordion 依 current-submenu 誤展開原父層。
+	 */
+	public static function print_promoted_highlight_fix(): void {
+		if ( ! self::$current_is_promoted ) {
+			return;
+		}
+		echo '<script id="ys-am-promoted-highlight-fix">'
+			. 'document.querySelectorAll("#adminmenu li.wp-has-current-submenu:not(.ys-am-promoted)")'
+			. '.forEach(function(li){li.classList.remove("wp-has-current-submenu","wp-menu-open");'
+			. 'li.classList.add("wp-not-current-submenu");});'
+			. '</script>';
 	}
 
 	/**
