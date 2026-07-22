@@ -192,6 +192,35 @@
     background: #e5e7eb;
 }
 
+/* v1.2.1：提升區（拖子選單到此 → 升頂層） */
+.ys-ec-permission-admin .ys-ec-promote-zone .ys-ec-promote-zone__hint td {
+    background: #eef2ff;
+    border: 2px dashed #c7d2fe;
+    border-radius: 8px;
+    color: #4338ca;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 14px;
+}
+.ys-ec-permission-admin .ys-ec-promote-zone .ys-ec-promote-zone__hint .dashicons {
+    color: #6366f1;
+    vertical-align: middle;
+    margin-right: 2px;
+}
+.ys-ec-permission-admin .ys-ec-promote-zone .ys-ec-promote-zone__hint code {
+    background: #ffffff;
+    border-radius: 3px;
+    letter-spacing: 2px;
+    padding: 0 4px;
+}
+/* 提升區內的子選單列：淡 indigo 底標示「已提升」 */
+.ys-ec-permission-admin .ys-ec-promote-zone tr.is-promoted > td {
+    background: #f5f7ff;
+}
+.ys-ec-permission-admin .ys-ec-promote-zone tr.is-promoted .menu-line strong {
+    color: #3730a3;
+}
+
 /* v1.1.0：升頂層 checkbox 欄 */
 .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-promote-cell {
     text-align: center;

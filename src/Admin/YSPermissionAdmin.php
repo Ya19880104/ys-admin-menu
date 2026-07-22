@@ -337,6 +337,16 @@ class YSPermissionAdmin {
 								<th class="ysca-table__actions">操作</th>
 							</tr>
 						</thead>
+						<?php if ( 'wp_native' !== $tab ) : ?>
+						<tbody id="ys-ec-promote-zone" class="ys-ec-promote-zone">
+							<tr class="ys-ec-promote-zone__hint" data-nodrag="1">
+								<td colspan="7">
+									<span class="dashicons dashicons-arrow-up-alt"></span>
+									<strong>提升為頂層選單</strong>：把下方任一子選單列，用最左側 <code>⋮⋮</code> 拖到這一區（或勾選該列的「升頂層」），即可提升為 wp-admin 頂層選單；拖回下方即取消。調整後記得按「儲存設定」。
+								</td>
+							</tr>
+						</tbody>
+						<?php endif; ?>
 						<tbody id="ys-ec-permission-rows">
 							<?php
 							if ( empty( $items ) ) :

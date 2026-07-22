@@ -66,7 +66,7 @@
                 window.jQuery( tbody ).find( '.ys-ec-color-picker' ).wpColorPicker();
             } catch ( e ) { /* swallow */ }
         }
-        initSortable( tbody );
+        setupSortable( tbody, tab );
 
         // 「+ 新增空白標題」 separator — 直接插入一列可即時編輯的分隔列（不用 prompt）
         if ( addSepBtn ) {
@@ -116,7 +116,7 @@
                 saveBtn.disabled = true;
                 setStatus( saveStatus, '儲存中…', '#6b7280' );
 
-                var rows = Array.prototype.slice.call( tbody.querySelectorAll( 'tr' ) );
+                var rows = collectDataRows( tbody );
                 var items = rows.map( function ( row ) {
                     if ( row.getAttribute( 'data-separator' ) === '1' ) {
                         var sepTitleInput = row.querySelector( '.ys-ec-separator-title' );
@@ -148,7 +148,7 @@
                         parent_slug:    row.getAttribute( 'data-parent' ) || null,
                         hide:           hideCb ? !!hideCb.checked : false,
                         self_only_uid:  selfOnlyUid,
-                        promote_to_top: promoteCb ? !!promoteCb.checked : false
+                        promote_to_top: isRowPromoted( row )
                     };
                 } );
 
@@ -275,28 +275,140 @@
     }
 
     // ─────────────────────────────────────────────
-    // SortableJS init（共用：主表 + user override 卡片排序）
+    // SortableJS init
+    //   - wp_native：單一清單拖拉排序。
+    //   - ys_cart：主清單 + 頂部「提升區」兩個 tbody 共 group，可互拖；
+    //     拖子選單進提升區＝升頂層、拖回＝取消（與「升頂層」勾選框雙向同步）。
     // ─────────────────────────────────────────────
-    function initSortable( tbody ) {
+    function setupSortable( tbody, tab ) {
         if ( typeof window.Sortable === 'undefined' ) {
             console.warn( '[ys-ec-permission] SortableJS not loaded' );
             return;
         }
-        window.Sortable.create( tbody, {
-            handle: '.ys-ec-drag-handle',
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: function () {
-                // 重排後重新指派 order = (i+1)*10
-                var rows = Array.prototype.slice.call( tbody.querySelectorAll( 'tr' ) );
-                rows.forEach( function ( row, i ) {
-                    var inp = row.querySelector( '.ys-ec-order-input' );
-                    if ( inp ) {
-                        inp.value = ( i + 1 ) * 10;
-                    }
-                } );
+
+        var zone = document.getElementById( 'ys-ec-promote-zone' );
+
+        if ( ! zone ) {
+            // wp_native：單一清單，維持原行為。
+            window.Sortable.create( tbody, {
+                handle: '.ys-ec-drag-handle',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onEnd: function () { reassignOrder( tbody ); }
+            } );
+            return;
+        }
+
+        // 載入時：把已勾「升頂層」的列移入提升區。
+        Array.prototype.slice.call( tbody.querySelectorAll( 'tr' ) ).forEach( function ( row ) {
+            var cb = row.querySelector( '.ys-ec-promote-cb' );
+            if ( cb && cb.checked ) {
+                zone.appendChild( row );
             }
         } );
+        syncPromoteRows();
+
+        var makeOpts = function () {
+            return {
+                group: 'ys-am-menu',
+                handle: '.ys-ec-drag-handle',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                filter: '.ys-ec-promote-zone__hint',
+                onMove: function ( evt ) {
+                    // 只有子選單可提升：非 sub 列不得拖進提升區。
+                    if ( evt.to === zone && 'sub' !== evt.dragged.getAttribute( 'data-level' ) ) {
+                        return false;
+                    }
+                    // hint 列固定在提升區最上方，不得插到它前面。
+                    if ( evt.related && evt.related.classList && evt.related.classList.contains( 'ys-ec-promote-zone__hint' ) ) {
+                        return false;
+                    }
+                    return true;
+                },
+                onEnd: function () {
+                    syncPromoteRows();
+                    reassignOrder( zone );
+                    reassignOrder( tbody );
+                }
+            };
+        };
+        window.Sortable.create( tbody, makeOpts() );
+        window.Sortable.create( zone, makeOpts() );
+
+        // 「升頂層」勾選框 ↔ 提升區：雙向同步。
+        document.addEventListener( 'change', function ( e ) {
+            var cb = e.target;
+            if ( ! cb || ! cb.classList || ! cb.classList.contains( 'ys-ec-promote-cb' ) ) {
+                return;
+            }
+            var row = cb.closest( 'tr' );
+            if ( ! row ) {
+                return;
+            }
+            if ( cb.checked ) {
+                zone.appendChild( row );
+            } else {
+                tbody.appendChild( row );
+            }
+            syncPromoteRows();
+        } );
+    }
+
+    // 依「是否在提升區」同步每列的 promote 勾選狀態與樣式。
+    function syncPromoteRows() {
+        var zone = document.getElementById( 'ys-ec-promote-zone' );
+        if ( ! zone ) {
+            return;
+        }
+        var all = document.querySelectorAll( '#ys-ec-permission-rows tr, #ys-ec-promote-zone tr' );
+        Array.prototype.forEach.call( all, function ( row ) {
+            if ( row.getAttribute( 'data-nodrag' ) === '1' ) {
+                return;
+            }
+            var inZone = !! ( row.closest && row.closest( '#ys-ec-promote-zone' ) );
+            var cb = row.querySelector( '.ys-ec-promote-cb' );
+            if ( cb ) {
+                cb.checked = inZone;
+            }
+            row.classList.toggle( 'is-promoted', inZone );
+        } );
+    }
+
+    // 重新指派某清單內各列 order = (i+1)*10（跳過 hint / 非資料列）。
+    function reassignOrder( listEl ) {
+        var i = 0;
+        Array.prototype.forEach.call( listEl.querySelectorAll( 'tr' ), function ( row ) {
+            if ( row.getAttribute( 'data-nodrag' ) === '1' ) {
+                return;
+            }
+            var inp = row.querySelector( '.ys-ec-order-input' );
+            if ( inp ) {
+                i += 1;
+                inp.value = i * 10;
+            }
+        } );
+    }
+
+    // 儲存時收集全部資料列：提升區（在前）+ 主清單，略過 hint 列。
+    function collectDataRows( tbody ) {
+        var out = [];
+        var zone = document.getElementById( 'ys-ec-promote-zone' );
+        if ( zone ) {
+            Array.prototype.forEach.call( zone.querySelectorAll( 'tr' ), function ( r ) {
+                if ( r.getAttribute( 'data-nodrag' ) !== '1' ) {
+                    out.push( r );
+                }
+            } );
+        }
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr' ), function ( r ) {
+            out.push( r );
+        } );
+        return out;
+    }
+
+    function isRowPromoted( row ) {
+        return !! ( row.closest && row.closest( '#ys-ec-promote-zone' ) );
     }
 
     /**
