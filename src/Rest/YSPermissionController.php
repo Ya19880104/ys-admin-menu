@@ -316,6 +316,12 @@ class YSPermissionController {
 			if ( 0 === strpos( $slug, 'ys-ec-sep-' ) || false !== strpos( $classes, 'ys-am-section-label' ) ) {
 				continue;
 			}
+			// v1.1.2：跳過「升頂層」的衍生頂層項——它的原始身分是子頁，
+			// 由 append_promoted_endpoints 以 sub 列補回（否則 php 型 slug 與
+			// 衍生頂層項同名，補回被誤判已列出，設定列消失無法取消提升）。
+			if ( false !== strpos( $classes, 'ys-am-promoted' ) ) {
+				continue;
+			}
 
 			$out[] = [
 				'slug'        => $slug,
