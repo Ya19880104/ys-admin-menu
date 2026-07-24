@@ -181,6 +181,18 @@ body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > .wp-subm
     display: block;
 }
 
+/* 手風琴權威性（v1.2.2）：部分外掛會用「兩個 ID」的高特異性選擇器強制撐開自己的
+   子選單，例如 WPForms Setup Checklist 於每個後台頁面注入
+   `#adminmenu #toplevel_page_wpforms-overview .wp-submenu{display:flex}`，
+   其特異性高於本檔的收合規則 → 該選單永遠展開、收不起來。
+   此處僅對「未展開」狀態加 !important，確保收放一律由手風琴決定；
+   展開時不加 !important，讓第三方自己的版面（如 flex order）仍能生效。
+   `:not(.folded)` 保護側欄收合模式下 WordPress 原生的 hover 飛出子選單。 */
+body.ys-theme-active.ys-am-js:not(.folded) #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu,
+body.ys-theme-active.ys-am-js:not(.folded) #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu-wrap {
+    display: none !important;
+}
+
 body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu,
 body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu-wrap {
     display: none;
