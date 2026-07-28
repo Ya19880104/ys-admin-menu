@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.2.3] - 2026-07-28
+
+### Fixed
+
+- Stop the bundled YS Hub Client library from registering an invalid
+  WooCommerce HPOS declaration from its vendor path.
+
 ## [1.2.2] - 2026-07-22
 
 ### 修正
