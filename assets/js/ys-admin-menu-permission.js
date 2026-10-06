@@ -68,6 +68,13 @@
         }
         setupSortable( tbody, tab );
 
+        // 頁面載入時列出的全部選單。儲存時一併送出，伺服器據此分辨「使用者移除的列」與
+        // 「這個帳號本來就看不到、所以沒列出來的列」，後者的設定要原樣保留。
+        var renderedSlugs = Array.prototype.map.call(
+            document.querySelectorAll( '#ys-ec-permission-rows tr[data-slug], #ys-ec-promote-zone tr[data-slug]' ),
+            function ( row ) { return row.getAttribute( 'data-slug' ); }
+        );
+
         // 「+ 新增空白標題」 separator — 直接插入一列可即時編輯的分隔列（不用 prompt）
         if ( addSepBtn ) {
             addSepBtn.addEventListener( 'click', function () {
@@ -154,9 +161,9 @@
 
                 var payload = {};
                 if ( 'wp_native' === tab ) {
-                    payload.wp_native = { items: items };
+                    payload.wp_native = { items: items, rendered_slugs: renderedSlugs };
                 } else if ( 'ys_cart' === tab ) {
-                    payload.ys_cart = { items: items };
+                    payload.ys_cart = { items: items, rendered_slugs: renderedSlugs };
                 }
 
                 postMenuConfig( payload )

@@ -158,8 +158,15 @@ class YSAdminThemeRenderer {
 
 	/**
 	 * Enqueue the companion stylesheet/script on all wp-admin pages.
+	 *
+	 * 只在皮膚啟用時載入：停用後後台完全回到 WordPress 原生的選單樣式與點擊行為。
 	 */
 	public static function enqueue_runtime_css(): void {
+		$cfg = self::get_config();
+		if ( empty( $cfg['enabled'] ) ) {
+			return;
+		}
+
 		wp_enqueue_style(
 			'ys-admin-menu-theme-runtime',
 			YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/ys-admin-menu-theme-runtime.css',
@@ -174,6 +181,17 @@ class YSAdminThemeRenderer {
 			YS_ADMIN_MENU_VERSION,
 			true
 		);
+	}
+
+	/**
+	 * 目前實際生效的樣式設定（已存的值疊上預設值）。
+	 *
+	 * 匯出設定用：從沒存過樣式的站也匯出完整內容，匯入另一站後外觀與來源站一致。
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function effective_config(): array {
+		return self::get_config();
 	}
 
 	/**

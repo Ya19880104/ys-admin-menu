@@ -32,7 +32,7 @@ final class YSRestAuth {
 		if ( '' === $capability ) {
 			$capability = 'manage_options';
 		}
-		if ( ! current_user_can( $capability ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( $capability ) ) {
 			return new \WP_Error(
 				'ys_admin_menu_forbidden',
 				__( '權限不足。', 'ys-admin-menu' ),

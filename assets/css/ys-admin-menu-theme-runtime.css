@@ -4,6 +4,12 @@
  * Consumes variables emitted by YSAdminThemeRenderer. This stylesheet skins the
  * native WordPress admin menu visually while preserving WordPress-owned DOM and
  * folded/responsive menu behavior.
+ *
+ * 版面規則分兩種：
+ *   - 顏色、字級等不影響排版的規則，任何寬度都套用。
+ *   - 手風琴子選單、列的 flex 排版、留白等「展開版面」，只在側欄真的展開時套用
+ *     （@container ys-am-menu）。側欄收成 36px 圖示列時（使用者按了「收合選單」，或
+ *     視窗寬 783–960px 被 WordPress 自動收合）交還原生的圖示列與飛出子選單。
  */
 
 body.ys-theme-active.wp-admin {
@@ -20,9 +26,10 @@ body.ys-theme-active #adminmenuwrap {
     background: var( --ys-theme-menu-bg );
 }
 
-body.ys-theme-active #adminmenu {
-    box-sizing: border-box;
-    padding: 8px;
+/* 以側欄的實際寬度判斷目前是「展開」還是「圖示列」。 */
+body.ys-theme-active #adminmenuwrap {
+    container-type: inline-size;
+    container-name: ys-am-menu;
 }
 
 body.ys-theme-active #adminmenu li.wp-menu-separator {
@@ -36,93 +43,14 @@ body.ys-theme-active #adminmenu li.menu-top {
     border-radius: var( --ys-theme-menu-item-radius );
 }
 
-body.ys-theme-active #adminmenu li.menu-top > a {
-    display: flex;
-    align-items: center;
-    min-height: var( --ys-theme-menu-item-height );
-    gap: var( --ys-theme-menu-item-gap );
-    padding: var( --ys-theme-menu-item-pt ) var( --ys-theme-menu-item-pr ) var( --ys-theme-menu-item-pb ) var( --ys-theme-menu-item-pl );
-    border-radius: var( --ys-theme-menu-item-radius );
-    box-sizing: border-box;
-    text-decoration: none;
-}
-
-/* 子選單方向指示器（純裝飾、非按鈕）：低調小箭頭，朝下=可展開 / 朝上=已展開。 */
-body.ys-theme-active #adminmenu li.wp-has-submenu > a.menu-top::after {
-    content: "\f347";
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    margin-left: auto;
-    color: var( --ys-theme-menu-icon-color );
-    background: transparent;
-    border: 0;
-    font-family: dashicons;
-    font-size: 12px;
-    line-height: 1;
-    opacity: 0.45;
-    transition: opacity 120ms ease, transform 120ms ease;
-}
-
-/* JS 未載入（漸進增強 fallback）：當前頁選單箭頭翻轉朝上。 */
-body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > a.menu-top::after,
-body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > a.menu-top::after {
-    color: var( --ys-theme-menu-text );
-    background: transparent;
-    opacity: 0.8;
-    transform: rotate(180deg);
-}
-
-/* JS 載入後：箭頭即可點收放控制。hover 提亮，展開(.ys-am-open)時翻轉朝上。 */
-body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu > a.menu-top:hover::after {
-    opacity: 0.85;
-}
-body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > a.menu-top::after {
-    color: var( --ys-theme-menu-text );
-    background: transparent;
-    opacity: 0.8;
-    transform: rotate(180deg);
-}
-
 body.ys-theme-active #adminmenu .wp-menu-name,
 body.ys-theme-active #adminmenu li.menu-top > a {
     color: var( --ys-theme-menu-text );
 }
 
-body.ys-theme-active #adminmenu .wp-menu-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 0;
-    font-weight: 650;
-    font-size: var( --ys-theme-menu-font-size );
-    line-height: var( --ys-theme-menu-line-height );
-}
-
-body.ys-theme-active #adminmenu .wp-menu-image {
-    display: inline-flex;
-    flex: 0 0 20px;
-    align-items: center;
-    justify-content: center;
-    float: none;
-    width: 20px;
-    height: 20px;
-    margin: 0;
-}
-
 body.ys-theme-active #adminmenu .wp-menu-image,
 body.ys-theme-active #adminmenu .wp-menu-image::before {
     color: var( --ys-theme-menu-icon-color );
-}
-
-body.ys-theme-active #adminmenu .wp-menu-image::before {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    font-size: 20px;
-    line-height: 20px;
 }
 
 body.ys-theme-active #adminmenu .wp-submenu,
@@ -154,57 +82,162 @@ body.ys-theme-active #adminmenu .wp-submenu a:focus {
     background: var( --ys-theme-submenu-hover-bg );
 }
 
-/* Native accordion submenu panels. */
-body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu,
-body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu-wrap {
-    position: static;
-    display: none;
-    left: auto;
-    top: auto;
-    width: auto;
-    min-width: 0;
-    /* !important：防 WP common.js adjustSubmenu 注入 inline 負 margin-top 造成子選單跳動。 */
-    margin: 2px 0 6px !important;
-    padding: 2px 0 7px var( --ys-theme-submenu-indent );
-    border-radius: 0 0 var( --ys-theme-menu-item-radius ) var( --ys-theme-menu-item-radius );
-    box-shadow: none;
-    box-sizing: border-box;
+/* ── 展開版面：側欄寬度 ≥ 100px 才套用（桌機寬版 300px、未收合的原生 160px、手機抽屜） ── */
+@container ys-am-menu (min-width: 100px) {
+
+    body.ys-theme-active #adminmenu {
+        box-sizing: border-box;
+        padding: 8px;
+    }
+
+    body.ys-theme-active #adminmenu li.menu-top > a {
+        display: flex;
+        align-items: center;
+        min-height: var( --ys-theme-menu-item-height );
+        gap: var( --ys-theme-menu-item-gap );
+        padding: var( --ys-theme-menu-item-pt ) var( --ys-theme-menu-item-pr ) var( --ys-theme-menu-item-pb ) var( --ys-theme-menu-item-pl );
+        border-radius: var( --ys-theme-menu-item-radius );
+        box-sizing: border-box;
+        text-decoration: none;
+    }
+
+    /* 子選單方向指示器（純裝飾、非按鈕）：低調小箭頭，朝下=可展開 / 朝上=已展開。 */
+    body.ys-theme-active #adminmenu li.wp-has-submenu > a.menu-top::after {
+        content: "\f347";
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        margin-left: auto;
+        color: var( --ys-theme-menu-icon-color );
+        background: transparent;
+        border: 0;
+        font-family: dashicons;
+        font-size: 12px;
+        line-height: 1;
+        opacity: 0.45;
+        transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    /* JS 未載入（漸進增強 fallback）：當前頁選單箭頭翻轉朝上。 */
+    body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > a.menu-top::after,
+    body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > a.menu-top::after {
+        color: var( --ys-theme-menu-text );
+        background: transparent;
+        opacity: 0.8;
+        transform: rotate(180deg);
+    }
+
+    /* JS 載入後：箭頭即可點收放控制。hover 提亮，展開(.ys-am-open)時翻轉朝上。 */
+    body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu > a.menu-top:hover::after {
+        opacity: 0.85;
+    }
+    body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > a.menu-top::after {
+        color: var( --ys-theme-menu-text );
+        background: transparent;
+        opacity: 0.8;
+        transform: rotate(180deg);
+    }
+
+    body.ys-theme-active #adminmenu .wp-menu-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0;
+        font-weight: 650;
+        font-size: var( --ys-theme-menu-font-size );
+        line-height: var( --ys-theme-menu-line-height );
+    }
+
+    body.ys-theme-active #adminmenu .wp-menu-image {
+        display: inline-flex;
+        flex: 0 0 20px;
+        align-items: center;
+        justify-content: center;
+        float: none;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+    }
+
+    body.ys-theme-active #adminmenu .wp-menu-image::before {
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        font-size: 20px;
+        line-height: 20px;
+    }
+
+    /* Native accordion submenu panels. */
+    body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu,
+    body.ys-theme-active #adminmenu li.wp-has-submenu > .wp-submenu-wrap {
+        position: static;
+        display: none;
+        left: auto;
+        top: auto;
+        width: auto;
+        min-width: 0;
+        /* !important：防 WP common.js adjustSubmenu 注入 inline 負 margin-top 造成子選單跳動。 */
+        margin: 2px 0 6px !important;
+        padding: 2px 0 7px var( --ys-theme-submenu-indent );
+        border-radius: 0 0 var( --ys-theme-menu-item-radius ) var( --ys-theme-menu-item-radius );
+        box-shadow: none;
+        box-sizing: border-box;
+    }
+
+    /* JS 未載入（fallback）：當前頁選單常駐展開。 */
+    body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > .wp-submenu,
+    body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > .wp-submenu {
+        display: block;
+    }
+    /* JS 載入後：僅 .ys-am-open 展開（點箭頭收放，狀態存 localStorage）。 */
+    body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > .wp-submenu {
+        display: block;
+    }
+
+    /* 手風琴權威性（v1.2.2）：部分外掛會用「兩個 ID」的高特異性選擇器強制撐開自己的
+       子選單，例如 WPForms Setup Checklist 於每個後台頁面注入
+       `#adminmenu #toplevel_page_wpforms-overview .wp-submenu{display:flex}`，
+       其特異性高於本檔的收合規則 → 該選單永遠展開、收不起來。
+       此處僅對「未展開」狀態加 !important，確保收放一律由手風琴決定；
+       展開時不加 !important，讓第三方自己的版面（如 flex order）仍能生效。
+       圖示列模式不在這個 @container 內，WordPress 原生的 hover 飛出子選單不受影響。 */
+    body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu,
+    body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu-wrap {
+        display: none !important;
+    }
+
+    body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu,
+    body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu-wrap {
+        display: none;
+    }
+
+    body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu {
+        padding: 2px 0 7px var( --ys-theme-submenu-indent );
+        box-sizing: border-box;
+    }
+
+    body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu a {
+        margin: 0 8px 2px 0;
+    }
+
+    /* Keep current WordPress submenus inline on native WordPress pages. */
+    body.ys-theme-active #adminmenu li.wp-has-current-submenu.opensub > .wp-submenu,
+    #adminmenu li[id^="toplevel_page_ys-"].wp-has-current-submenu.opensub > .wp-submenu {
+        position: relative;
+        left: auto;
+        top: auto;
+        margin-left: 0;
+        box-shadow: none;
+    }
 }
 
-/* JS 未載入（fallback）：當前頁選單常駐展開。 */
-body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-has-current-submenu > .wp-submenu,
-body.ys-theme-active:not(.ys-am-js) #adminmenu li.wp-has-submenu.wp-menu-open > .wp-submenu {
-    display: block;
-}
-/* JS 載入後：僅 .ys-am-open 展開（點箭頭收放，狀態存 localStorage）。 */
-body.ys-theme-active.ys-am-js #adminmenu li.wp-has-submenu.ys-am-open > .wp-submenu {
-    display: block;
-}
-
-/* 手風琴權威性（v1.2.2）：部分外掛會用「兩個 ID」的高特異性選擇器強制撐開自己的
-   子選單，例如 WPForms Setup Checklist 於每個後台頁面注入
-   `#adminmenu #toplevel_page_wpforms-overview .wp-submenu{display:flex}`，
-   其特異性高於本檔的收合規則 → 該選單永遠展開、收不起來。
-   此處僅對「未展開」狀態加 !important，確保收放一律由手風琴決定；
-   展開時不加 !important，讓第三方自己的版面（如 flex order）仍能生效。
-   `:not(.folded)` 保護側欄收合模式下 WordPress 原生的 hover 飛出子選單。 */
-body.ys-theme-active.ys-am-js:not(.folded) #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu,
-body.ys-theme-active.ys-am-js:not(.folded) #adminmenu li.wp-has-submenu:not(.ys-am-open) > .wp-submenu-wrap {
-    display: none !important;
-}
-
-body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu,
-body.ys-theme-active #adminmenu li.wp-has-submenu.opensub:not(.wp-has-current-submenu):not(.wp-menu-open):not(.ys-am-open) > .wp-submenu-wrap {
-    display: none;
-}
-
-body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu {
-    padding: 2px 0 7px var( --ys-theme-submenu-indent );
-    box-sizing: border-box;
-}
-
-body.ys-theme-active #adminmenu .wp-has-current-submenu .wp-submenu a {
-    margin: 0 8px 2px 0;
+/* ── 圖示列版面：分組標籤沒有文字可顯示，整列收掉 ── */
+@container ys-am-menu (max-width: 99px) {
+    body.ys-theme-active #adminmenu li.ys-am-section-label {
+        display: none;
+    }
 }
 
 body.ys-theme-active #wpadminbar,
@@ -283,19 +316,12 @@ body.ys-theme-active #adminmenu .wp-submenu li.current a {
 
 }
 
-body.ys-theme-active.folded #wpcontent,
-body.ys-theme-active.folded #wpfooter {
-    margin-left: 36px;
-}
-
-/* Keep current WordPress submenus inline on native WordPress pages. */
-body.ys-theme-active #adminmenu li.wp-has-current-submenu.opensub > .wp-submenu,
-#adminmenu li[id^="toplevel_page_ys-"].wp-has-current-submenu.opensub > .wp-submenu {
-    position: relative;
-    left: auto;
-    top: auto;
-    margin-left: 0;
-    box-shadow: none;
+/* 手動收合只在桌機與平板寬度有意義；手機寬度由 WordPress 的抽屜版面接手。 */
+@media screen and (min-width: 783px) {
+    body.ys-theme-active.folded #wpcontent,
+    body.ys-theme-active.folded #wpfooter {
+        margin-left: 36px;
+    }
 }
 
 /* Hide native scrollbars without disabling wheel/touchpad/touch scroll. */

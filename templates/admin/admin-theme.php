@@ -89,7 +89,7 @@ $number_fields = [
 		'label'       => '主選單行高',
 		'min'         => '1.0',
 		'max'         => '2.5',
-		'step'        => '0.1',
+		'step'        => '0.05',
 		'suffix'      => '',
 		'description' => '建議 1.4-1.6。',
 	],
@@ -113,7 +113,7 @@ $number_fields = [
 	<div class="notice notice-info ysca-notice-spaced">
 		<p>
 			<strong>說明：</strong>
-			本頁設定會套用到 WordPress 原生後台選單。系統只調整顏色、文字大小與捲動條視覺，不會改變原生選單寬度、子選單定位或 WordPress 選單功能。
+			本頁設定會套用到 WordPress 原生後台選單。啟用後側欄改成自訂配色，桌機寬版的側欄寬度是 300px，子選單改成點右側箭頭收放；側欄收成圖示列時（按了「收合選單」或視窗較窄）維持 WordPress 原生的飛出子選單。停用就完全回到 WordPress 原生外觀與操作。
 		</p>
 	</div>
 
@@ -339,7 +339,7 @@ $number_fields = [
 				</div>
 				<div class="ys-ec-form-group">
 					<label for="submenu_line_height">行高</label>
-					<input type="number" id="submenu_line_height" name="submenu_line_height" value="<?php echo esc_attr( (string) ( $cfg['submenu_line_height'] ?? 1.45 ) ); ?>" min="1.0" max="2.5" step="0.1" class="ysca-field--xs">
+					<input type="number" id="submenu_line_height" name="submenu_line_height" value="<?php echo esc_attr( (string) ( $cfg['submenu_line_height'] ?? 1.45 ) ); ?>" min="1.0" max="2.5" step="0.05" class="ysca-field--xs">
 					<p class="description">建議 1.3-1.5。</p>
 				</div>
 				<div class="ys-ec-form-group">

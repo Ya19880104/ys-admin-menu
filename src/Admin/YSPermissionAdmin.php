@@ -666,6 +666,9 @@ class YSPermissionAdmin {
 					<input type="checkbox" class="ys-cart-only" <?php checked( $ys_cart_only ); ?>>
 					僅允許存取受保護的管理選單
 				</label>
+				<?php if ( ! defined( 'YS_ECOMMERCE_VERSION' ) ) : ?>
+					<p class="description">這個站沒有安裝 YS CART，「受保護的管理選單」只有本外掛自己的頁面：勾選後，這位使用者會進不了後台的其他頁面（包含控制台）。一般情況請不要勾，改用下方的可見清單。</p>
+				<?php endif; ?>
 				<details>
 					<summary>
 						展開可見 slug 清單（已選 <span class="picked-count"><?php echo (int) $picked_count; ?></span> / <?php echo (int) $slug_count; ?> 個；空白 = 不限制）
@@ -704,9 +707,12 @@ class YSPermissionAdmin {
 			</div>
 			<div class="card-body">
 				<label class="ys-cart-only-label">
-					<input type="checkbox" class="ys-cart-only" checked>
+					<input type="checkbox" class="ys-cart-only">
 					僅允許存取受保護的管理選單
 				</label>
+				<?php if ( ! defined( 'YS_ECOMMERCE_VERSION' ) ) : ?>
+					<p class="description">這個站沒有安裝 YS CART，「受保護的管理選單」只有本外掛自己的頁面：勾選後，這位使用者會進不了後台的其他頁面（包含控制台）。一般情況請不要勾，改用下方的可見清單。</p>
+				<?php endif; ?>
 				<details>
 					<summary>
 						展開可見 slug 清單（已選 <span class="picked-count">0</span> / <?php echo (int) $slug_count; ?> 個；空白 = 不限制）

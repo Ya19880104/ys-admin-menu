@@ -1,9 +1,14 @@
 /**
  * 原生選單樣式 runtime — 子選單可點收放。
  *
- * 點頂層選單列「右側箭頭區」可收合／展開該選單的子項清單（不導航）；
- * 點選單名稱／圖示區則維持 WordPress 原生行為（進入該頁）。
+ * 只在「原生選單樣式」啟用時載入。
+ *
+ * 側欄展開時（桌機寬版、手機抽屜）：點頂層選單列「右側箭頭區」收合／展開該選單的
+ * 子項清單（不導航）；點選單名稱／圖示區維持 WordPress 原生行為（進入該頁）。
  * 收放狀態存於 localStorage，重新整理後保留。
+ *
+ * 側欄收成圖示列時（使用者按了「收合選單」，或視窗寬度落在 WordPress 自動收合的
+ * 範圍）：完全不介入，交還 WordPress 原生的圖示列與飛出子選單。
  *
  * 漸進增強：載入後於 <body> 加上 .ys-am-js，CSS 才交由 .ys-am-open 控制顯示；
  * 若本檔未載入，CSS fallback 仍讓當前頁子選單常駐展開（不會消失）。
@@ -17,6 +22,9 @@
 		return;
 	}
 
+	// 圖示列寬度是 36px，展開時至少 160px；與 CSS 的 container query 用同一個門檻。
+	var COLLAPSED_MAX_WIDTH = 100;
+
 	document.body.classList.add( 'ys-am-js' );
 
 	var saved = {};
@@ -24,6 +32,11 @@
 		saved = JSON.parse( localStorage.getItem( KEY ) || '{}' ) || {};
 	} catch ( e ) {
 		saved = {};
+	}
+
+	function isCollapsed() {
+		var width = menu.getBoundingClientRect().width;
+		return width > 0 && width < COLLAPSED_MAX_WIDTH;
 	}
 
 	function isOpen( li ) {
@@ -59,8 +72,8 @@
 		if ( ! li || ! li.classList || ! li.classList.contains( 'wp-has-submenu' ) ) {
 			return;
 		}
-		if ( document.body.classList.contains( 'folded' ) ) {
-			return; // 收合（folded）模式不介入，維持 WP 原生行為。
+		if ( isCollapsed() ) {
+			return; // 圖示列模式不介入：點圖示進頁面、滑過顯示飛出子選單，都由 WordPress 處理。
 		}
 		var rect = a.getBoundingClientRect();
 		if ( event.clientX < rect.right - 44 ) {

@@ -59,6 +59,13 @@ class YSMenuRouter {
 	private static bool $current_is_promoted = false;
 
 	/**
+	 * 已提升、但暫時還留在原父層的子選單列：[ 父層 slug, 子頁 slug ]。
+	 *
+	 * @var array<int, array{0:string,1:string}>
+	 */
+	private static array $promoted_rows = [];
+
+	/**
 	 * 輸出「分組標籤」CSS（帶標題的分隔列）。
 	 *
 	 * 無條件輸出（不依賴原生選單樣式皮膚是否啟用），讓 .ys-am-section-label
@@ -79,8 +86,9 @@ class YSMenuRouter {
 		$color = $s['color'];
 		$bg    = $s['bg'];
 
-		// 文字色：有設定＝該色不透明；未設定＝繼承選單色並淡化。
-		$color_rule = '' !== $color ? 'color:' . $color . ' !important;opacity:1 !important;' : 'opacity:.5 !important;';
+		// 文字色：有設定＝該色不透明；未設定＝繼承選單色並淡化。淡化只套在連結這一層，裡面的文字用
+		// inherit 跟著走：兩層各套一次會變成原本的四分之一，在深色側欄上幾乎看不見。
+		$color_rule = '' !== $color ? 'color:' . $color . ' !important;opacity:1 !important;' : 'opacity:.62 !important;';
 		$bg_rule    = '' !== $bg ? 'background:' . $bg . ' !important;' : 'background:transparent !important;';
 		// hover / focus / opensub 固定回非 hover 外觀（!important 蓋皮膚 runtime hover-bg）。
 		$hover_bg  = '' !== $bg ? $bg : 'transparent';
@@ -92,7 +100,8 @@ class YSMenuRouter {
 			. 'padding:' . $pt . 'px ' . $pr . 'px ' . $pb . 'px ' . $pl . 'px !important;'
 			. 'font-size:' . $fs . 'px !important;font-weight:' . $fw . ' !important;letter-spacing:.06em;text-transform:uppercase;'
 			. $color_rule . $bg_rule . 'box-shadow:none !important;}'
-			. '#adminmenu li.ys-am-section-label>a.menu-top .wp-menu-name{' . $color_rule . '}'
+			. '#adminmenu li.ys-am-section-label>a.menu-top .wp-menu-name{color:inherit !important;opacity:1 !important;'
+			. 'font-size:inherit !important;font-weight:inherit !important;line-height:1.4 !important;}'
 			. '#adminmenu li.ys-am-section-label>a.menu-top:hover,'
 			. '#adminmenu li.ys-am-section-label>a.menu-top:focus,'
 			. '#adminmenu li.ys-am-section-label.opensub>a.menu-top,'
@@ -101,6 +110,9 @@ class YSMenuRouter {
 			. 'background:' . $hover_bg . ' !important;color:' . $hover_col . ' !important;box-shadow:none !important;}'
 			. '#adminmenu li.ys-am-section-label .wp-menu-image,#adminmenu li.ys-am-section-label .wp-menu-arrow{display:none;}'
 			. '#adminmenu li.ys-am-section-label .wp-menu-name{padding-left:0;}'
+			// 側欄收成圖示列時（手動收合，或 783–960px 被 WordPress 自動收合）標籤沒有文字可顯示，整列收掉。
+			. '@media screen and (min-width:783px){.folded #adminmenu li.ys-am-section-label{display:none;}}'
+			. '@media screen and (min-width:783px) and (max-width:960px){.auto-fold #adminmenu li.ys-am-section-label{display:none;}}'
 			. '</style>';
 	}
 
@@ -293,14 +305,16 @@ class YSMenuRouter {
 			foreach ( $submenu[ $parent ] as $idx => $sub ) {
 				if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
 					$row = $sub;
-					unset( $submenu[ $parent ][ $idx ] );
+					// 這一列先留在原父層：WordPress 要靠它找回這個頁面註冊時的父層（權限檢查與 page hook
+					// 都從父層推導）。父層是外掛頂層（admin.php?page=…）時，提早拿掉會讓該頁對所有人 403。
+					// 輸出側欄前才由 prepare_menu_for_render() 拿掉，畫面上仍然只出現在頂層。
+					self::$promoted_rows[] = [ $parent, (string) $sub[2] ];
 					break;
 				}
 			}
 			if ( null === $row ) {
 				continue;
 			}
-			$submenu[ $parent ] = array_values( $submenu[ $parent ] );
 
 			// 頂層 icon：沿用原父層選單的 icon，找不到用預設。
 			$icon = 'dashicons-admin-generic';
@@ -386,6 +400,81 @@ class YSMenuRouter {
 		}
 
 		return $parent_file;
+	}
+
+	/**
+	 * 輸出側欄前的最後整理（掛在 parent_file filter，wp-admin/menu-header.php 一開始就會跑）。
+	 *
+	 * 這個時間點 WordPress 已經做完權限檢查、也算好 page hook，可以安全地：
+	 *   1. 把已提升的子選單列從原父層拿掉（頂層已有對應項）。
+	 *   2. 拿掉底下沒有任何選單的分組標籤（這個身分看不到該組的選單時）。
+	 *
+	 * @param string $parent_file WP 推導的父層檔案（原樣回傳）。
+	 */
+	public static function prepare_menu_for_render( $parent_file ) {
+		self::detach_promoted_rows();
+		self::prune_empty_section_labels();
+		return $parent_file;
+	}
+
+	private static function detach_promoted_rows(): void {
+		global $submenu;
+		if ( empty( self::$promoted_rows ) || ! is_array( $submenu ) ) {
+			return;
+		}
+
+		foreach ( self::$promoted_rows as [ $parent, $slug ] ) {
+			if ( empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+				continue;
+			}
+			foreach ( $submenu[ $parent ] as $idx => $sub ) {
+				if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
+					unset( $submenu[ $parent ][ $idx ] );
+					break;
+				}
+			}
+			$submenu[ $parent ] = array_values( $submenu[ $parent ] );
+
+			// 只剩「父選單自己」那一列時不必再展開成子選單（與 WordPress 自己的處理一致）。
+			if ( 1 === count( $submenu[ $parent ] ) && (string) ( $submenu[ $parent ][0][2] ?? '' ) === $parent ) {
+				unset( $submenu[ $parent ] );
+			}
+		}
+		self::$promoted_rows = [];
+	}
+
+	private static function prune_empty_section_labels(): void {
+		global $menu;
+		if ( ! is_array( $menu ) ) {
+			return;
+		}
+
+		$pending = null; // 後面還沒出現任何選單項的標籤。
+		foreach ( $menu as $key => $item ) {
+			$classes = is_array( $item ) ? (string) ( $item[4] ?? '' ) : '';
+			if ( false !== strpos( $classes, 'ys-am-section-label' ) ) {
+				if ( null !== $pending ) {
+					unset( $menu[ $pending ] );
+				}
+				$pending = $key;
+			} elseif ( false === strpos( $classes, 'wp-menu-separator' ) ) {
+				$pending = null;
+			}
+		}
+		if ( null !== $pending ) {
+			unset( $menu[ $pending ] );
+		}
+	}
+
+	/**
+	 * 分組標籤是 WordPress 以連結輸出的頂層項，但它不是可以點的東西：拿掉 href 與鍵盤焦點，
+	 * 避免用 Tab 走到它、按 Enter 之後跳到不存在的網址。
+	 */
+	public static function print_section_label_fix(): void {
+		echo '<script id="ys-am-section-label-fix">'
+			. 'document.querySelectorAll("#adminmenu li.ys-am-section-label > a").forEach(function(a){'
+			. 'a.removeAttribute("href");a.removeAttribute("aria-haspopup");a.setAttribute("tabindex","-1");});'
+			. '</script>';
 	}
 
 	/**
@@ -704,7 +793,7 @@ class YSMenuRouter {
 			}
 
 			$visible_slugs = self::normalize_slug_list_for_match( (array) ( $uo['visible_slugs'] ?? [] ) );
-			if ( ! empty( $visible_slugs ) && ! in_array( $slug, $visible_slugs, true ) ) {
+			if ( ! empty( $visible_slugs ) && ! self::whitelist_contains( $visible_slugs, $slug ) ) {
 				return false;
 			}
 			break;
@@ -714,7 +803,7 @@ class YSMenuRouter {
 		$key    = (string) $user_id;
 		if ( isset( $legacy[ $key ] ) && is_array( $legacy[ $key ] ) ) {
 			$visible_slugs = self::normalize_slug_list_for_match( (array) ( $legacy[ $key ]['visible_slugs'] ?? [] ) );
-			if ( ! empty( $visible_slugs ) && ! in_array( $slug, $visible_slugs, true ) ) {
+			if ( ! empty( $visible_slugs ) && ! self::whitelist_contains( $visible_slugs, $slug ) ) {
 				return false;
 			}
 		}
@@ -738,6 +827,68 @@ class YSMenuRouter {
 		}
 
 		return true;
+	}
+
+	/**
+	 * 白名單是否涵蓋這個 slug。
+	 *
+	 * 編輯畫面（post.php、term.php）與上傳端點沒有自己的選單項，勾不到；它們沿用所屬列表頁的結果，
+	 * 否則白名單裡的使用者看得到列表、卻打不開任何一筆。只在判斷「目前這個請求」時才這樣對應。
+	 *
+	 * @param array<int, string> $visible_slugs 已正規化的白名單。
+	 */
+	private static function whitelist_contains( array $visible_slugs, string $slug ): bool {
+		if ( in_array( $slug, $visible_slugs, true ) ) {
+			return true;
+		}
+		foreach ( self::request_owner_slugs( $slug ) as $owner ) {
+			if ( in_array( $owner, $visible_slugs, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 目前請求若是沒有選單項的編輯畫面，回傳它所屬的選單 slug（可能有多種寫法）。
+	 *
+	 * @return array<int, string>
+	 */
+	private static function request_owner_slugs( string $slug ): array {
+		global $pagenow;
+		if ( ! is_string( $pagenow ) || $slug !== $pagenow ) {
+			return [];
+		}
+
+		if ( 'post.php' === $slug ) {
+			$post_id   = isset( $_GET['post'] ) ? absint( wp_unslash( $_GET['post'] ) ) : ( isset( $_POST['post_ID'] ) ? absint( wp_unslash( $_POST['post_ID'] ) ) : 0 );
+			$post_type = $post_id > 0 ? (string) get_post_type( $post_id ) : '';
+			if ( '' === $post_type ) {
+				return [];
+			}
+			if ( 'attachment' === $post_type ) {
+				return [ 'upload.php' ];
+			}
+			return [ 'post' === $post_type ? 'edit.php' : 'edit.php?post_type=' . $post_type ];
+		}
+
+		if ( 'term.php' === $slug || 'edit-tags.php' === $slug ) {
+			$taxonomy  = isset( $_REQUEST['taxonomy'] ) ? sanitize_key( wp_unslash( $_REQUEST['taxonomy'] ) ) : 'post_tag';
+			$post_type = isset( $_REQUEST['post_type'] ) ? sanitize_key( wp_unslash( $_REQUEST['post_type'] ) ) : '';
+			$owners    = [ 'edit-tags.php?taxonomy=' . $taxonomy ];
+			if ( '' !== $post_type && 'post' !== $post_type ) {
+				// WordPress 註冊自訂文章類型的分類子選單時用 &amp;；設定頁存下來的是 &。兩種都比對。
+				$owners[] = 'edit-tags.php?taxonomy=' . $taxonomy . '&amp;post_type=' . $post_type;
+				$owners[] = 'edit-tags.php?taxonomy=' . $taxonomy . '&post_type=' . $post_type;
+			}
+			return self::normalize_slug_list_for_match( $owners );
+		}
+
+		if ( 'async-upload.php' === $slug || 'media-upload.php' === $slug ) {
+			return [ 'upload.php', 'media-new.php' ];
+		}
+
+		return [];
 	}
 
 	private static function is_ys_cart_namespace_slug( string $slug ): bool {
@@ -1013,6 +1164,13 @@ class YSMenuRouter {
 			return;
 		}
 
+		// admin-post.php 是表單處理端點、不是頁面：交給各 handler 自己的 capability 與 nonce 檢查。
+		// 擋在這裡會讓白名單裡的頁面送不出表單。
+		global $pagenow;
+		if ( 'admin-post.php' === $pagenow ) {
+			return;
+		}
+
 		// 「僅限本人」優先於 super-admin bypass：非綁定帳號（含其他 super-admin）直接擋直接訪問
 		$self_page = self::current_admin_request_slug();
 		if ( '' !== $self_page ) {
@@ -1054,8 +1212,8 @@ class YSMenuRouter {
 
 			// Layer 1：hide_ys_cart=true → 擋所有 ys- 開頭 slug
 			// Layer 2：visible_slugs 白名單模式
-			$visible = (array) ( $uo['visible_slugs'] ?? [] );
-			if ( ! empty( $visible ) && ! in_array( $page, $visible, true ) ) {
+			$visible = self::normalize_slug_list_for_match( (array) ( $uo['visible_slugs'] ?? [] ) );
+			if ( ! empty( $visible ) && ! self::whitelist_contains( $visible, $page ) ) {
 				self::deny_access( $page );
 			}
 		}
@@ -1080,11 +1238,18 @@ class YSMenuRouter {
 	 * @param string $page 用於 log / debug
 	 */
 	private static function current_admin_request_slug(): string {
+		global $pagenow, $plugin_page;
 		if ( isset( $_GET['page'] ) ) {
-			return self::normalize_admin_slug( (string) wp_unslash( $_GET['page'] ) );
+			// WordPress 載入外掛頁面前會先正規化 page 參數（去掉前後的斜線等），結果放在 $plugin_page。
+			// 用同一個值比對：直接拿網址上的原字串比，多打一個斜線就比不到、頁面卻照常載入。
+			if ( is_string( $plugin_page ?? null ) && '' !== $plugin_page ) {
+				return self::normalize_admin_slug( $plugin_page );
+			}
+			return is_string( $_GET['page'] )
+				? self::normalize_admin_slug( trim( str_replace( '\\', '/', (string) wp_unslash( $_GET['page'] ) ), '/' ) )
+				: '';
 		}
 
-		global $pagenow;
 		$script = is_string( $pagenow ) && '' !== $pagenow
 			? $pagenow
 			: basename( (string) ( $_SERVER['PHP_SELF'] ?? '' ) );
@@ -1105,11 +1270,70 @@ class YSMenuRouter {
 		// 留個 hook 給 dev 監控
 		do_action( 'ys_admin_menu_access_denied', $page, get_current_user_id() );
 
+		// 控制台是登入後的落點。它被規則擋下時，改送到這個帳號看得到的第一個選單，
+		// 不讓人一登入就看到 404；沒有任何看得到的選單才照舊顯示 404。
+		if ( 'index.php' === $page && 'GET' === strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) ) {
+			$target = self::first_accessible_menu_url();
+			if ( '' !== $target ) {
+				wp_safe_redirect( $target );
+				exit;
+			}
+		}
+
 		wp_die(
 			esc_html__( '此頁面不存在或您無權存取。', 'ys-admin-menu' ),
 			esc_html__( '404', 'ys-admin-menu' ),
 			[ 'response' => 404 ]
 		);
+	}
+
+	/**
+	 * 這個帳號目前看得到、也進得去的第一個選單的網址（控制台除外）；沒有就回空字串。
+	 *
+	 * admin_init 時 $menu 已經套完本外掛的規則，WordPress 也已拿掉沒有權限的項目。
+	 */
+	private static function first_accessible_menu_url(): string {
+		global $menu, $submenu;
+		if ( ! is_array( $menu ) ) {
+			return '';
+		}
+
+		foreach ( $menu as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$slug    = (string) ( $item[2] ?? '' );
+			$classes = (string) ( $item[4] ?? '' );
+			if ( '' === $slug || 'index.php' === $slug
+				|| false !== strpos( $classes, 'wp-menu-separator' )
+				|| false !== strpos( $classes, 'ys-am-section-label' ) ) {
+				continue;
+			}
+			if ( ! current_user_can( (string) ( $item[1] ?? 'read' ) ) ) {
+				continue;
+			}
+
+			// 有子選單時，WordPress 的頂層連結指向第一個子項。
+			$target = $slug;
+			if ( ! empty( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
+				$first = reset( $submenu[ $slug ] );
+				if ( is_array( $first ) && ! empty( $first[2] ) ) {
+					$target = (string) $first[2];
+				}
+			}
+			if ( ! self::current_user_can_access_admin_slug( $target ) ) {
+				continue;
+			}
+
+			$target = wp_specialchars_decode( $target );
+			if ( false !== strpos( $target, '.php' ) ) {
+				return admin_url( $target );
+			}
+			$url = function_exists( 'menu_page_url' ) ? (string) menu_page_url( $target, false ) : '';
+			return '' !== $url ? $url : admin_url( 'admin.php?page=' . rawurlencode( $target ) );
+		}
+
+		return '';
 	}
 
 	/**
@@ -1212,14 +1436,23 @@ class YSMenuRouter {
 	 *      'edit.php'  → 'menu-posts'
 	 *      'admin.php?page=ys-cart' → 'toplevel_page_ys-cart'
 	 *
-	 * 為了通用性，使用 [class*="ys-cart"] 與 [id*="{slug}"] selector，
-	 * 套用 a 顏色與 li > a 顏色。
+	 * 這些 id 無法從 slug 推導，所以從 $menu 讀出每一項實際輸出的 id 再產生規則。
 	 */
 	public static function output_colors(): void {
 		$config = self::get_config();
 		$items  = (array) ( $config['wp_native']['items'] ?? [] );
 		if ( empty( $items ) ) {
 			return;
+		}
+
+		// slug → 側欄 <li> 的 id。產生方式與 wp-admin/menu-header.php 相同（核心選單的 id 是
+		// menu-dashboard、menu-pages 這種語意名稱，無法從 slug 推出來，只能查 $menu）。
+		global $menu;
+		$id_by_slug = [];
+		foreach ( (array) $menu as $menu_item ) {
+			if ( is_array( $menu_item ) && isset( $menu_item[2] ) && ! empty( $menu_item[5] ) ) {
+				$id_by_slug[ (string) $menu_item[2] ] = (string) preg_replace( '|[^a-zA-Z0-9_:.]|', '-', (string) $menu_item[5] );
+			}
 		}
 
 		$rules = [];
@@ -1236,14 +1469,14 @@ class YSMenuRouter {
 			if ( ! $color ) {
 				continue;
 			}
-			$id_safe = sanitize_html_class( str_replace( [ '.php', '?', '=', '&' ], '-', $slug ) );
-			if ( '' === $id_safe ) {
-				continue;
+			$li_id = $id_by_slug[ $slug ] ?? '';
+			if ( '' === $li_id ) {
+				continue; // 這個身分的側欄沒有這一項。
 			}
-			// 同時匹配 toplevel_page_{slug} / menu-{id_safe} 兩種 WP 命名
+			// 文字與字型圖示一起上色：啟用原生選單樣式時，文字與圖示各有自己的顏色規則，只改連結看不出來。
 			$rules[] = sprintf(
-				'#adminmenu li#menu-%1$s > a, #adminmenu li#toplevel_page_%1$s > a { color: %2$s !important; }',
-				esc_attr( $id_safe ),
+				'#adminmenu li#%1$s > a.menu-top, #adminmenu li#%1$s > a.menu-top .wp-menu-name, #adminmenu li#%1$s > a.menu-top .wp-menu-image::before { color: %2$s !important; }',
+				esc_attr( $li_id ),
 				esc_attr( $color )
 			);
 		}

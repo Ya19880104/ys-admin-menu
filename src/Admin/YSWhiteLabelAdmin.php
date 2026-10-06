@@ -79,11 +79,6 @@ class YSWhiteLabelAdmin {
 		// 白牌頁啟用 indigo design system（body.ysca-wl-active 讓 whitelabel.css 生效）。
 		add_filter( 'admin_body_class', [ self::class, 'add_wl_body_class' ] );
 
-		// 隱藏 admin bar 左上角的 WordPress LOGO（白牌：前後台 admin bar 都移除）。
-		if ( self::get_hide_wp_logo() ) {
-			add_action( 'admin_bar_menu', [ self::class, 'remove_wp_logo_node' ], 999 );
-		}
-
 		// 整個後台背景色（有設定才輸出，無條件套用、不需啟用主題皮膚）。
 		if ( '' !== self::get_admin_bg_color() ) {
 			add_action( 'admin_head', [ self::class, 'print_admin_bg_style' ] );

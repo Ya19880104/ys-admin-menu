@@ -111,7 +111,9 @@ class YSPermissionController {
 			'site'        => get_site_url(),
 			'exported_at' => gmdate( 'c' ),
 			'menu'        => (array) get_option( YSMenuRouter::OPTION_KEY, [] ),
-			'theme'       => (array) get_option( \YangSheep\AdminMenu\Theme\YSAdminThemeRenderer::OPTION_KEY, [] ),
+			// 匯出實際生效的樣式（已存的值疊上預設值）。從沒存過樣式的站若只匯出空陣列，
+			// 匯入端會把它存成「停用」，外觀就和來源站不一樣了。
+			'theme'       => \YangSheep\AdminMenu\Theme\YSAdminThemeRenderer::effective_config(),
 			'whitelabel'  => $whitelabel,
 		];
 
@@ -310,7 +312,11 @@ class YSPermissionController {
 		if ( isset( $payload['wp_native'] ) && is_array( $payload['wp_native'] ) ) {
 			$slice = $payload['wp_native'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
-				$existing['wp_native']['items'] = self::sanitize_native_items( $slice['items'] );
+				$existing['wp_native']['items'] = self::merge_unrendered_items(
+					self::sanitize_native_items( $slice['items'] ),
+					(array) ( $existing['wp_native']['items'] ?? [] ),
+					$slice['rendered_slugs'] ?? null
+				);
 			}
 		}
 
@@ -318,7 +324,11 @@ class YSPermissionController {
 		if ( isset( $payload['ys_cart'] ) && is_array( $payload['ys_cart'] ) ) {
 			$slice = $payload['ys_cart'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
-				$existing['ys_cart']['items'] = self::sanitize_ys_cart_items( $slice['items'] );
+				$existing['ys_cart']['items'] = self::merge_unrendered_items(
+					self::sanitize_ys_cart_items( $slice['items'] ),
+					(array) ( $existing['ys_cart']['items'] ?? [] ),
+					$slice['rendered_slugs'] ?? null
+				);
 			}
 			if ( isset( $slice['hide_for_user_ids'] ) ) {
 				$existing['ys_cart']['hide_for_user_ids'] = self::sanitize_user_id_list( $slice['hide_for_user_ids'] );
@@ -360,6 +370,48 @@ class YSPermissionController {
 			[ 'success' => true, 'saved_at' => time() ],
 			200
 		);
+	}
+
+	/**
+	 * 把「頁面上沒列出來」的既有設定併回這次要存的清單。
+	 *
+	 * 設定頁只列得出目前登入者的側欄裡有的選單。別的管理員設成「僅限本人」的列、暫時停用的外掛的
+	 * 選單、只有其他角色才有的選單（例如非管理員的「個人資料」）都不在頁面上；整段取代的話，
+	 * 按一次儲存它們的設定就消失。這裡只保留「頁面載入時沒列出」的列——使用者自己按 × 移除的列
+	 * 在載入時有列出，仍然照他的意思刪掉。
+	 *
+	 * @param array<int, array<string, mixed>> $submitted 這次送出的列（已清理）。
+	 * @param array<int, array<string, mixed>> $stored    目前已存的列。
+	 * @param mixed                            $rendered  頁面載入時列出的全部 slug；沒帶就維持整段取代（匯入、舊版頁面）。
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function merge_unrendered_items( array $submitted, array $stored, $rendered ): array {
+		if ( ! is_array( $rendered ) ) {
+			return $submitted;
+		}
+
+		$known = [];
+		foreach ( $rendered as $slug ) {
+			if ( is_string( $slug ) && '' !== $slug ) {
+				$known[ sanitize_text_field( $slug ) ] = true;
+			}
+		}
+		foreach ( $submitted as $row ) {
+			if ( empty( $row['separator'] ) && isset( $row['slug'] ) ) {
+				$known[ (string) $row['slug'] ] = true;
+			}
+		}
+
+		foreach ( $stored as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) ) {
+				continue;
+			}
+			if ( ! isset( $known[ (string) $row['slug'] ] ) ) {
+				$submitted[] = $row;
+			}
+		}
+
+		return $submitted;
 	}
 
 	/**
