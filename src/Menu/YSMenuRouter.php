@@ -53,10 +53,33 @@ class YSMenuRouter {
 		// v1.1.1：hook 型提升頁，WP 核心以 $self（請求檔名）比對仍會讓原父層帶
 		// current/展開 class（繞過 parent_file filter）→ footer 收斂殘留 class。
 		add_action( 'admin_footer', [ self::class, 'print_promoted_highlight_fix' ], 5 );
+		// v1.3.0：子選單「複製到主選單」——原位置在這個帳號的側欄裡看不到時，目前頁的高亮改標在複製項。
+		// 判斷排在 fix_promoted_highlight（10）之後；實際改 class 在 footer（WordPress 在 parent_file
+		// filter 之後還會用 get_admin_page_parent() 重算父選單，伺服器端改不動）。
+		add_filter( 'parent_file', [ self::class, 'fix_copy_highlight' ], 11 );
+		add_action( 'admin_footer', [ self::class, 'print_copy_highlight_fix' ], 5 );
 	}
 
 	/** 目前請求是否為「已提升」頁（由 fix_promoted_highlight 判定後設定）。 */
 	private static bool $current_is_promoted = false;
+
+	/**
+	 * v1.3.0：本次請求實際插入側欄的「複製到主選單」項目：選單代稱（$menu[2]）=> 來源資訊。
+	 *
+	 * @var array<string, array{id:string,slug:string,parent:string,title:string,parent_title:string,parent_icon:string}>
+	 */
+	private static array $copy_entries = [];
+
+	/** v1.3.0：本次請求改標在複製項上的選單代稱（只有原位置看不到時才有值）。 */
+	private static string $current_copy_key = '';
+
+	/**
+	 * v1.3.0：過濾前的頂層選單（複製項沿用原父選單圖示與位置、設定頁顯示原位置用）：
+	 * 選單代稱 => [ $menu 鍵, 圖示, 名稱 ]。
+	 *
+	 * @var array<string, array{key:int|string,icon:string,title:string}>
+	 */
+	private static array $parent_meta = [];
 
 	/**
 	 * 已提升、但暫時還留在原父層的子選單列：[ 父層 slug, 子頁 slug ]。
@@ -176,6 +199,10 @@ class YSMenuRouter {
 			self::promote_submenus_to_top( $ys_cart_items );
 		}
 
+		// 1.6 v1.3.0：記下各頂層選單的圖示與名稱。複製項預設沿用原父選單的圖示；原父選單對這個帳號
+		//     隱藏時，過濾之後就查不到了，所以在過濾之前先記。
+		self::remember_parent_menus( $config );
+
 		// ─────────────────────────────────────────────
 		// 2. WP 原生選單 — role-based 過濾
 		// ─────────────────────────────────────────────
@@ -205,11 +232,17 @@ class YSMenuRouter {
 		// 5.「僅限本人」：不分 super-admin，綁定特定帳號的選單只有該帳號的 sidebar 看得到
 		self::apply_self_only_filter( $config, $current_user_id );
 
+		// 5.5 v1.3.0：子選單「複製到主選單」（top_copies）。放在所有過濾之後：原子選單對這個帳號
+		//     還在（沒被隱藏、角色、僅限本人、白名單拿掉），複製項才會出現；複製項自己的
+		//     隱藏／角色／僅限本人在插入時另外判斷。
+		self::insert_top_level_copies( $config, $current_user_id, $user_roles );
+
 		// ─────────────────────────────────────────────
 		// 5. 重新排序頂層 + 注入分隔列
+		//    v1.3.0：還沒排過序的複製項跟著原父選單（with_copy_placeholders）。
 		// ─────────────────────────────────────────────
 		if ( ! empty( $wp_native_items ) ) {
-			self::reorder_and_insert_separators( $wp_native_items );
+			self::reorder_and_insert_separators( self::with_copy_placeholders( $wp_native_items ) );
 		}
 
 		// ─────────────────────────────────────────────
@@ -495,6 +528,453 @@ class YSMenuRouter {
 			. '.forEach(function(li){li.classList.remove("wp-has-current-submenu","wp-menu-open");'
 			. 'li.classList.add("wp-not-current-submenu");});'
 			. '</script>';
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.3.0：子選單「複製到主選單」（top_copies）
+	//
+	// 設定：
+	//   - top_copies.items[] = { slug, parent_slug }：要複製的子選單（原子選單保留在原位）。
+	//   - 複製項在主選單的排序、改名、圖示、顏色、角色、隱藏、僅限本人，存在「主選單（頂層）」分頁
+	//     （wp_native.items[]），slug 是 copy_menu_key() 算出的選單代稱，跟一般頂層項同一套欄位。
+	// ─────────────────────────────────────────────
+
+	/**
+	 * v1.3.0：「複製到主選單」頂層項的選單代稱（$menu[2]，也就是側欄連結）。
+	 *
+	 * 與「移到主選單」一樣以原生父層組合連結（promoted_menu_url，AME original-parent URL 策略），
+	 * 前面再加 "./"：
+	 *   - 瀏覽器把 ./options-writing.php 解析成與原子選單完全相同的網址，伺服器收到的請求一樣，
+	 *     page hook、權限檢查、載入流程照舊命中。
+	 *   - 字串和原子選單、父選單都不一樣。WordPress 用 $menu[2] 比對目前頁（$self、$parent_file）、
+	 *     也用它當 $submenu 的索引；若和原子選單同字串，會把複製項也標成目前頁，複製「設定 → 一般」
+	 *     （options-general.php 與父選單同名）時還會把整組設定子選單掛到複製項底下。
+	 *   - 字串只由來源決定：同一個子選單只會有一個複製項（同 Admin Menu Editor「頂層連結不得重複」
+	 *     的規則），主選單分頁的設定、匯出匯入都以它為鍵，換網域也不變。
+	 * 外部網址（含 ://）原樣使用；結果含引號、角括號、空白或反斜線時不建立複製項（避免破壞側欄 HTML）。
+	 */
+	public static function copy_menu_key( string $slug, string $parent ): string {
+		$slug   = trim( wp_specialchars_decode( $slug ) );
+		$parent = trim( wp_specialchars_decode( $parent ) );
+		if ( '' === $slug || '' === $parent ) {
+			return '';
+		}
+
+		if ( preg_match( '#^[a-z][a-z0-9+.\-]*://#i', $slug ) ) {
+			$url = $slug;
+		} else {
+			$url  = self::promoted_menu_url( $slug, $parent );
+			$file = explode( '?', $slug, 2 )[0];
+			// 舊式外掛頁的代稱是外掛目錄裡的檔案（例：my-plugin/page.php），WordPress 以 ?page= 開啟它。
+			if ( $url === $slug && false !== strpos( $file, '/' )
+				&& defined( 'WP_PLUGIN_DIR' ) && is_file( WP_PLUGIN_DIR . '/' . $file ) ) {
+				$base = ( false !== strpos( $parent, '.php' ) && false === strpos( $parent, '/' ) ) ? $parent : 'admin.php';
+				$url  = $base . ( false === strpos( $base, '?' ) ? '?' : '&' ) . 'page=' . $slug;
+			}
+			$url = './' . $url;
+		}
+
+		return preg_match( '/[\'"<>\s\\\\]/', $url ) ? '' : $url;
+	}
+
+	/**
+	 * v1.3.0：這次請求插入側欄的複製項（設定頁標示「複製」、排序與 badge 用）。
+	 *
+	 * @return array<string, array{id:string,slug:string,parent:string,title:string,parent_title:string,parent_icon:string}>
+	 */
+	public static function copy_entries(): array {
+		return self::$copy_entries;
+	}
+
+	/**
+	 * v1.3.0：複製項的圖示只接受 WordPress 側欄認得的格式。
+	 *
+	 * dashicons-*、none／div（不顯示圖示）、data:image/svg+xml;base64、http(s) 圖片網址；其餘回空字串（沿用原父選單圖示）。
+	 */
+	public static function sanitize_menu_icon( string $icon ): string {
+		$icon = trim( $icon );
+		if ( '' === $icon ) {
+			return '';
+		}
+		if ( preg_match( '/^dashicons-[a-z0-9-]+$/', $icon ) || 'none' === $icon || 'div' === $icon ) {
+			return $icon;
+		}
+		if ( preg_match( '#^data:image/svg\+xml;base64,[A-Za-z0-9+/=]+$#', $icon ) ) {
+			return strlen( $icon ) <= 20000 ? $icon : '';
+		}
+		if ( preg_match( '#^https?://#i', $icon ) && function_exists( 'esc_url_raw' ) ) {
+			return (string) esc_url_raw( $icon, [ 'http', 'https' ] );
+		}
+		return '';
+	}
+
+	/**
+	 * v1.3.0：把「複製到主選單」的子選單插入為頂層項（原子選單保留在原位）。
+	 *
+	 * 顯示規則：
+	 *   - 原子選單這時還在 $submenu 裡（沒被本外掛的隱藏、角色、僅限本人、白名單規則拿掉）才插入；
+	 *     複製項沿用原子選單的 capability，WordPress 稍後照同一個權限拿掉沒權限的人看到的複製項。
+	 *   - 複製項自己的規則（主選單分頁以 copy_menu_key 為 slug 的那一列）：僅限本人對所有人生效；
+	 *     隱藏、角色對 super admin 以外生效——與其他選單一致。它們只管複製項，不會擋原頁面。
+	 *   - 位置：插在原父選單正下方；主選單分頁排過序之後依設定（見 with_copy_placeholders）。
+	 *   - 圖示：主選單分頁設定的圖示，沒設定沿用原父選單的圖示。
+	 */
+	private static function insert_top_level_copies( array $config, int $user_id, array $user_roles ): void {
+		global $menu;
+
+		self::$copy_entries     = [];
+		self::$current_copy_key = '';
+
+		$copies = $config['top_copies']['items'] ?? [];
+		if ( empty( $copies ) || ! is_array( $copies ) || ! is_array( $menu ) ) {
+			return;
+		}
+
+		$native_rows = [];
+		foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
+				$native_rows[ (string) $row['slug'] ] = $row;
+			}
+		}
+
+		$is_super   = is_super_admin( $user_id );
+		$last_after = []; // 父選單鍵 => 最後一個插在它後面的鍵（同一個父選單的多個複製項依設定順序排）。
+
+		foreach ( $copies as $copy ) {
+			if ( ! is_array( $copy ) ) {
+				continue;
+			}
+			$slug   = (string) ( $copy['slug'] ?? '' );
+			$parent = (string) ( $copy['parent_slug'] ?? '' );
+			$key    = self::copy_menu_key( $slug, $parent );
+			if ( '' === $key || isset( self::$copy_entries[ $key ] ) ) {
+				continue;
+			}
+
+			$source = self::find_copy_source( $parent, $slug );
+			if ( null === $source ) {
+				continue; // 原子選單不在（外掛停用，或這個帳號看不到、進不去）。
+			}
+			[ $row, $real_parent ] = $source;
+
+			$own     = $native_rows[ $key ] ?? [];
+			$own_uid = (int) ( $own['self_only_uid'] ?? 0 );
+			if ( $own_uid > 0 && $own_uid !== $user_id ) {
+				continue;
+			}
+			if ( ! $is_super ) {
+				if ( ! empty( $own['hide'] ) ) {
+					continue;
+				}
+				$allowed = array_values( array_filter( array_map( 'sanitize_key', (array) ( $own['roles'] ?? [] ) ) ) );
+				if ( ! empty( $allowed ) && empty( array_intersect( $user_roles, $allowed ) ) ) {
+					continue;
+				}
+			}
+
+			$parent_entry = self::find_menu_entry( $real_parent );
+			$parent_meta  = self::$parent_meta[ $real_parent ] ?? ( self::$parent_meta[ $parent ] ?? [ 'icon' => '', 'title' => $parent ] );
+			$parent_icon  = '' !== $parent_meta['icon'] ? $parent_meta['icon'] : 'dashicons-admin-generic';
+			$icon         = self::sanitize_menu_icon( (string) ( $own['icon'] ?? '' ) );
+			$title        = (string) ( $row[0] ?? $slug );
+			$id_base      = substr( md5( $parent . '|' . $slug ), 0, 10 );
+
+			$entry = [
+				$title,
+				(string) ( $row[1] ?? 'read' ),
+				$key,
+				(string) ( $row[3] ?? wp_strip_all_tags( $title ) ),
+				'menu-top ys-am-copy menu-top-ys-am-copy-' . $id_base,
+				'ys-am-copy-' . $id_base,
+				'' !== $icon ? $icon : $parent_icon,
+			];
+
+			// 原父選單對這個帳號隱藏時，仍用它原本的鍵排位置（WordPress 之後依鍵排序）。
+			$base = null !== $parent_entry ? $parent_entry[0] : ( $parent_meta['key'] ?? null );
+			if ( null !== $base ) {
+				$last_after[ (string) $base ] = self::insert_menu_entry_after(
+					$last_after[ (string) $base ] ?? ( null !== $parent_entry ? $base : null ),
+					$base,
+					$entry
+				);
+			} else {
+				self::insert_menu_entry_after( null, null, $entry );
+			}
+
+			self::$copy_entries[ $key ] = [
+				'id'           => 'ys-am-copy-' . $id_base,
+				'slug'         => $slug,
+				'parent'       => $parent,
+				'title'        => trim( wp_strip_all_tags( $title ) ),
+				'parent_title' => $parent_meta['title'],
+				'parent_icon'  => $parent_icon,
+			];
+		}
+	}
+
+	/**
+	 * v1.3.0：記下各頂層選單的圖示與名稱（只在設定裡有複製項時才做）。
+	 */
+	private static function remember_parent_menus( array $config ): void {
+		global $menu;
+
+		self::$parent_meta = [];
+		if ( empty( $config['top_copies']['items'] ) || ! is_array( $menu ) ) {
+			return;
+		}
+		foreach ( $menu as $k => $m ) {
+			if ( is_array( $m ) && ! empty( $m[2] ) ) {
+				$title = trim( wp_strip_all_tags( (string) ( $m[0] ?? '' ) ) );
+				self::$parent_meta[ (string) $m[2] ] = [
+					'key'   => $k,
+					'icon'  => (string) ( $m[6] ?? '' ),
+					'title' => '' !== $title ? $title : (string) $m[2],
+				];
+			}
+		}
+	}
+
+	/**
+	 * v1.3.0：在 $submenu 裡找複製來源的那一列。
+	 *
+	 * 父選單被 WordPress 換過代稱（這個帳號進不了父選單本身時，$_wp_real_parent_file）也找得到。
+	 * 代稱比對前先還原 &amp;（自訂文章類型的分類子選單以 &amp; 註冊，設定頁存的是 &）。
+	 *
+	 * @return array{0:array<int,mixed>,1:string}|null [ 子選單列, 實際父選單代稱 ]
+	 */
+	private static function find_copy_source( string $parent, string $slug ): ?array {
+		global $submenu, $_wp_real_parent_file;
+		if ( ! is_array( $submenu ) ) {
+			return null;
+		}
+
+		$want    = wp_specialchars_decode( $slug );
+		$parents = [ $parent ];
+		if ( is_array( $_wp_real_parent_file ?? null ) && isset( $_wp_real_parent_file[ $parent ] ) ) {
+			$parents[] = (string) $_wp_real_parent_file[ $parent ];
+		}
+
+		foreach ( array_unique( $parents ) as $p ) {
+			if ( empty( $submenu[ $p ] ) || ! is_array( $submenu[ $p ] ) ) {
+				continue;
+			}
+			foreach ( $submenu[ $p ] as $sub ) {
+				if ( is_array( $sub ) && wp_specialchars_decode( (string) ( $sub[2] ?? '' ) ) === $want ) {
+					return [ $sub, (string) $p ];
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * v1.3.0：找頂層選單項。
+	 *
+	 * @return array{0:int|string,1:array<int,mixed>}|null [ $menu 鍵, 選單項 ]
+	 */
+	private static function find_menu_entry( string $slug ): ?array {
+		global $menu;
+		foreach ( (array) $menu as $k => $m ) {
+			if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $slug ) {
+				return [ $k, $m ];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * v1.3.0：把一個頂層項插在指定鍵之後（陣列順序與鍵的排序都緊接在後）；沒有基準鍵就接在最後。
+	 *
+	 * WordPress 在 admin_menu 之後以 strnatcasecmp 依鍵排序 $menu，所以新鍵是「父選單鍵.0001」
+	 * 這類字串（排在父選單之後、下一個整數之前；同一個父選單的第二個是 .0002）；陣列裡也緊接在後，
+	 * 給之後依陣列順序重排的程式（reorder_and_insert_separators）用。父選單這次不在 $menu 裡時
+	 * （對這個帳號隱藏），只用它原本的鍵產生新鍵、接在陣列最後。
+	 *
+	 * @param int|string|null   $after_key 要接在哪個鍵之後（同一個父選單的上一個複製項，或父選單本身）。
+	 * @param int|string|null   $base_key  新鍵以哪個鍵為基準（父選單的鍵）。
+	 * @param array<int, mixed> $entry     頂層選單項。
+	 * @return int|string 新項目的鍵。
+	 */
+	private static function insert_menu_entry_after( $after_key, $base_key, array $entry ) {
+		global $menu;
+
+		if ( null === $base_key ) {
+			$menu[] = $entry;
+			end( $menu );
+			return key( $menu );
+		}
+
+		$n = 1;
+		do {
+			$new_key = (string) $base_key . '.' . str_pad( (string) $n, 4, '0', STR_PAD_LEFT );
+			++$n;
+		} while ( array_key_exists( $new_key, $menu ) );
+
+		if ( null === $after_key || ! array_key_exists( $after_key, $menu ) ) {
+			$menu[ $new_key ] = $entry; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
+			return $new_key;
+		}
+
+		$rebuilt = [];
+		foreach ( $menu as $k => $m ) {
+			$rebuilt[ $k ] = $m;
+			if ( (string) $k === (string) $after_key ) {
+				$rebuilt[ $new_key ] = $entry;
+			}
+		}
+		$menu = $rebuilt; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
+
+		return $new_key;
+	}
+
+	/**
+	 * v1.3.0：主選單分頁還沒排過序的複製項，排序時跟在原父選單之後（同一個 order，穩定排序保留先後）。
+	 *
+	 * 原父選單也沒排過序時不必處理：兩者都接在已排序項目之後，複製項本來就緊接在父選單後面。
+	 *
+	 * @param array<int, array<string, mixed>> $wp_native_items wp_native.items[]
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function with_copy_placeholders( array $wp_native_items ): array {
+		if ( empty( self::$copy_entries ) ) {
+			return $wp_native_items;
+		}
+
+		$order_by_slug = [];
+		foreach ( $wp_native_items as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && isset( $row['slug'] ) ) {
+				$order_by_slug[ (string) $row['slug'] ] = (int) ( $row['order'] ?? 0 );
+			}
+		}
+
+		foreach ( self::$copy_entries as $key => $info ) {
+			if ( isset( $order_by_slug[ $key ] ) || ! isset( $order_by_slug[ $info['parent'] ] ) ) {
+				continue;
+			}
+			$wp_native_items[] = [
+				'slug'  => $key,
+				'order' => $order_by_slug[ $info['parent'] ],
+			];
+		}
+
+		return $wp_native_items;
+	}
+
+	/**
+	 * v1.3.0：同一頁在側欄有兩個入口（原位置＋複製項）時，「目前所在」只標一個。
+	 *
+	 * 規則：原位置優先。原位置在這個帳號的側欄裡看得到時，完全交給 WordPress 原生判斷——原父選單
+	 * 展開、原子選單標為目前頁；複製項的代稱前面有 "./"，WordPress 不會把它當成目前頁，所以不必處理。
+	 * 原位置看不到時（例如原父選單對這個帳號隱藏），才把高亮改標在指向目前頁的複製項
+	 * （print_copy_highlight_fix）。目前頁是「已提升」頁時沿用提升的規則（提升後的頂層項就是原位置）。
+	 *
+	 * 這裡只做判斷、原樣回傳：WordPress 在這個 filter 之後會用 get_admin_page_parent() 依 $submenu
+	 * 重算父選單，複製來源那一列一直在 $submenu 裡，改了也會被蓋回去。
+	 *
+	 * @param string $parent_file WP 推導的父層檔案。
+	 */
+	public static function fix_copy_highlight( $parent_file ) {
+		global $menu, $self, $typenow;
+
+		self::$current_copy_key = '';
+		if ( self::$current_is_promoted || empty( self::$copy_entries ) || ! is_array( $menu ) ) {
+			return $parent_file;
+		}
+
+		$present = [];
+		foreach ( $menu as $m ) {
+			if ( ! is_array( $m ) ) {
+				continue;
+			}
+			$item = (string) ( $m[2] ?? '' );
+			if ( isset( self::$copy_entries[ $item ] ) ) {
+				$present[ $item ] = true;
+				continue;
+			}
+			// 這一項會被 WordPress 標成目前所在（與 menu-header.php 的判斷相同）＝原位置看得到。
+			if ( '' !== $item
+				&& ( ( is_string( $parent_file ) && '' !== $parent_file && $item === $parent_file )
+					|| ( empty( $typenow ) && is_string( $self ) && $self === $item ) ) ) {
+				return $parent_file;
+			}
+		}
+
+		foreach ( self::$copy_entries as $key => $info ) {
+			if ( isset( $present[ $key ] ) && self::copy_matches_request( $info['slug'] ) ) {
+				self::$current_copy_key = $key;
+				break;
+			}
+		}
+
+		return $parent_file;
+	}
+
+	/**
+	 * v1.3.0：原位置看不到時，把目前頁標在複製項上（footer，早於其他 footer script）。
+	 *
+	 * 先拿掉側欄裡其他「目前所在」的標記（原父選單被隱藏時通常沒有），確保只標一個。
+	 */
+	public static function print_copy_highlight_fix(): void {
+		if ( '' === self::$current_copy_key || ! isset( self::$copy_entries[ self::$current_copy_key ] ) ) {
+			return;
+		}
+		$id = self::$copy_entries[ self::$current_copy_key ]['id'];
+
+		echo '<script id="ys-am-copy-highlight-fix">(function(){'
+			. 'var li=document.getElementById(' . wp_json_encode( $id ) . ');if(!li){return;}'
+			. 'document.querySelectorAll("#adminmenu li.wp-has-current-submenu,#adminmenu li.wp-has-current-submenu > a").forEach(function(el){'
+			. 'el.classList.remove("wp-has-current-submenu","wp-menu-open");el.classList.add("wp-not-current-submenu");});'
+			. 'document.querySelectorAll("#adminmenu .current").forEach(function(el){el.classList.remove("current");el.removeAttribute("aria-current");});'
+			. 'var a=li.querySelector(":scope > a");'
+			. '[li,a].forEach(function(el){if(el){el.classList.remove("wp-not-current-submenu");el.classList.add("current");}});'
+			. 'if(a){a.setAttribute("aria-current","page");}'
+			. '})();</script>';
+	}
+
+	/**
+	 * v1.3.0：目前請求是不是複製來源的那一頁（只在原位置看不到、要改標複製項時用）。
+	 *
+	 * 外掛頁比 page 參數；.php 頁比檔名，代稱帶的查詢參數也要相同（edit.php／post-new.php 沒帶
+	 * post_type 時視為 post，與 WordPress 一致）。
+	 */
+	private static function copy_matches_request( string $slug ): bool {
+		global $pagenow, $plugin_page;
+
+		$slug = trim( wp_specialchars_decode( $slug ) );
+		if ( '' === $slug ) {
+			return false;
+		}
+		$page = ( is_string( $plugin_page ?? null ) && '' !== $plugin_page ) ? (string) $plugin_page : '';
+
+		if ( '' !== $page || false === strpos( $slug, '.php' ) ) {
+			return '' !== $page && $page === $slug;
+		}
+
+		$parts = explode( '?', $slug, 2 );
+		if ( ! is_string( $pagenow ) || $parts[0] !== $pagenow ) {
+			return false;
+		}
+
+		$args = [];
+		if ( isset( $parts[1] ) ) {
+			wp_parse_str( $parts[1], $args );
+		}
+		$post_default = in_array( $parts[0], [ 'edit.php', 'post-new.php' ], true );
+		if ( $post_default && ! isset( $args['post_type'] ) ) {
+			$args['post_type'] = 'post';
+		}
+
+		foreach ( $args as $name => $value ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只比對網址，不處理資料。
+			$current = isset( $_GET[ $name ] ) && is_string( $_GET[ $name ] ) ? (string) wp_unslash( $_GET[ $name ] ) : null;
+			if ( null === $current && 'post_type' === $name && $post_default ) {
+				$current = 'post';
+			}
+			if ( ! is_string( $value ) || $current !== $value ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

@@ -686,3 +686,376 @@
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-line code {
     color: #94a3b8;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * v1.3.0 — 子選單「移到主選單」「複製到主選單」
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 操作欄：膠囊按鈕 ── */
+.ys-ec-permission-admin .ys-ec-permission-table td.ys-ec-row-actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 26px;
+    margin: 2px 0 2px 4px;
+    padding: 2px 10px 2px 7px;
+    color: #4338ca;
+    background: #ffffff;
+    border: 1px solid #c7d2fe;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn .dashicons {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn:hover {
+    background: #eef2ff;
+    border-color: #a5b4fc;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 1px;
+}
+
+.ys-ec-permission-admin .ys-ec-move-btn.is-active,
+.ys-ec-permission-admin .ys-ec-move-btn[aria-pressed="true"] {
+    color: #3730a3;
+    background: #eef2ff;
+    border-color: #818cf8;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-btn {
+    color: #0f766e;
+    border-color: #99f6e4;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-btn:hover {
+    background: #f0fdfa;
+    border-color: #5eead4;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-btn.is-copied,
+.ys-ec-permission-admin .ys-ec-copy-btn:disabled {
+    color: #15803d;
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    cursor: default;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn--danger {
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.ys-ec-permission-admin .ys-ec-row-btn--danger:hover {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+/* ── 複製區（拖進來或按按鈕＝複製到主選單，原位置保留） ── */
+.ys-ec-permission-admin .ys-ec-copy-zone .ys-ec-copy-zone__hint td {
+    padding: 10px 14px;
+    color: #0f766e;
+    background: #f0fdfa;
+    border: 2px dashed #99f6e4;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-zone .ys-ec-copy-zone__hint .dashicons {
+    margin-right: 2px;
+    color: #14b8a6;
+    vertical-align: middle;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-zone .ys-ec-copy-zone__hint code {
+    padding: 0 4px;
+    background: #ffffff;
+    border-radius: 3px;
+    letter-spacing: 2px;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-zone tr.ys-ec-copy-row > td {
+    background: #f7fefc;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-zone tr.ys-ec-copy-row .menu-line strong {
+    color: #115e59;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-zone tr.sortable-ghost > td {
+    background: #ccfbf1;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-row__icon {
+    color: #14b8a6;
+    text-align: center;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-row.is-inactive .menu-line {
+    opacity: 0.7;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-note,
+.ys-ec-permission-admin .ys-ec-self-note {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: 11.5px;
+    line-height: 1.45;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-note--pending {
+    color: #b45309;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge.level-copy {
+    color: #115e59;
+    background: #ccfbf1;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge.level-self {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+.ys-ec-permission-admin .ys-ec-copy-source {
+    color: #64748b;
+    font-size: 11.5px;
+}
+
+/* 主選單分頁：從子選單複製來的頂層項 */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-copy-top-row > td {
+    background: #f7fefc;
+}
+
+/* ── 父選單預設頁列（例：設定 → 一般）：與子頁同樣縮排與連接線，淡一點 ── */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] > td {
+    background: #fcfcfd;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] > td:nth-child(3) {
+    position: relative;
+    padding-left: 36px;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] > td:nth-child(3)::before {
+    content: "";
+    position: absolute;
+    left: 16px;
+    top: -3px;
+    bottom: 50%;
+    width: 9px;
+    border-left: 1.5px solid #c3c9d6;
+    border-bottom: 1.5px solid #c3c9d6;
+    border-bottom-left-radius: 5px;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] .menu-indent {
+    display: none;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] .menu-line strong {
+    color: #475569;
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] .menu-line code {
+    color: #94a3b8;
+}
+
+/* ── 複製項的圖示欄位 ── */
+.ys-ec-permission-admin .ys-ec-icon-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 320px;
+    margin-top: 4px;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: #334155;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-btn:hover,
+.ys-ec-permission-admin .ys-ec-icon-btn[aria-expanded="true"] {
+    color: #4338ca;
+    border-color: #6366f1;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-btn:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 1px;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-preview {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-preview.is-image {
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1px 6px;
+    color: #475569;
+    background: transparent;
+    border: 1px dashed #d1d5db;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.ys-ec-permission-admin .ys-ec-icon-input:focus {
+    color: #1f2937;
+    background: #ffffff;
+    border-color: #6366f1;
+    border-style: solid;
+    outline: 0;
+}
+
+/* 圖示挑選面板（掛在 body 底下，不在 .ys-ec-permission-admin 內） */
+.ys-ec-icon-picker {
+    position: absolute;
+    z-index: 100000;
+    width: 316px;
+    padding: 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+}
+
+.ys-ec-icon-picker[hidden] {
+    display: none;
+}
+
+.ys-ec-icon-picker__grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    max-height: 244px;
+    overflow-y: auto;
+}
+
+.ys-ec-icon-picker__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ys-ec-icon-picker__item:hover,
+.ys-ec-icon-picker__item:focus-visible {
+    color: #3730a3;
+    background: #eef2ff;
+    border-color: #a5b4fc;
+    outline: none;
+}
+
+.ys-ec-icon-picker__item.is-selected {
+    color: #ffffff;
+    background: #4f46e5;
+    border-color: #4338ca;
+}
+
+.ys-ec-icon-picker__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.ys-ec-icon-picker__reset {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    color: #334155;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 11.5px;
+    cursor: pointer;
+}
+
+.ys-ec-icon-picker__reset:hover {
+    color: #4338ca;
+    border-color: #6366f1;
+}
+
+/* ── 剛加入、剛切換的列閃一下 ── */
+@keyframes ys-ec-flash {
+    from {
+        background-color: #ccfbf1;
+        box-shadow: inset 4px 0 0 #14b8a6;
+    }
+    to {
+        box-shadow: inset 4px 0 0 transparent;
+    }
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-flash > td {
+    animation: ys-ec-flash 1.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-flash > td {
+        animation: none;
+    }
+}
+
+/* 中等寬度：操作欄按鈕上下排，讓選單欄保有寬度 */
+@media (max-width: 1280px) {
+    .ys-ec-permission-admin .ys-ec-permission-table td.ys-ec-row-actions {
+        white-space: normal;
+    }
+
+    .ys-ec-permission-admin .ys-ec-row-btn {
+        display: flex;
+        margin: 3px 0 3px auto;
+    }
+}

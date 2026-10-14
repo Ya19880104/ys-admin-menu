@@ -12,6 +12,9 @@
  *   - JS 啟動時直接用 server-rendered rows + 套 wpColorPicker + init Sortable
  *   - 「+ 新增空白標題」 / 「儲存」 / 「移除 row」 邏輯保留
  *
+ * v1.3.0（YS Admin Menu）：子選單「移到主選單」「複製到主選單」按鈕、複製區（按鈕或拖進來）、
+ *   主選單分頁的複製項（圖示、刪除）；儲存時多送 top_copies（只動頁面上列出的複製項）。
+ *
  * Dependencies：sortablejs（CDN 或 enqueue local）+ wp-color-picker（jQuery + WP API）
  *
  * @package YangSheep\Ecommerce
@@ -75,6 +78,15 @@
             function ( row ) { return row.getAttribute( 'data-slug' ); }
         );
 
+        // v1.3.0：「複製到主選單」。全部選單分頁＝複製區的列；主選單分頁＝標示「複製」的頂層列。
+        // 同 renderedSlugs：只動頁面上列出的複製項，伺服器保留沒列出的。
+        var copyZone = document.getElementById( 'ys-ec-copy-zone' );
+        var renderedCopies = collectCopies( tab );
+        if ( 'wp_native' === tab ) {
+            setupIconPickers( table );
+        }
+        syncCopyButtons();
+
         // 「+ 新增空白標題」 separator — 直接插入一列可即時編輯的分隔列（不用 prompt）
         if ( addSepBtn ) {
             addSepBtn.addEventListener( 'click', function () {
@@ -102,18 +114,50 @@
             } );
         }
 
-        // Delete row（event delegation）
-        tbody.addEventListener( 'click', function ( e ) {
-            var del = e.target.closest && e.target.closest( '.ys-ec-delete-row' );
-            if ( ! del ) {
+        // 列上的按鈕（event delegation）。綁在整張表上：提升區、複製區的列也要能按。
+        table.addEventListener( 'click', function ( e ) {
+            var btn = e.target.closest && e.target.closest( 'button' );
+            if ( ! btn || ! table.contains( btn ) ) {
                 return;
             }
-            var row = del.closest( 'tr' );
+            var row = btn.closest( 'tr' );
             if ( ! row ) {
                 return;
             }
-            if ( window.confirm( '確定要從清單移除？\n（不會真的刪除選單，只是不在管理範圍內）' ) ) {
-                row.parentNode.removeChild( row );
+
+            // 從清單移除（不會真的刪除選單）
+            if ( btn.classList.contains( 'ys-ec-delete-row' ) ) {
+                if ( window.confirm( '確定要從清單移除？\n（不會真的刪除選單，只是不在管理範圍內）' ) ) {
+                    row.parentNode.removeChild( row );
+                }
+                return;
+            }
+
+            // v1.3.0：移到主選單／移回原位＝切換「升頂層」勾選（提升區與勾選框由 change 事件同步）。
+            if ( btn.classList.contains( 'ys-ec-move-btn' ) ) {
+                var cb = row.querySelector( '.ys-ec-promote-cb' );
+                if ( cb ) {
+                    cb.checked = ! cb.checked;
+                    cb.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+                    flashRow( row );
+                }
+                return;
+            }
+
+            // v1.3.0：複製到主選單（原位置保留）。
+            if ( btn.classList.contains( 'ys-ec-copy-btn' ) ) {
+                if ( addCopyFromRow( row ) ) {
+                    setStatus( saveStatus, '已加入複製區，按「儲存設定」後出現在主選單', '#4338ca', 4000 );
+                }
+                return;
+            }
+
+            // v1.3.0：刪除複製項（全部選單分頁的複製區、主選單分頁的複製列）。原子選單不受影響。
+            if ( btn.classList.contains( 'ys-ec-copy-remove' ) || btn.classList.contains( 'ys-ec-delete-copy' ) ) {
+                if ( window.confirm( '確定刪除這個複製項？\n（只刪除主選單上的複製項，原子選單不受影響；按「儲存設定」後生效）' ) ) {
+                    row.parentNode.removeChild( row );
+                    syncCopyButtons();
+                }
             }
         } );
 
@@ -123,7 +167,10 @@
                 saveBtn.disabled = true;
                 setStatus( saveStatus, '儲存中…', '#6b7280' );
 
-                var rows = collectDataRows( tbody );
+                // 「父選單預設頁」列只提供複製，不是可管理的選單列，不送。
+                var rows = collectDataRows( tbody ).filter( function ( row ) {
+                    return row.getAttribute( 'data-self-row' ) !== '1';
+                } );
                 var items = rows.map( function ( row ) {
                     if ( row.getAttribute( 'data-separator' ) === '1' ) {
                         var sepTitleInput = row.querySelector( '.ys-ec-separator-title' );
@@ -144,8 +191,9 @@
                     var promoteCb = row.querySelector( '.ys-ec-promote-cb' );
                     var existingSelfUid = parseInt( row.getAttribute( 'data-self-uid' ) || '0', 10 ) || 0;
                     var selfOnlyUid = ( selfCb && selfCb.checked ) ? ( existingSelfUid || ( cfg.currentUserId | 0 ) ) : 0;
+                    var iconEl = row.querySelector( '.ys-ec-icon-input' );
 
-                    return {
+                    var item = {
                         slug:           row.getAttribute( 'data-slug' ),
                         order:          parseInt( ( row.querySelector( '.ys-ec-order-input' ) || {} ).value || '0', 10 ) || 0,
                         roles:          roles,
@@ -157,6 +205,10 @@
                         self_only_uid:  selfOnlyUid,
                         promote_to_top: isRowPromoted( row )
                     };
+                    if ( iconEl ) {
+                        item.icon = iconEl.value.replace( /^\s+|\s+$/g, '' ); // v1.3.0：複製項的圖示
+                    }
+                    return item;
                 } );
 
                 var payload = {};
@@ -165,11 +217,27 @@
                 } else if ( 'ys_cart' === tab ) {
                     payload.ys_cart = { items: items, rendered_slugs: renderedSlugs };
                 }
+                // v1.3.0：複製到主選單（兩個分頁都送；只動頁面上列出的複製項）。
+                var copiesNow = collectCopies( tab );
+                var copiesAdded = copiesNow.some( function ( c ) {
+                    return ! renderedCopies.some( function ( r ) { return r.slug === c.slug && r.parent_slug === c.parent_slug; } );
+                } );
+                payload.top_copies = { items: copiesNow, rendered: renderedCopies };
 
                 postMenuConfig( payload )
                     .then( function ( ok ) {
                         if ( ok ) {
-                            setStatus( saveStatus, '已儲存 ✓', '#16a34a', 3000 );
+                            renderedCopies = copiesNow;
+                            if ( copyZone ) {
+                                Array.prototype.forEach.call( copyZone.querySelectorAll( '.ys-ec-copy-note--pending' ), function ( note ) {
+                                    note.parentNode.removeChild( note );
+                                } );
+                            }
+                            if ( copiesAdded && cfg.nativeTabUrl ) {
+                                setStatusWithLink( saveStatus, '已儲存 ✓ 重新整理後複製項會出現在主選單；', '到「主選單（頂層）」排序、改名、換圖示', cfg.nativeTabUrl );
+                            } else {
+                                setStatus( saveStatus, '已儲存 ✓', '#16a34a', 3000 );
+                            }
                         }
                     } )
                     .finally( function () {
@@ -315,21 +383,44 @@
         } );
         syncPromoteRows();
 
+        // v1.3.0：複製區（拖進來＝複製到主選單，原列留在原處）。
+        var copyZone = document.getElementById( 'ys-ec-copy-zone' );
+
         var makeOpts = function () {
             return {
-                group: 'ys-am-menu',
+                group: {
+                    name: 'ys-am-menu',
+                    // 拖到複製區時以「複本」方式拉出，原列留在原位（放下後再把原列放回、另建複製項）。
+                    pull: function ( to ) {
+                        return ( copyZone && to && to.el === copyZone ) ? 'clone' : true;
+                    },
+                    put: true
+                },
                 handle: '.ys-ec-drag-handle',
                 animation: 150,
                 ghostClass: 'sortable-ghost',
-                filter: '.ys-ec-promote-zone__hint',
+                filter: '.ys-ec-promote-zone__hint, .ys-ec-copy-zone__hint',
                 onMove: function ( evt ) {
-                    // 只有子選單可提升：非 sub 列不得拖進提升區。
-                    if ( evt.to === zone && 'sub' !== evt.dragged.getAttribute( 'data-level' ) ) {
+                    var dragged = evt.dragged;
+                    var related = evt.related;
+                    var onHint  = !! ( related && related.classList
+                        && ( related.classList.contains( 'ys-ec-promote-zone__hint' ) || related.classList.contains( 'ys-ec-copy-zone__hint' ) ) );
+                    // 複製區：只收可以複製、還沒複製過的子選單列（放下後原列回到原位、另建複製項）。
+                    if ( copyZone && evt.to === copyZone ) {
+                        return canCopyRow( dragged ) ? ( onHint ? 1 : true ) : false;
+                    }
+                    // 「父選單預設頁」列固定在父選單第一個，只能拖到複製區。
+                    if ( dragged.getAttribute( 'data-self-row' ) === '1' ) {
                         return false;
                     }
-                    // hint 列固定在提升區最上方，不得插到它前面。
-                    if ( evt.related && evt.related.classList && evt.related.classList.contains( 'ys-ec-promote-zone__hint' ) ) {
+                    // 只有子選單可提升：非 sub 列不得拖進提升區。
+                    if ( evt.to === zone && 'sub' !== dragged.getAttribute( 'data-level' ) ) {
                         return false;
+                    }
+                    // 說明列固定在各區最上方：拖到說明列上時一律接在它後面。
+                    // （以前一律拒絕，提升區裡只有說明列時怎麼拖都放不進去。）
+                    if ( onHint ) {
+                        return 1;
                     }
                     return true;
                 },
@@ -342,6 +433,29 @@
         };
         window.Sortable.create( tbody, makeOpts() );
         window.Sortable.create( zone, makeOpts() );
+
+        if ( copyZone ) {
+            window.Sortable.create( copyZone, {
+                group: { name: 'ys-am-menu', pull: false, put: true },
+                sort: false,
+                handle: '.ys-ec-drag-handle', // 複製區的列沒有拖拉把手：只收不出。
+                filter: '.ys-ec-copy-zone__hint, .ys-ec-copy-row',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onAdd: function ( evt ) {
+                    var row = evt.item;
+                    // 原列放回原處：pull 為 clone 時，SortableJS 在原位置留了一個複本（evt.clone）。
+                    if ( evt.clone && evt.clone !== row && evt.clone.parentNode ) {
+                        evt.clone.parentNode.replaceChild( row, evt.clone );
+                    }
+                    if ( row.parentNode === copyZone && evt.from ) {
+                        evt.from.insertBefore( row, evt.from.children[ evt.oldIndex ] || null );
+                    }
+                    addCopyFromRow( row );
+                    syncPromoteRows();
+                }
+            } );
+        }
 
         // 「升頂層」勾選框 ↔ 提升區：雙向同步。
         document.addEventListener( 'change', function ( e ) {
@@ -356,13 +470,35 @@
             if ( cb.checked ) {
                 zone.appendChild( row );
             } else {
-                tbody.appendChild( row );
+                restoreRowPosition( tbody, row );
             }
             syncPromoteRows();
         } );
     }
 
-    // 依「是否在提升區」同步每列的 promote 勾選狀態與樣式。
+    // v1.3.0：取消提升時把列放回原父選單那一組的最後面（以前是接到整張表最後）。
+    function restoreRowPosition( tbody, row ) {
+        var parent = row.getAttribute( 'data-parent' ) || '';
+        var anchor = null;
+        if ( '' !== parent ) {
+            Array.prototype.forEach.call( tbody.querySelectorAll( 'tr' ), function ( r ) {
+                if ( r === row ) {
+                    return;
+                }
+                var isParentTop = r.getAttribute( 'data-level' ) === 'top' && r.getAttribute( 'data-slug' ) === parent;
+                if ( isParentTop || r.getAttribute( 'data-parent' ) === parent ) {
+                    anchor = r;
+                }
+            } );
+        }
+        if ( anchor ) {
+            tbody.insertBefore( row, anchor.nextSibling );
+        } else {
+            tbody.appendChild( row );
+        }
+    }
+
+    // 依「是否在提升區」同步每列的 promote 勾選狀態與樣式（v1.3.0：連同「移到主選單」按鈕的文字）。
     function syncPromoteRows() {
         var zone = document.getElementById( 'ys-ec-promote-zone' );
         if ( ! zone ) {
@@ -379,7 +515,303 @@
                 cb.checked = inZone;
             }
             row.classList.toggle( 'is-promoted', inZone );
+            var moveBtn = row.querySelector( '.ys-ec-move-btn' );
+            if ( moveBtn ) {
+                moveBtn.setAttribute( 'aria-pressed', inZone ? 'true' : 'false' );
+                moveBtn.classList.toggle( 'is-active', inZone );
+                var label = moveBtn.querySelector( '.ys-ec-row-btn__label' );
+                if ( label ) {
+                    label.textContent = inZone ? '移回原位' : '移到主選單';
+                }
+                var icon = moveBtn.querySelector( '.dashicons' );
+                if ( icon ) {
+                    icon.className = 'dashicons ' + ( inZone ? 'dashicons-undo' : 'dashicons-arrow-up-alt' );
+                }
+            }
         } );
+    }
+
+    // ═════════════════════════════════════════════
+    // v1.3.0：複製到主選單
+    // ═════════════════════════════════════════════
+
+    // 目前頁面上的複製項：全部選單分頁讀複製區，主選單分頁讀標示「複製」的頂層列。
+    function collectCopies( tab ) {
+        var selector = ( 'wp_native' === tab )
+            ? '#ys-ec-permission-rows tr[data-copy="1"]'
+            : '#ys-ec-copy-zone tr.ys-ec-copy-row';
+        return Array.prototype.map.call( document.querySelectorAll( selector ), function ( row ) {
+            return {
+                slug:        row.getAttribute( 'data-copy-slug' ) || '',
+                parent_slug: row.getAttribute( 'data-copy-parent' ) || ''
+            };
+        } ).filter( function ( c ) {
+            return '' !== c.slug && '' !== c.parent_slug;
+        } );
+    }
+
+    function findCopyRow( key ) {
+        var zone = document.getElementById( 'ys-ec-copy-zone' );
+        if ( ! zone || ! key ) {
+            return null;
+        }
+        var rows = zone.querySelectorAll( 'tr.ys-ec-copy-row' );
+        for ( var i = 0; i < rows.length; i++ ) {
+            if ( rows[ i ].getAttribute( 'data-copy-key' ) === key ) {
+                return rows[ i ];
+            }
+        }
+        return null;
+    }
+
+    // 這一列能不能複製：要有選單代稱，而且還沒複製過（同一個子選單只能複製一次）。
+    function canCopyRow( row ) {
+        var key = row && row.getAttribute ? row.getAttribute( 'data-copy-key' ) : '';
+        return !! key && ! findCopyRow( key );
+    }
+
+    // 在複製區新增一列（尚未儲存）。回傳是否真的新增了。
+    function addCopyFromRow( row ) {
+        var zone = document.getElementById( 'ys-ec-copy-zone' );
+        if ( ! zone || ! row ) {
+            return false;
+        }
+        var key = row.getAttribute( 'data-copy-key' ) || '';
+        var existing = findCopyRow( key );
+        if ( existing ) {
+            flashRow( existing );
+            syncCopyButtons();
+            return false;
+        }
+        if ( ! canCopyRow( row ) ) {
+            return false;
+        }
+        var slug        = row.getAttribute( 'data-copy-slug' ) || '';
+        var parent      = row.getAttribute( 'data-copy-parent' ) || '';
+        var title       = ( ( row.querySelector( '.menu-line strong' ) || {} ).textContent || slug ).replace( /^\s+|\s+$/g, '' );
+        var parentTitle = row.getAttribute( 'data-parent-title' ) || parent;
+
+        var tr = document.createElement( 'tr' );
+        tr.className = 'ys-ec-copy-row';
+        tr.setAttribute( 'data-nodrag', '1' );
+        tr.setAttribute( 'data-copy-key', key );
+        tr.setAttribute( 'data-copy-slug', slug );
+        tr.setAttribute( 'data-copy-parent', parent );
+        tr.innerHTML = '<td class="ys-ec-copy-row__icon"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span></td>'
+            + '<td colspan="5"><div class="menu-line">'
+                + '<strong>' + escapeHtml( title ) + '</strong> '
+                + '<code>' + escapeHtml( slug ) + '</code> '
+                + '<span class="level-badge level-copy">複製</span> '
+                + '<span class="ys-ec-copy-source">原位置：' + escapeHtml( parentTitle ) + ' › ' + escapeHtml( title ) + '</span>'
+            + '</div>'
+            + '<p class="ys-ec-copy-note ys-ec-copy-note--pending">尚未儲存：按「儲存設定」後才會出現在主選單。</p></td>'
+            + '<td class="ys-ec-row-actions"><button type="button" class="ys-ec-row-btn ys-ec-row-btn--danger ys-ec-copy-remove" title="刪除這個複製項（原子選單不受影響）">'
+                + '<span class="dashicons dashicons-trash" aria-hidden="true"></span><span class="ys-ec-row-btn__label">刪除複製</span>'
+            + '</button></td>';
+        zone.appendChild( tr );
+        flashRow( tr );
+        syncCopyButtons();
+        return true;
+    }
+
+    // 子選單列的「複製到主選單」按鈕：已複製＝停用並顯示「已複製」。
+    function syncCopyButtons() {
+        var rows = document.querySelectorAll( '#ys-ec-permission-rows tr[data-copy-key], #ys-ec-promote-zone tr[data-copy-key]' );
+        Array.prototype.forEach.call( rows, function ( row ) {
+            var btn = row.querySelector( '.ys-ec-copy-btn' );
+            if ( ! btn ) {
+                return;
+            }
+            var copied = !! findCopyRow( row.getAttribute( 'data-copy-key' ) );
+            btn.disabled = copied;
+            btn.classList.toggle( 'is-copied', copied );
+            btn.title = copied
+                ? '已經複製到主選單（同一個子選單只能複製一次）；要刪除請按上方複製區的「刪除複製」'
+                : '複製到主選單：主選單另外多一個連到同一頁的項目，原位置保留';
+            var label = btn.querySelector( '.ys-ec-row-btn__label' );
+            if ( label ) {
+                label.textContent = copied ? '已複製' : '複製到主選單';
+            }
+            var icon = btn.querySelector( '.dashicons' );
+            if ( icon ) {
+                icon.className = 'dashicons ' + ( copied ? 'dashicons-yes' : 'dashicons-admin-page' );
+            }
+        } );
+    }
+
+    function flashRow( row ) {
+        if ( ! row || ! row.classList ) {
+            return;
+        }
+        row.classList.remove( 'ys-ec-flash' );
+        void row.offsetWidth; // 重新觸發動畫
+        row.classList.add( 'ys-ec-flash' );
+        setTimeout( function () { row.classList.remove( 'ys-ec-flash' ); }, 1600 );
+    }
+
+    // ─────────────────────────────────────────────
+    // v1.3.0：複製項的圖示（主選單分頁）。常用 dashicons 一鍵選，也可以直接貼 dashicons-… 或圖片網址。
+    // ─────────────────────────────────────────────
+    var ICONS = [
+        'admin-home', 'admin-site', 'dashboard', 'admin-post', 'admin-page', 'admin-media', 'admin-comments',
+        'admin-appearance', 'admin-plugins', 'admin-users', 'admin-tools', 'admin-settings', 'admin-generic',
+        'admin-links', 'admin-customizer', 'edit', 'edit-page', 'text-page', 'media-document', 'format-image',
+        'images-alt2', 'format-gallery', 'video-alt3', 'playlist-audio', 'category', 'tag', 'list-view',
+        'clipboard', 'calendar-alt', 'clock', 'location', 'flag', 'star-filled', 'heart', 'email-alt', 'phone',
+        'groups', 'businessman', 'id', 'cart', 'products', 'store', 'money-alt', 'chart-bar', 'chart-line',
+        'chart-pie', 'analytics', 'search', 'filter', 'shield', 'lock', 'visibility', 'bell', 'megaphone',
+        'lightbulb', 'book', 'portfolio', 'screenoptions', 'layout', 'grid-view', 'database', 'cloud',
+        'download', 'upload', 'share', 'art', 'translation', 'feedback', 'forms', 'awards', 'info', 'sos'
+    ];
+    var iconPanel = null;
+    var iconPanelField = null;
+
+    function setupIconPickers( table ) {
+        Array.prototype.forEach.call( table.querySelectorAll( '.ys-ec-icon-field' ), function ( field ) {
+            renderIconPreview( field );
+        } );
+        table.addEventListener( 'input', function ( e ) {
+            if ( e.target && e.target.classList && e.target.classList.contains( 'ys-ec-icon-input' ) ) {
+                renderIconPreview( e.target.closest( '.ys-ec-icon-field' ) );
+            }
+        } );
+        table.addEventListener( 'click', function ( e ) {
+            var btn = e.target.closest && e.target.closest( '.ys-ec-icon-btn' );
+            if ( ! btn ) {
+                return;
+            }
+            var field = btn.closest( '.ys-ec-icon-field' );
+            if ( iconPanel && ! iconPanel.hidden && iconPanelField === field ) {
+                closeIconPanel();
+            } else {
+                openIconPanel( field, btn );
+            }
+        } );
+        document.addEventListener( 'click', function ( e ) {
+            if ( ! iconPanel || iconPanel.hidden ) {
+                return;
+            }
+            if ( iconPanel.contains( e.target ) || ( e.target.closest && e.target.closest( '.ys-ec-icon-btn' ) ) ) {
+                return;
+            }
+            closeIconPanel();
+        } );
+        document.addEventListener( 'keydown', function ( e ) {
+            if ( 'Escape' === e.key && iconPanel && ! iconPanel.hidden ) {
+                var btn = iconPanelField && iconPanelField.querySelector( '.ys-ec-icon-btn' );
+                closeIconPanel();
+                if ( btn ) {
+                    btn.focus();
+                }
+            }
+        } );
+    }
+
+    function iconValueFor( field ) {
+        var input = field.querySelector( '.ys-ec-icon-input' );
+        var row = field.closest( 'tr' );
+        var value = input ? input.value.replace( /^\s+|\s+$/g, '' ) : '';
+        return value || ( row && row.getAttribute( 'data-default-icon' ) ) || 'dashicons-admin-generic';
+    }
+
+    function renderIconPreview( field ) {
+        if ( ! field ) {
+            return;
+        }
+        var preview = field.querySelector( '.ys-ec-icon-preview' );
+        if ( ! preview ) {
+            return;
+        }
+        var value = iconValueFor( field );
+        preview.style.backgroundImage = '';
+        if ( /^dashicons-[a-z0-9-]+$/.test( value ) ) {
+            preview.className = 'ys-ec-icon-preview dashicons ' + value;
+        } else if ( /^(https?:\/\/|data:image\/svg\+xml;base64,)/i.test( value ) ) {
+            preview.className = 'ys-ec-icon-preview is-image';
+            preview.style.backgroundImage = 'url("' + value.replace( /["\\\s]/g, '' ) + '")';
+        } else {
+            preview.className = 'ys-ec-icon-preview is-none';
+        }
+    }
+
+    function ensureIconPanel() {
+        if ( iconPanel ) {
+            return iconPanel;
+        }
+        iconPanel = document.createElement( 'div' );
+        iconPanel.className = 'ys-ec-icon-picker';
+        iconPanel.setAttribute( 'role', 'dialog' );
+        iconPanel.setAttribute( 'aria-label', '選擇圖示' );
+        iconPanel.hidden = true;
+        var html = '<div class="ys-ec-icon-picker__grid">';
+        ICONS.forEach( function ( name ) {
+            html += '<button type="button" class="ys-ec-icon-picker__item" data-icon="dashicons-' + name + '" title="dashicons-' + name + '">'
+                + '<span class="dashicons dashicons-' + name + '" aria-hidden="true"></span>'
+                + '<span class="screen-reader-text">dashicons-' + name + '</span></button>';
+        } );
+        html += '</div><div class="ys-ec-icon-picker__foot">'
+            + '<button type="button" class="ys-ec-icon-picker__reset">沿用原父選單圖示</button>'
+            + '<span>也可以在欄位直接貼 dashicons-… 或圖片網址</span></div>';
+        iconPanel.innerHTML = html;
+        iconPanel.addEventListener( 'click', function ( e ) {
+            var item = e.target.closest && e.target.closest( '.ys-ec-icon-picker__item, .ys-ec-icon-picker__reset' );
+            if ( ! item || ! iconPanelField ) {
+                return;
+            }
+            var input = iconPanelField.querySelector( '.ys-ec-icon-input' );
+            if ( input ) {
+                input.value = item.classList.contains( 'ys-ec-icon-picker__reset' ) ? '' : ( item.getAttribute( 'data-icon' ) || '' );
+                input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+            }
+            renderIconPreview( iconPanelField );
+            var btn = iconPanelField.querySelector( '.ys-ec-icon-btn' );
+            closeIconPanel();
+            if ( btn ) {
+                btn.focus();
+            }
+        } );
+        document.body.appendChild( iconPanel );
+        return iconPanel;
+    }
+
+    function openIconPanel( field, btn ) {
+        var panel = ensureIconPanel();
+        if ( iconPanelField && iconPanelField !== field ) {
+            var prev = iconPanelField.querySelector( '.ys-ec-icon-btn' );
+            if ( prev ) {
+                prev.setAttribute( 'aria-expanded', 'false' );
+            }
+        }
+        iconPanelField = field;
+        var current = iconValueFor( field );
+        Array.prototype.forEach.call( panel.querySelectorAll( '.ys-ec-icon-picker__item' ), function ( item ) {
+            item.classList.toggle( 'is-selected', item.getAttribute( 'data-icon' ) === current );
+        } );
+        panel.hidden = false;
+        var rect = btn.getBoundingClientRect();
+        var width = panel.offsetWidth || 320;
+        var left = Math.max( 8, Math.min( rect.left + window.pageXOffset, window.pageXOffset + document.documentElement.clientWidth - width - 8 ) );
+        panel.style.top = ( rect.bottom + window.pageYOffset + 6 ) + 'px';
+        panel.style.left = left + 'px';
+        btn.setAttribute( 'aria-expanded', 'true' );
+        var selected = panel.querySelector( '.ys-ec-icon-picker__item.is-selected' ) || panel.querySelector( '.ys-ec-icon-picker__item' );
+        if ( selected ) {
+            selected.focus();
+        }
+    }
+
+    function closeIconPanel() {
+        if ( ! iconPanel ) {
+            return;
+        }
+        iconPanel.hidden = true;
+        if ( iconPanelField ) {
+            var btn = iconPanelField.querySelector( '.ys-ec-icon-btn' );
+            if ( btn ) {
+                btn.setAttribute( 'aria-expanded', 'false' );
+            }
+        }
+        iconPanelField = null;
     }
 
     // 重新指派某清單內各列 order = (i+1)*10（跳過 hint / 非資料列）。
@@ -679,6 +1111,19 @@
                 }
             }, autoClearMs );
         }
+    }
+
+    // v1.3.0：狀態文字後面接一個連結（例如儲存複製項後指向「主選單（頂層）」分頁）。
+    function setStatusWithLink( el, text, linkText, href ) {
+        if ( ! el ) {
+            return;
+        }
+        el.textContent = text;
+        el.style.color = '#16a34a';
+        var a = document.createElement( 'a' );
+        a.href = href;
+        a.textContent = linkText;
+        el.appendChild( a );
     }
 
     // ─────────────────────────────────────────────

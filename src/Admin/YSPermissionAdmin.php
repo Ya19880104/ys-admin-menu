@@ -59,9 +59,17 @@
  *       { "user_id": 5, "user_login": "alice", "user_email": "alice@example.com",
  *         "visible_slugs": ["index.php","ys-ec-products"], "hide_ys_cart": false }
  *     ]
+ *   },
+ *   "top_copies": {                // v1.3.0：子選單「複製到主選單」（原子選單保留在原位）
+ *     "items": [
+ *       { "slug": "options-writing.php", "parent_slug": "options-general.php" }
+ *     ]
  *   }
  * }
  * ```
+ *
+ * 複製項在主選單的排序、名稱、圖示（icon）、顏色、角色、隱藏、僅限本人存在 wp_native.items[]，
+ * slug 是 YSMenuRouter::copy_menu_key() 算出的選單代稱（例：./options-writing.php）。
  *
  * 安全：
  *   - cap：manage_options
@@ -178,6 +186,8 @@ class YSPermissionAdmin {
 			'usersUrl'   => esc_url_raw( rest_url( 'wp/v2/users' ) ),
 			'nonce'      => wp_create_nonce( 'wp_rest' ),
 			'currentUserId' => get_current_user_id(),
+			// v1.3.0：複製到主選單後，提示到「主選單（頂層）」分頁排序、改名、換圖示。
+			'nativeTabUrl'  => esc_url_raw( add_query_arg( 'tab', 'wp_native', admin_url( 'admin.php?page=' . YSMenuPage::SLUG_PERMISSIONS ) ) ),
 		] );
 
 		wp_enqueue_style(
@@ -230,8 +240,8 @@ class YSPermissionAdmin {
 		$tab_title  = $tabs[ $tab ] ?? '選單';
 		$tab_icon   = ( 'wp_native' === $tab ) ? 'dashicons-admin-settings' : 'dashicons-menu';
 		$tab_desc   = ( 'wp_native' === $tab )
-			? '管理 wp-admin 左側 sidebar 上 <strong>所有</strong>頂層選單（含 WordPress 核心與第三方外掛）：拖拉調整順序、限制角色可見、套色、勾選「隱藏」完全藏起來，或插入「空白標題」分隔列。未列入此處的選單會接續顯示於設定排序之後。'
-			: '管理 <strong>所有</strong>選單端點 — 不只頂層，包含每個頂層底下的子選單（sub-page）。可拖拉調整順序、限制角色可見、勾選「隱藏」、插入分隔列。';
+			? '管理 wp-admin 左側 sidebar 上 <strong>所有</strong>頂層選單（含 WordPress 核心與第三方外掛）：拖拉調整順序、限制角色可見、套色、勾選「隱藏」完全藏起來，或插入「空白標題」分隔列。未列入此處的選單會接續顯示於設定排序之後。從子選單複製來的項目標示「複製」，可在這裡排序、改名、換圖示、隱藏或刪除。'
+			: '管理 <strong>所有</strong>選單端點 — 不只頂層，包含每個頂層底下的子選單（sub-page）。可拖拉調整順序、限制角色可見、勾選「隱藏」、插入分隔列；每個子選單列右側的「移到主選單」「複製到主選單」可把它提升或複製成 wp-admin 頂層選單。';
 
 		// v2.38.2 hotfix：直接在 admin context 讀全域 $menu / $submenu，在伺服器端輸出 rows
 		$items        = ( 'wp_native' === $tab )
@@ -265,6 +275,30 @@ class YSPermissionAdmin {
 			}
 			if ( ! empty( $row['slug'] ) ) {
 				$saved_by_slug[ (string) $row['slug'] ] = $row;
+			}
+		}
+
+		// v1.3.0：子選單「複製到主選單」。
+		//   - copy_entries：這次側欄實際出現的複製項（主選單分頁標示「複製」、提供圖示與刪除）。
+		//   - saved_copies：設定裡的全部複製項（全部選單分頁的「複製區」逐筆列出，含暫時沒出現的）。
+		$copy_entries = YSMenuRouter::copy_entries();
+		$saved_copies = YSPermissionController::sanitize_top_copies( (array) ( $saved_config['top_copies']['items'] ?? [] ) );
+		$copied_keys  = [];
+		foreach ( $saved_copies as $sc ) {
+			$copied_keys[ YSMenuRouter::copy_menu_key( $sc['slug'], $sc['parent_slug'] ) ] = true;
+		}
+
+		// 全部選單分頁：父選單名稱（子選單列的「原位置」說明與複製區用）。
+		$top_titles = [];
+		$sub_titles = [];
+		if ( 'wp_native' !== $tab ) {
+			foreach ( $items as $it ) {
+				$it_slug = (string) ( $it['slug'] ?? '' );
+				if ( 'sub' === (string) ( $it['level'] ?? 'top' ) ) {
+					$sub_titles[ (string) ( $it['parent_slug'] ?? '' ) ][ $it_slug ] = (string) ( $it['title'] ?? $it_slug );
+				} else {
+					$top_titles[ $it_slug ] = (string) ( $it['title'] ?? $it_slug );
+				}
 			}
 		}
 		?>
@@ -341,10 +375,32 @@ class YSPermissionAdmin {
 						<tbody id="ys-ec-promote-zone" class="ys-ec-promote-zone">
 							<tr class="ys-ec-promote-zone__hint" data-nodrag="1">
 								<td colspan="7">
-									<span class="dashicons dashicons-arrow-up-alt"></span>
-									<strong>提升為頂層選單</strong>：把下方任一子選單列，用最左側 <code>⋮⋮</code> 拖到這一區（或勾選該列的「升頂層」），即可提升為 wp-admin 頂層選單；拖回下方即取消。調整後記得按「儲存設定」。
+									<strong><span class="dashicons dashicons-arrow-up-alt" aria-hidden="true"></span> 移到主選單（提升為頂層選單，原位置移除）</strong>
+									按子選單列右側的「移到主選單」、勾選「升頂層」，或用最左側 <code>⋮⋮</code> 把該列拖到這一區；再按一次「移回原位」、取消勾選或拖回下方即還原。調整後記得按「儲存設定」。
 								</td>
 							</tr>
+						</tbody>
+						<tbody id="ys-ec-copy-zone" class="ys-ec-copy-zone">
+							<tr class="ys-ec-copy-zone__hint" data-nodrag="1">
+								<td colspan="7">
+									<strong><span class="dashicons dashicons-admin-page" aria-hidden="true"></span> 複製到主選單（原位置保留）</strong>
+									按子選單列右側的「複製到主選單」，或用 <code>⋮⋮</code> 把該列拖到這一區。複製項會出現在主選單、緊接在原父選單下方，連到同一頁；儲存後到「主選單（頂層）」分頁可排序、改名、換圖示、隱藏或刪除。刪除複製項不影響原子選單。
+								</td>
+							</tr>
+							<?php
+							foreach ( $saved_copies as $sc ) :
+								$sc_key    = YSMenuRouter::copy_menu_key( $sc['slug'], $sc['parent_slug'] );
+								$sc_parent = $top_titles[ $sc['parent_slug'] ] ?? ( isset( $copy_entries[ $sc_key ] ) ? $copy_entries[ $sc_key ]['parent_title'] : $sc['parent_slug'] );
+								if ( isset( $copy_entries[ $sc_key ] ) ) {
+									$sc_title = $copy_entries[ $sc_key ]['title'];
+								} elseif ( $sc['slug'] === $sc['parent_slug'] ) {
+									$sc_title = (string) ( self::parent_self_row_title( $sc['parent_slug'] ) ?? $sc['slug'] );
+								} else {
+									$sc_title = $sub_titles[ $sc['parent_slug'] ][ $sc['slug'] ] ?? $sc['slug'];
+								}
+								self::render_copy_zone_row( $sc, $sc_key, $sc_title, $sc_parent, isset( $copy_entries[ $sc_key ] ) );
+							endforeach;
+							?>
 						</tbody>
 						<?php endif; ?>
 						<tbody id="ys-ec-permission-rows">
@@ -371,10 +427,16 @@ class YSPermissionAdmin {
 									if ( '' === $slug ) {
 										continue;
 									}
-									$saved         = $saved_by_slug[ $slug ] ?? [];
+									$saved = $saved_by_slug[ $slug ] ?? [];
+									$order = isset( $saved['order'] ) ? (int) $saved['order'] : ( $idx * 10 );
+									// v1.3.0：還沒排過序的複製項顯示在原父選單旁（與側欄位置一致；同 order 時穩定排序保留先後）。
+									if ( ! isset( $saved['order'] ) && isset( $copy_entries[ $slug ] )
+										&& isset( $saved_by_slug[ $copy_entries[ $slug ]['parent'] ]['order'] ) ) {
+										$order = (int) $saved_by_slug[ $copy_entries[ $slug ]['parent'] ]['order'];
+									}
 									$render_list[] = [
 										'kind'  => 'item',
-										'order' => isset( $saved['order'] ) ? (int) $saved['order'] : ( $idx * 10 ),
+										'order' => $order,
 										'item'  => $item,
 										'saved' => $saved,
 									];
@@ -398,8 +460,31 @@ class YSPermissionAdmin {
 								foreach ( $render_list as $entry ) :
 									if ( 'separator' === $entry['kind'] ) {
 										self::render_separator_row( $tab, $entry['title'], $entry['order'] );
-									} else {
-										self::render_item_row( $tab, $entry['item'], $entry['saved'], $entry['order'], $promoted_urls );
+										continue;
+									}
+
+									$row_slug   = (string) ( $entry['item']['slug'] ?? '' );
+									$row_parent = (string) ( $entry['item']['parent_slug'] ?? '' );
+									$row_is_sub = 'sub' === (string) ( $entry['item']['level'] ?? 'top' );
+									$extra      = [];
+									if ( 'wp_native' === $tab ) {
+										$extra['copy'] = $copy_entries[ $row_slug ] ?? null;
+									} elseif ( $row_is_sub ) {
+										$row_key               = self::copyable_key( $row_slug, $row_parent );
+										$extra['parent_title'] = $top_titles[ $row_parent ] ?? $row_parent;
+										$extra['copy_key']     = $row_key;
+										$extra['copied']       = '' !== $row_key && isset( $copied_keys[ $row_key ] );
+									}
+									self::render_item_row( $tab, $entry['item'], $entry['saved'], $entry['order'], $promoted_urls, $extra );
+
+									// v1.3.0：父選單本身的預設頁（例如「設定 → 一般」）。WordPress 把它列成第一個子選單，
+									// 但它跟父選單同一個代稱，排序、隱藏、角色都由父選單那一列決定；這裡只提供「複製到主選單」。
+									if ( 'wp_native' !== $tab && ! $row_is_sub ) {
+										$self_title = self::parent_self_row_title( $row_slug );
+										if ( null !== $self_title ) {
+											$self_key = self::copyable_key( $row_slug, $row_slug );
+											self::render_self_row( $row_slug, $self_title, (string) ( $entry['item']['title'] ?? $row_slug ), $self_key, '' !== $self_key && isset( $copied_keys[ $self_key ] ) );
+										}
 									}
 								endforeach;
 							endif;
@@ -417,15 +502,22 @@ class YSPermissionAdmin {
 	 * 渲染一般 menu item row（v2.39.0 BATCH Q2 + Q3：compact + hide cb）
 	 *
 	 * 結構（單行 ~38px 高）：
-	 *   | drag | order | menu-line(strong+code+badge) + title-override-inline | roles | [color?] | hide | × |
+	 *   | drag | order | menu-line(strong+code+badge) + title-override-inline | roles | [color?] | hide | 操作 |
+	 *
+	 * v1.3.0：
+	 *   - 全部選單分頁的子選單列，「操作」欄多了「移到主選單」（等同升頂層，與勾選、提升區同步）與
+	 *     「複製到主選單」（原位置保留，主選單另外多一個連到同一頁的項目）。
+	 *   - 主選單分頁的複製項：標示「複製」與原位置，多一個圖示欄位，「×」換成「刪除複製」。
 	 *
 	 * @param string               $tab           'wp_native' | 'ys_cart'
 	 * @param array<string, mixed> $item          enumeration item（slug / title / level / parent_slug / icon）
-	 * @param array<string, mixed> $saved         該 slug 的已存設定（color / roles / title_override / hide / promote_to_top）
+	 * @param array<string, mixed> $saved         該 slug 的已存設定（color / roles / title_override / hide / promote_to_top / icon）
 	 * @param int                  $order         最終要寫入 input 的 order 值
 	 * @param array<string, bool>  $promoted_urls （wp_native tab）promoted URL => true，用於標示「已提升」badge
+	 * @param array<string, mixed> $extra         v1.3.0：全部選單分頁子選單列的 parent_title / copy_key / copied；
+	 *                                            主選單分頁的 copy（YSMenuRouter::copy_entries() 的一筆，非複製項為 null）。
 	 */
-	private static function render_item_row( string $tab, array $item, array $saved, int $order, array $promoted_urls = [] ): void {
+	private static function render_item_row( string $tab, array $item, array $saved, int $order, array $promoted_urls = [], array $extra = [] ): void {
 		$slug           = (string) ( $item['slug'] ?? '' );
 		$title          = (string) ( $item['title'] ?? $slug );
 		$level          = (string) ( $item['level'] ?? 'top' );
@@ -440,19 +532,35 @@ class YSPermissionAdmin {
 		$promoted       = ! empty( $saved['promote_to_top'] );
 		$is_promoted_top = ( 'wp_native' === $tab ) && isset( $promoted_urls[ $slug ] );
 
+		// v1.3.0：複製到主選單。
+		$copy      = ( 'wp_native' === $tab && is_array( $extra['copy'] ?? null ) ) ? $extra['copy'] : null;
+		$copy_key  = (string) ( $extra['copy_key'] ?? '' );
+		$copied    = ! empty( $extra['copied'] );
+		$copy_icon = (string) ( $saved['icon'] ?? '' );
+
 		$role_options = [
 			'administrator' => 'Admin',
 			'shop_manager'  => 'SM',
 			'editor'        => 'Editor',
 		];
 
-		$parent_attr = ( null !== $parent_slug )
-			? ' data-parent="' . esc_attr( $parent_slug ) . '"'
-			: '';
+		$attrs = '';
+		if ( null !== $parent_slug ) {
+			$attrs .= ' data-parent="' . esc_attr( $parent_slug ) . '"';
+		}
+		if ( 'wp_native' !== $tab && isset( $extra['parent_title'] ) ) {
+			$attrs .= ' data-parent-title="' . esc_attr( (string) $extra['parent_title'] ) . '"';
+		}
+		if ( '' !== $copy_key && null !== $parent_slug ) {
+			$attrs .= ' data-copy-key="' . esc_attr( $copy_key ) . '" data-copy-slug="' . esc_attr( $slug ) . '" data-copy-parent="' . esc_attr( $parent_slug ) . '"';
+		}
+		if ( null !== $copy ) {
+			$attrs .= ' class="ys-ec-copy-top-row" data-copy="1" data-copy-slug="' . esc_attr( $copy['slug'] ) . '" data-copy-parent="' . esc_attr( $copy['parent'] ) . '" data-default-icon="' . esc_attr( $copy['parent_icon'] ) . '"';
+		}
 
 		$is_sub = ( 'sub' === $level );
 		?>
-		<tr data-slug="<?php echo esc_attr( $slug ); ?>" data-level="<?php echo esc_attr( $level ); ?>" data-self-uid="<?php echo (int) $self_only_uid; ?>"<?php echo $parent_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped above ?>>
+		<tr data-slug="<?php echo esc_attr( $slug ); ?>" data-level="<?php echo esc_attr( $level ); ?>" data-self-uid="<?php echo (int) $self_only_uid; ?>"<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped above ?>>
 			<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>
 			<td>
 				<input type="number" class="ys-ec-order-input" value="<?php echo esc_attr( (string) $order ); ?>"
@@ -464,15 +572,29 @@ class YSPermissionAdmin {
 						<span class="menu-indent">&#8627;</span>
 					<?php endif; ?>
 					<strong><?php echo esc_html( $title ); ?></strong>
-					<code><?php echo esc_html( $slug ); ?></code>
+					<code><?php echo esc_html( null !== $copy ? $copy['slug'] : $slug ); ?></code>
 					<span class="level-badge<?php echo $is_sub ? ' level-sub' : ''; ?>"><?php echo $is_sub ? '子頁' : '頂層'; ?></span>
 					<?php if ( $is_promoted_top ) : ?>
 						<span class="level-badge level-promoted" title="此項由「全部選單（含子選單）」的子頁提升而來；到該分頁取消勾選「升頂層」即可還原">已提升</span>
+					<?php endif; ?>
+					<?php if ( null !== $copy ) : ?>
+						<span class="level-badge level-copy" title="從子選單複製到主選單的項目，連到同一頁；原子選單仍在原位">複製</span>
+						<span class="ys-ec-copy-source">原位置：<?php echo esc_html( $copy['parent_title'] ); ?> › <?php echo esc_html( $copy['title'] ); ?></span>
 					<?php endif; ?>
 				</div>
 				<input type="text" class="title-override-inline ys-ec-title-override"
 					value="<?php echo esc_attr( $title_override ); ?>"
 					placeholder="自訂顯示名稱（留空保留原名）">
+				<?php if ( null !== $copy ) : ?>
+					<div class="ys-ec-icon-field">
+						<button type="button" class="ys-ec-icon-btn" aria-expanded="false" title="選擇圖示">
+							<span class="ys-ec-icon-preview" aria-hidden="true"></span>
+							<span class="screen-reader-text">選擇圖示</span>
+						</button>
+						<input type="text" class="ys-ec-icon-input" value="<?php echo esc_attr( $copy_icon ); ?>"
+							placeholder="圖示：留空沿用原父選單（dashicons-… 或圖片網址）" spellcheck="false">
+					</div>
+				<?php endif; ?>
 			</td>
 			<td>
 				<div class="role-cb-group">
@@ -509,11 +631,146 @@ class YSPermissionAdmin {
 				</td>
 			<?php endif; ?>
 			<td class="ys-ec-hide-cb">
-				<input type="checkbox" class="ys-ec-hide-checkbox" title="勾選後完全隱藏（含 sidebar + 直接訪問）"
+				<input type="checkbox" class="ys-ec-hide-checkbox"
+					title="<?php echo esc_attr( null !== $copy ? '對管理員以外的帳號隱藏這個複製項（原子選單與頁面不受影響）' : '勾選後完全隱藏（含 sidebar + 直接訪問）' ); ?>"
 					<?php checked( $hide ); ?>>
 			</td>
+			<td class="ys-ec-row-actions">
+				<?php if ( 'wp_native' !== $tab && $is_sub ) : ?>
+					<button type="button" class="ys-ec-row-btn ys-ec-move-btn" aria-pressed="<?php echo $promoted ? 'true' : 'false'; ?>"
+						title="移到主選單：變成 wp-admin 頂層選單，原位置移除（等同勾選「升頂層」）；再按一次移回原位">
+						<span class="dashicons dashicons-arrow-up-alt" aria-hidden="true"></span><span class="ys-ec-row-btn__label"><?php echo $promoted ? '移回原位' : '移到主選單'; ?></span>
+					</button>
+					<?php if ( '' !== $copy_key ) : ?>
+						<?php self::render_copy_button( $copied ); ?>
+					<?php endif; ?>
+				<?php endif; ?>
+				<?php if ( null !== $copy ) : ?>
+					<button type="button" class="ys-ec-row-btn ys-ec-row-btn--danger ys-ec-delete-copy" title="刪除這個複製項（原子選單不受影響）">
+						<span class="dashicons dashicons-trash" aria-hidden="true"></span><span class="ys-ec-row-btn__label">刪除複製</span>
+					</button>
+				<?php else : ?>
+					<button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-delete-row" title="從清單移除">×</button>
+				<?php endif; ?>
+			</td>
+		</tr>
+		<?php
+	}
+
+	/**
+	 * v1.3.0：「複製到主選單」按鈕。已經有複製項時改成「已複製」（同一個子選單只能複製一次）。
+	 */
+	private static function render_copy_button( bool $copied ): void {
+		?>
+		<button type="button" class="ys-ec-row-btn ys-ec-copy-btn<?php echo $copied ? ' is-copied' : ''; ?>"
+			<?php disabled( $copied ); ?>
+			title="<?php echo esc_attr( $copied ? '已經複製到主選單（同一個子選單只能複製一次）；要刪除請按上方複製區的「刪除複製」' : '複製到主選單：主選單另外多一個連到同一頁的項目，原位置保留' ); ?>">
+			<span class="dashicons <?php echo $copied ? 'dashicons-yes' : 'dashicons-admin-page'; ?>" aria-hidden="true"></span><span class="ys-ec-row-btn__label"><?php echo $copied ? '已複製' : '複製到主選單'; ?></span>
+		</button>
+		<?php
+	}
+
+	/**
+	 * v1.3.0：子選單列可以複製時的選單代稱；不行（代稱帶 % 編碼、組不出安全連結）回空字串。
+	 *
+	 * 帶 % 的代稱（例：「自訂」的 customize.php?return=%2F…，每一頁都不同）存檔時會被清理掉 % 編碼，
+	 * 之後對不回原子選單，所以不提供複製。
+	 */
+	private static function copyable_key( string $slug, string $parent ): string {
+		if ( '' === $slug || '' === $parent || false !== strpos( $slug . $parent, '%' ) ) {
+			return '';
+		}
+		return YSMenuRouter::copy_menu_key( $slug, $parent );
+	}
+
+	/**
+	 * v1.3.0：父選單本身的預設頁（$submenu[ 父選單 ] 裡與父選單同代稱的那一列）的名稱；沒有回 null。
+	 */
+	private static function parent_self_row_title( string $parent ): ?string {
+		global $submenu;
+		if ( '' === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+			return null;
+		}
+		foreach ( $submenu[ $parent ] as $sub ) {
+			if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $parent ) {
+				$title = trim( wp_strip_all_tags( (string) ( $sub[0] ?? '' ) ) );
+				return '' !== $title ? $title : $parent;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * v1.3.0：全部選單分頁的「父選單預設頁」列（例如「設定 → 一般」）。
+	 *
+	 * 它和父選單是同一個代稱：排序固定在第一個、隱藏與角色由父選單那一列決定，所以這一列只提供
+	 * 「複製到主選單」（可按按鈕，或拖到複製區）。不送進儲存的 ys_cart.items。
+	 */
+	private static function render_self_row( string $parent_slug, string $title, string $parent_title, string $copy_key, bool $copied ): void {
+		$copy_attrs = '' !== $copy_key
+			? ' data-copy-key="' . esc_attr( $copy_key ) . '" data-copy-slug="' . esc_attr( $parent_slug ) . '" data-copy-parent="' . esc_attr( $parent_slug ) . '"'
+			: '';
+		?>
+		<tr class="ys-ec-self-row" data-level="self" data-self-row="1" data-parent="<?php echo esc_attr( $parent_slug ); ?>" data-parent-title="<?php echo esc_attr( $parent_title ); ?>"<?php echo $copy_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped above ?>>
+			<?php if ( '' !== $copy_key ) : ?>
+				<td class="ys-ec-drag-handle" title="拖到上方「複製區」即可複製到主選單（這一列固定在父選單的第一個，不能排序）">&#x205E;&#x205E;</td>
+			<?php else : ?>
+				<td></td>
+			<?php endif; ?>
+			<td class="ysca-text-center"><span class="ysca-text-muted" title="父選單的預設頁固定排在第一個">—</span></td>
 			<td>
-				<button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-delete-row" title="從清單移除">×</button>
+				<div class="menu-line">
+					<span class="menu-indent">&#8627;</span>
+					<strong><?php echo esc_html( $title ); ?></strong>
+					<code><?php echo esc_html( $parent_slug ); ?></code>
+					<span class="level-badge level-sub">子頁</span>
+					<span class="level-badge level-self" title="<?php echo esc_attr( '點父選單「' . $parent_title . '」本身開啟的頁面' ); ?>">父選單預設頁</span>
+				</div>
+				<p class="ys-ec-self-note">固定排在第一個；隱藏、角色請設定在「<?php echo esc_html( $parent_title ); ?>」那一列。</p>
+			</td>
+			<td class="ysca-text-center"><span class="ysca-text-muted" aria-hidden="true">—</span></td>
+			<td class="ysca-text-center"><span class="ysca-text-muted" aria-hidden="true">—</span></td>
+			<td class="ysca-text-center"><span class="ysca-text-muted" aria-hidden="true">—</span></td>
+			<td class="ys-ec-row-actions">
+				<?php if ( '' !== $copy_key ) : ?>
+					<?php self::render_copy_button( $copied ); ?>
+				<?php endif; ?>
+			</td>
+		</tr>
+		<?php
+	}
+
+	/**
+	 * v1.3.0：全部選單分頁「複製區」的一列（設定裡的一個複製項）。
+	 *
+	 * @param array{slug:string,parent_slug:string} $copy         複製來源。
+	 * @param string                                $key          選單代稱（copy_menu_key）。
+	 * @param string                                $title        原子選單名稱。
+	 * @param string                                $parent_title 原父選單名稱。
+	 * @param bool                                  $live         這次側欄裡有沒有出現。
+	 */
+	private static function render_copy_zone_row( array $copy, string $key, string $title, string $parent_title, bool $live ): void {
+		?>
+		<tr class="ys-ec-copy-row<?php echo $live ? '' : ' is-inactive'; ?>" data-nodrag="1"
+			data-copy-key="<?php echo esc_attr( $key ); ?>"
+			data-copy-slug="<?php echo esc_attr( $copy['slug'] ); ?>"
+			data-copy-parent="<?php echo esc_attr( $copy['parent_slug'] ); ?>">
+			<td class="ys-ec-copy-row__icon"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span></td>
+			<td colspan="5">
+				<div class="menu-line">
+					<strong><?php echo esc_html( $title ); ?></strong>
+					<code><?php echo esc_html( $copy['slug'] ); ?></code>
+					<span class="level-badge level-copy">複製</span>
+					<span class="ys-ec-copy-source">原位置：<?php echo esc_html( $parent_title ); ?> › <?php echo esc_html( $title ); ?></span>
+				</div>
+				<?php if ( ! $live ) : ?>
+					<p class="ys-ec-copy-note">目前沒有出現在你的側欄：原子選單不在（例如外掛停用），或這個複製項設了「僅限本人」給其他帳號。</p>
+				<?php endif; ?>
+			</td>
+			<td class="ys-ec-row-actions">
+				<button type="button" class="ys-ec-row-btn ys-ec-row-btn--danger ys-ec-copy-remove" title="刪除這個複製項（原子選單不受影響）">
+					<span class="dashicons dashicons-trash" aria-hidden="true"></span><span class="ys-ec-row-btn__label">刪除複製</span>
+				</button>
 			</td>
 		</tr>
 		<?php

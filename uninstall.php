@@ -7,6 +7,8 @@
  * 時，才會移除本外掛的所有 wp_options。
  *
  * 注意：本外掛的選單設定與樣式設定皆儲存於 wp_options，自己沒有資料表。
+ * v1.3.0 的「複製到主選單」（top_copies）與複製項的排序、名稱、圖示（wp_native.items[]）都存在
+ * ys_admin_menu_config 裡，刪掉這個 option 就一起清除，沒有另外的 option 或暫存資料。
  * 內嵌的 YS Plugin Hub Client 另有兩張資料表（{prefix}ys_hub_client_logs、{prefix}ys_hub_client_settings），
  * 那是站上所有 YS 外掛共用的，這裡不刪。
  *

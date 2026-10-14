@@ -37,6 +37,9 @@ class YSPermissionController {
 	/** REST namespace（本外掛專屬） */
 	private const NAMESPACE_NAME = 'ys-admin-menu/v1';
 
+	/** v1.3.0：「複製到主選單」最多幾個（防止異常 payload 塞爆設定）。 */
+	private const MAX_TOP_COPIES = 100;
+
 	/**
 	 * 註冊路由（由 YSRouteRegistrar 在 rest_api_init 呼叫）
 	 */
@@ -144,6 +147,11 @@ class YSPermissionController {
 				$existing['ys_cart']['hide_for_user_ids'] = self::sanitize_user_id_list( $menu['ys_cart']['hide_for_user_ids'] );
 			}
 			$existing['user_overrides']['items'] = self::sanitize_user_override_items( (array) ( $menu['user_overrides']['items'] ?? [] ) );
+			// v1.3.0：子選單「複製到主選單」。舊版匯出檔沒有這一段＝沒有複製項（匯入是整份覆蓋）。
+			$copies = self::sanitize_top_copies( (array) ( $menu['top_copies']['items'] ?? [] ) );
+			if ( ! empty( $copies ) ) {
+				$existing['top_copies']['items'] = $copies;
+			}
 
 			// 維持 v2.37.1 legacy fallback（與 save_menu_config 一致）
 			$legacy_map = [];
@@ -292,6 +300,7 @@ class YSPermissionController {
 	 *   { "wp_native": { "items": [ ... ] } }
 	 *   { "ys_cart":   { "items": [ ... ], "hide_for_user_ids": [5,7] } }
 	 *   { "user_overrides": { ... } }  // future extension
+	 *   { "top_copies": { "items": [ { "slug", "parent_slug" } ], "rendered": [ ... ] } }  // v1.3.0
 	 *
 	 * 採 partial-merge：每次只覆寫提交的 tab，其他 slice 不動。
 	 */
@@ -332,6 +341,25 @@ class YSPermissionController {
 			}
 			if ( isset( $slice['hide_for_user_ids'] ) ) {
 				$existing['ys_cart']['hide_for_user_ids'] = self::sanitize_user_id_list( $slice['hide_for_user_ids'] );
+			}
+		}
+
+		// v1.3.0：子選單「複製到主選單」（top_copies）。兩個分頁都會送：「全部選單」新增與刪除、
+		// 「主選單（頂層）」刪除。只動頁面載入時列出的複製項（rendered），其餘原樣保留；
+		// 刪掉的複製項，它在主選單分頁的設定列（排序、名稱、圖示…）一併清掉。
+		if ( isset( $payload['top_copies'] ) && is_array( $payload['top_copies'] )
+			&& isset( $payload['top_copies']['items'] ) && is_array( $payload['top_copies']['items'] ) ) {
+			$slice  = $payload['top_copies'];
+			$stored = self::sanitize_top_copies( (array) ( $existing['top_copies']['items'] ?? [] ) );
+			$merged = self::merge_unrendered_copies(
+				self::sanitize_top_copies( $slice['items'] ),
+				$stored,
+				$slice['rendered'] ?? null
+			);
+
+			$existing['top_copies'] = [ 'items' => $merged ];
+			if ( ! empty( $existing['wp_native']['items'] ) ) {
+				$existing['wp_native']['items'] = self::drop_removed_copy_rows( (array) $existing['wp_native']['items'], $stored, $merged );
 			}
 		}
 
@@ -412,6 +440,104 @@ class YSPermissionController {
 		}
 
 		return $submitted;
+	}
+
+	/**
+	 * v1.3.0：「複製到主選單」的清單——同 merge_unrendered_items 的做法，頁面上沒列出的複製項原樣保留。
+	 *
+	 * 「全部選單」分頁列出全部複製項；「主選單（頂層）」分頁只列出目前登入者側欄裡有的複製項
+	 * （原子選單暫時不在、設了僅限本人給別人的不會列出）。以複製項的選單代稱（copy_menu_key）比對。
+	 *
+	 * @param array<int, array{slug:string,parent_slug:string}> $submitted 這次送出的複製項（已清理）。
+	 * @param array<int, array{slug:string,parent_slug:string}> $stored    目前已存的複製項（已清理）。
+	 * @param mixed                                             $rendered  頁面載入時列出的複製項；沒帶就整份取代。
+	 * @return array<int, array{slug:string,parent_slug:string}>
+	 */
+	private static function merge_unrendered_copies( array $submitted, array $stored, $rendered ): array {
+		if ( ! is_array( $rendered ) ) {
+			return $submitted;
+		}
+
+		$known = [];
+		foreach ( array_merge( self::sanitize_top_copies( $rendered ), $submitted ) as $row ) {
+			$known[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] = true;
+		}
+		foreach ( $stored as $row ) {
+			if ( ! isset( $known[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] ) ) {
+				$submitted[] = $row;
+			}
+		}
+
+		return self::sanitize_top_copies( $submitted );
+	}
+
+	/**
+	 * v1.3.0：刪掉的複製項，它在「主選單（頂層）」分頁的設定列一併拿掉（重新複製時從預設值開始）。
+	 *
+	 * @param array<int, mixed>                                 $native_items wp_native.items[]
+	 * @param array<int, array{slug:string,parent_slug:string}> $before       儲存前的複製項。
+	 * @param array<int, array{slug:string,parent_slug:string}> $after        儲存後的複製項。
+	 * @return array<int, mixed>
+	 */
+	private static function drop_removed_copy_rows( array $native_items, array $before, array $after ): array {
+		$kept = [];
+		foreach ( $after as $row ) {
+			$kept[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] = true;
+		}
+		$removed = [];
+		foreach ( $before as $row ) {
+			$key = YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] );
+			if ( ! isset( $kept[ $key ] ) ) {
+				$removed[ $key ] = true;
+			}
+		}
+		if ( empty( $removed ) ) {
+			return $native_items;
+		}
+
+		return array_values(
+			array_filter(
+				$native_items,
+				static function ( $row ) use ( $removed ): bool {
+					return ! ( is_array( $row ) && empty( $row['separator'] ) && isset( $removed[ (string) ( $row['slug'] ?? '' ) ] ) );
+				}
+			)
+		);
+	}
+
+	/**
+	 * v1.3.0：Sanitize「複製到主選單」清單（top_copies.items[]）。
+	 *
+	 * 每一筆只存來源：{ slug, parent_slug }（&amp; 還原成 &，與側欄比對時一致）。同一個子選單只留
+	 * 第一筆（選單代稱相同即視為同一個，與 Admin Menu Editor 頂層連結不得重複的規則一致）；
+	 * 代稱組不出安全連結的（含引號、角括號、空白）丟掉；最多 MAX_TOP_COPIES 筆。
+	 *
+	 * @param array<int, mixed> $raw
+	 * @return array<int, array{slug:string,parent_slug:string}>
+	 */
+	public static function sanitize_top_copies( array $raw ): array {
+		$out  = [];
+		$seen = [];
+		foreach ( $raw as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$slug   = isset( $row['slug'] ) && is_scalar( $row['slug'] ) ? wp_specialchars_decode( sanitize_text_field( (string) $row['slug'] ) ) : '';
+			$parent = isset( $row['parent_slug'] ) && is_scalar( $row['parent_slug'] ) ? wp_specialchars_decode( sanitize_text_field( (string) $row['parent_slug'] ) ) : '';
+			$key    = YSMenuRouter::copy_menu_key( $slug, $parent );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = [
+				'slug'        => $slug,
+				'parent_slug' => $parent,
+			];
+			if ( count( $out ) >= self::MAX_TOP_COPIES ) {
+				break;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -560,6 +686,11 @@ class YSPermissionController {
 			// 由 append_promoted_endpoints 以 sub 列補回（否則 php 型 slug 與
 			// 衍生頂層項同名，補回被誤判已列出，設定列消失無法取消提升）。
 			if ( false !== strpos( $classes, 'ys-am-promoted' ) ) {
+				continue;
+			}
+			// v1.3.0：跳過「複製到主選單」的頂層項——原子選單仍在原父選單底下列出，複製項由「主選單（頂層）」
+			// 分頁管理（使用者覆寫的可見清單也不列：複製項跟著原子選單的權限走）。
+			if ( false !== strpos( $classes, 'ys-am-copy' ) ) {
 				continue;
 			}
 
@@ -732,7 +863,7 @@ class YSPermissionController {
 			// v2.39.0 BATCH Q3：hide flag（boolean）
 			$hide = ! empty( $row['hide'] );
 
-			$out[] = [
+			$item = [
 				'slug'           => $slug,
 				'title_override' => '' !== $title_override ? $title_override : null,
 				'order'          => $order,
@@ -741,6 +872,14 @@ class YSPermissionController {
 				'hide'           => $hide,
 				'self_only_uid'  => isset( $row['self_only_uid'] ) ? absint( $row['self_only_uid'] ) : 0,
 			];
+
+			// v1.3.0：圖示（目前只有「複製到主選單」的項目會用到）。沒設定就不存這個欄位，舊設定的形狀不變。
+			$icon = isset( $row['icon'] ) && is_scalar( $row['icon'] ) ? YSMenuRouter::sanitize_menu_icon( (string) $row['icon'] ) : '';
+			if ( '' !== $icon ) {
+				$item['icon'] = $icon;
+			}
+
+			$out[] = $item;
 		}
 		return $out;
 	}
