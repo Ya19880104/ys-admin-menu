@@ -101,9 +101,17 @@ body.ys-theme-active #adminmenu .wp-submenu a:focus {
         text-decoration: none;
     }
 
-    /* 子選單方向指示器（純裝飾、非按鈕）：低調小箭頭，朝下=可展開 / 朝上=已展開。 */
+    /* 子選單方向指示器（純裝飾、非按鈕）：低調小箭頭，朝下=可展開 / 朝上=已展開。
+       v1.3.1：WordPress 核心替「目前所在選單」的 a::after 另外定了一個絕對定位的小三角形
+       （position:absolute; right:0; top:50%; margin-top:-8px）。這裡不取消的話，目前所在選單的箭頭會被
+       擺到列的最右緣，其他選單的箭頭卻由 flex 的 margin-left:auto 與列的右內距決定位置，兩邊對不齊。
+       所以一律回到一般排版（position:static），所有狀態的箭頭位置才會一致。 */
     body.ys-theme-active #adminmenu li.wp-has-submenu > a.menu-top::after {
         content: "\f347";
+        position: static;
+        top: auto;
+        right: auto;
+        margin-top: 0;
         display: inline-flex;
         flex: 0 0 auto;
         align-items: center;
@@ -139,6 +147,17 @@ body.ys-theme-active #adminmenu .wp-submenu a:focus {
         background: transparent;
         opacity: 0.8;
         transform: rotate(180deg);
+    }
+
+    /* v1.3.1：展開版面是手風琴——沒有飛出子選單，也沒有「缺口指向內容區」的目前頁標記。WordPress 核心貼在
+       列右緣的這兩種小三角形在這裡只會在列的右端露出一塊多餘的三角形，所以不顯示：
+       ① 非目前選單 li::after：滑過、取得焦點（含點箭頭展開後焦點還在連結上）時指向飛出子選單的深色三角形。
+       ② 沒有子選單的目前選單 a.current::after：指向內容區的淺灰色缺口。
+       圖示列（<100px）不在這個 @container 內，仍是 WordPress 原生的小三角形與飛出子選單。 */
+    body.ys-theme-active #adminmenu li.wp-has-submenu.wp-not-current-submenu:hover::after,
+    body.ys-theme-active #adminmenu li.wp-has-submenu.wp-not-current-submenu:focus-within::after,
+    body.ys-theme-active #adminmenu li.menu-top:not(.wp-has-submenu) > a.current::after {
+        display: none;
     }
 
     body.ys-theme-active #adminmenu .wp-menu-name {
