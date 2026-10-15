@@ -13,6 +13,9 @@
 - **自訂登入頁（wp-login.php）**：採 YS CRM 的深藍品牌版面（左側品牌區、右側登入卡片，窄螢幕改單欄）。可設定標題、副標、標語、品牌名稱、登入頁專用 LOGO、背景圖與頁尾文字（可放「由某公司開發與維護」這類說明），並可切換「返回首頁」連結。忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。總開關 `ys_admin_menu_login_enabled`（預設關）。只改外觀與文字，不改登入流程、不碰帳號密碼的驗證。
 - **Cloudflare Turnstile 登入防護**：在 wp-login.php 的登入（可另外涵蓋註冊、忘記密碼）表單加入 Turnstile 驗證，送出時由伺服器端向 Cloudflare 驗證後才放行。可設定啟用開關、Site Key、Secret Key、套用範圍，以及「連不到 Cloudflare 時」的處理方式（寬鬆＝放行並記錄，預設；嚴格＝擋下）。設定頁有「測試設定」可當場確認金鑰正確。啟用開關與 Site Key、Secret Key 都填好才會生效，少一個就不顯示、也不會擋登入，避免把自己鎖在外面。
 
+### 修正
+- **手機上打開側欄時，選單圖示壓在名稱上**（啟用原生選單樣式、視窗寬 782px 以下）：每個選單項的圖示和名稱疊在一起。WordPress 在視窗 960px 以下會把選單圖示改成絕對定位（給收合的圖示列用），手機的側欄抽屜也沿用這個設定，靠名稱的左內距讓出位置；原生選單樣式的展開版面把名稱的左內距拿掉、改成圖示與名稱並排，圖示卻沒有回到一般排版。現在展開的側欄（含手機抽屜）圖示一律回到一般排版，和名稱之間留固定間距，與桌機一致。側欄收合成圖示列（按「收合選單」或視窗寬 783–960px）以及停用原生選單樣式時不受影響。這個問題從 1.0.0 就存在，與 WordPress 版本無關。
+
 ### 說明
 - 所有新增的開關預設值都讓升級後外觀不變：選單 LOGO 區塊預設關、沒有任何 Admin Bar 節點被隱藏、前台 Admin Bar 照 WordPress 預設、自訂登入頁與 Turnstile 都預設關。
 - 新增 option 前綴一律 `ys_admin_menu_`：白牌 `show_menu_logo`／`menu_logo_text`／`adminbar_hidden`／`adminbar_seen`／`frontend_adminbar`／`frontend_adminbar_roles`；登入頁 `login_enabled`／`login_brand`／`login_title`／`login_subtitle`／`login_tagline`／`login_logo_url`／`login_bg_url`／`login_footer_text`／`login_back_link`；Turnstile `turnstile_enabled`／`turnstile_site_key`／`turnstile_secret_key`／`turnstile_scope`／`turnstile_mode`／`turnstile_log`。解除安裝清除時一併涵蓋這些。

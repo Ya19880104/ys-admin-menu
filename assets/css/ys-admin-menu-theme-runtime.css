@@ -169,7 +169,13 @@ body.ys-theme-active #adminmenu .wp-submenu a:focus {
         line-height: var( --ys-theme-menu-line-height );
     }
 
+    /* v1.4.0：position: static。WordPress 核心在視窗 ≤960px 時給 .auto-fold #adminmenu div.wp-menu-image
+       position:absolute（給 36px 圖示列用），這條在 ≤782px 的手機抽屜裡也還在；核心在抽屜裡是靠名稱的
+       36px 左內距讓位。這裡把名稱內距歸零、改用 flex＋gap 排版，圖示若還是絕對定位就脫離 flex，
+       名稱從同一個起點開始、兩者疊在一起。所以在展開版面一律回到一般排版。
+       圖示列（<100px，含手動收合與 783–960px 自動收合）不在這個 @container 內，核心的絕對定位照舊。 */
     body.ys-theme-active #adminmenu .wp-menu-image {
+        position: static;
         display: inline-flex;
         flex: 0 0 20px;
         align-items: center;
