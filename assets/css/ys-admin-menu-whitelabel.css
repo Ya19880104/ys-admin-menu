@@ -599,3 +599,183 @@ body.ysca-wl-active .ysca-wl-card__title::before {
     background: #6366f1;
     border-radius: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   v1.4.0 — 白牌設定頁分頁、Admin Bar 節點表、登入頁與 Turnstile 區塊
+   ═══════════════════════════════════════════════════════════ */
+
+/* .ysca-wl-tabs 是 display:flex，要明確讓 hidden 屬性生效（沒有 JS 時分頁列不出現、各分頁全部顯示）。 */
+body.ysca-wl-active .ys-am-wl-tabs[hidden],
+body.ysca-wl-active .ys-am-wl-panel[hidden] {
+    display: none;
+}
+
+body.ysca-wl-active .ys-am-wl-tabs .ysca-wl-tab {
+    border-radius: 6px 6px 0 0;
+}
+
+body.ysca-wl-active .ys-am-wl-tabs .ysca-wl-tab:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: -2px;
+}
+
+body.ysca-wl-active .ys-am-wl-panel {
+    margin-bottom: 20px;
+}
+
+body.ysca-wl-active .ys-am-wl-subfield {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid #e5e7eb;
+}
+
+body.ysca-wl-active .ys-am-wl-grid {
+    margin-top: 18px;
+}
+
+body.ysca-wl-active .ys-am-wl-grid .ysca-wl-field {
+    margin-bottom: 0;
+}
+
+body.ysca-wl-active .ys-am-wl-table-wrap {
+    margin: 16px 0 12px;
+    overflow-x: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes th,
+body.ysca-wl-active .ys-am-wl-log th {
+    width: auto;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes thead th {
+    white-space: nowrap;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes tbody th {
+    background: #fff;
+    font-weight: 500;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes tbody th code {
+    margin-left: 6px;
+    color: #6b7280;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes td {
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes td:nth-child(2),
+body.ysca-wl-active .ys-am-wl-nodes td:nth-child(3),
+body.ysca-wl-active .ys-am-wl-nodes thead th:nth-child(2),
+body.ysca-wl-active .ys-am-wl-nodes thead th:nth-child(3) {
+    text-align: center;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes input[type="checkbox"] {
+    margin: 0;
+}
+
+body.ysca-wl-active .ys-am-wl-nodes .ysca-wl-badge + .ysca-wl-badge {
+    margin-left: 4px;
+}
+
+body.ysca-wl-active .ys-am-wl-node-note {
+    display: block;
+    margin-top: 2px;
+}
+
+body.ysca-wl-active .ys-am-wl-fieldset {
+    min-width: 0;
+    margin: 18px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+body.ysca-wl-active .ys-am-wl-fieldset legend {
+    padding: 0;
+}
+
+body.ysca-wl-active .ys-am-wl-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+
+body.ysca-wl-active .ys-am-wl-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #374151;
+    font-size: 13px;
+}
+
+body.ysca-wl-active .ys-am-wl-check input[type="checkbox"] {
+    margin: 0;
+}
+
+body.ysca-wl-active .ys-am-wl-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 10px;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+body.ysca-wl-active .ys-am-wl-radio input[type="radio"] {
+    flex-shrink: 0;
+    margin: 3px 0 0;
+}
+
+body.ysca-wl-active .ys-am-wl-radio strong {
+    color: #111827;
+}
+
+body.ysca-wl-active .ys-am-wl-emergency {
+    margin: 18px 0 0;
+    background: #fff7ed;
+    border-left-color: #f59e0b;
+    color: #7c2d12;
+}
+
+body.ysca-wl-active .ys-am-wl-emergency code {
+    padding: 1px 4px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 3px;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+body.ysca-wl-active .ys-am-wl-test-widget {
+    margin: 12px 0 0;
+    min-height: 65px;
+}
+
+body.ysca-wl-active .ys-am-wl-test-result {
+    margin: 12px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+}
+
+body.ysca-wl-active .ys-am-wl-test-result.is-ok {
+    color: #065f46;
+}
+
+body.ysca-wl-active .ys-am-wl-test-result.is-bad {
+    color: #991b1b;
+}
+
+@media (max-width: 782px) {
+    body.ysca-wl-active .ys-am-wl-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body.ysca-wl-active .ys-am-wl-nodes td {
+        white-space: normal;
+    }
+}

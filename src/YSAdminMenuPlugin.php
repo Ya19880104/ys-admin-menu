@@ -7,6 +7,7 @@
  *   2. 原生選單樣式渲染 YSAdminThemeRenderer（全 wp-admin 皮膚）
  *   3. REST 路由 YSRouteRegistrar（ys-admin-menu/v1）
  *   4. 後台設定頁 YSMenuPage（頂層選單 + 子頁）+ 白牌 admin-post handler
+ *   5. v1.4.0 自訂登入頁 YSLoginPage、Cloudflare Turnstile 登入防護 YSTurnstile（wp-login.php）
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -21,6 +22,8 @@ use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 use YangSheep\AdminMenu\Rest\YSRouteRegistrar;
 use YangSheep\AdminMenu\Admin\YSMenuPage;
 use YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin;
+use YangSheep\AdminMenu\Login\YSLoginPage;
+use YangSheep\AdminMenu\Login\YSTurnstile;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -69,6 +72,11 @@ final class YSAdminMenuPlugin {
 		if ( YSWhiteLabelAdmin::get_hide_wp_logo() ) {
 			add_action( 'admin_bar_menu', [ YSWhiteLabelAdmin::class, 'remove_wp_logo_node' ], 999 );
 		}
+
+		// v1.4.0：自訂登入頁與 Turnstile 都在 wp-login.php（不是 is_admin()），所以不放在後台區塊裡。
+		// 兩者都等到 login_init 才讀設定；其他請求不受影響。
+		YSLoginPage::register();
+		YSTurnstile::register();
 
 		// 4. 後台設定頁 + 白牌 admin-post handler（僅後台）
 		if ( is_admin() ) {

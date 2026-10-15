@@ -1,19 +1,18 @@
 <?php
 /**
- * 白牌設置頁面 template（v2.37.1 / v2.45.39 ADR-047 .ysca-wl-* 獨立樣式）
+ * 白牌設置頁面 template（v2.37.1 / v2.45.39 ADR-047 .ysca-wl-* 獨立樣式；v1.4.0 分頁）
  *
- * 從 YSWhiteLabelAdmin::render_settings() 載入。
+ * 從 YSWhiteLabelAdmin::render_settings() 載入。整頁是一個表單，「儲存白牌設置」一次存全部分頁。
  *
- * 區塊：
- *   1. 後台 LOGO（上傳 / 預覽 / 移除）— 作為頂層選單圖示
- *   2. Footer 文字 — 取代 wp-admin 頁尾
+ * 分頁（沒有 JavaScript 時四塊依序全部顯示）：
+ *   1. 後台品牌：後台 LOGO（頂層選單圖示＋選單上方 LOGO 區塊）、Footer 文字、後台頁尾、背景色、資料清除
+ *   2. Admin Bar：隱藏 WordPress 標誌、各節點後台／前台隱藏、前台 Admin Bar 載入方式與角色
+ *   3. 登入頁：自訂 wp-login.php 的開關與文字
+ *   4. 登入防護：Cloudflare Turnstile
  *
- * 變數：
- *   - $logo_url    string  目前 LOGO URL
- *   - $footer_text string  目前 Footer HTML
- *   - $notice      string  PRG 後 success message
- *
- * v2.45.39 ADR-047：全 markup 改 `.ysca-wl-*`、由 YSWhiteLabelAssets 載入獨立 CSS。
+ * 變數（render_settings 提供）：
+ *   - $logo_url, $footer_text, $hide_footer, $hide_wp_logo, $admin_bg_color, $purge_on_uninstall, $notice
+ *   - v1.4.0：$show_menu_logo, $menu_logo_text, $adminbar, $login_page, $turnstile, $field_errors, $active_tab
  *
  * @package YangSheep\Ecommerce\Templates
  */
@@ -23,9 +22,46 @@ defined( 'ABSPATH' ) || exit;
 /** @var string $logo_url */
 /** @var string $footer_text */
 /** @var string $notice */
+/** @var bool   $show_menu_logo */
+/** @var string $menu_logo_text */
+/** @var array  $adminbar */
+/** @var array  $login_page */
+/** @var array  $turnstile */
+/** @var array  $field_errors */
+/** @var string $active_tab */
 
-$has_logo = ( '' !== $logo_url );
+$has_logo        = ( '' !== $logo_url );
 $settings_action = admin_url( 'admin-post.php' );
+$site_name       = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+
+$tabs = [
+	'brand'     => '後台品牌',
+	'adminbar'  => 'Admin Bar',
+	'login'     => '登入頁',
+	'turnstile' => '登入防護',
+];
+
+$scope_labels = [
+	'login'        => '登入',
+	'register'     => '註冊（站台開放註冊時才有這個表單）',
+	'lostpassword' => '忘記密碼',
+];
+$log_labels = [
+	'context' => [
+		'login'        => '登入',
+		'register'     => '註冊',
+		'lostpassword' => '忘記密碼',
+		'test'         => '測試',
+	],
+	'outcome' => [
+		'allowed' => '已放行',
+		'blocked' => '已擋下',
+	],
+	'reason'  => [
+		'unreachable'    => '連不到 Cloudflare',
+		'secret_invalid' => 'Secret Key 不正確',
+	],
+];
 ?>
 <div class="ysca-wl-page ysca-whitelabel-settings">
 
@@ -35,137 +71,531 @@ $settings_action = admin_url( 'admin-post.php' );
 		</div>
 	<?php endif; ?>
 
-	<div class="ysca-wl-notice ysca-wl-notice--info">
-		<p>
-			<strong>說明：</strong>
-			LOGO 會作為「YS 選單管理」頂層選單的圖示；Footer 文字會取代 wp-admin 所有頁面右下角的頁尾文字。
-			未設定時，頂層選單使用預設圖示，頁尾維持 WordPress 預設。
-		</p>
-	</div>
+	<?php if ( in_array( 'site_key_format', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>Turnstile Site Key 格式不正確（只能有英文、數字、底線、連字號，10～100 個字），這個欄位沒有儲存。</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( in_array( 'secret_format', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>Turnstile Secret Key 格式不正確（只能有英文、數字、底線、連字號，10～100 個字），這個欄位沒有儲存，仍沿用原本的值。</p>
+		</div>
+	<?php endif; ?>
 
-	<form method="post" action="<?php echo esc_url( $settings_action ); ?>" class="ysca-wl-section">
+	<form method="post" action="<?php echo esc_url( $settings_action ); ?>" class="ysca-wl-section" id="ys-am-wl-form">
 		<input type="hidden" name="action" value="<?php echo esc_attr( \YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::ADMIN_POST_ACTION ); ?>">
 		<?php wp_nonce_field( \YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::NONCE_ACTION ); ?>
+		<input type="hidden" name="ys_am_tab" id="ys-am-wl-tab-input" value="<?php echo esc_attr( $active_tab ); ?>">
 
-		<div class="ysca-wl-card">
-			<div class="ysca-wl-card__header">
-				<h3 class="ysca-wl-card__title">後台 LOGO</h3>
-			</div>
-			<div class="ysca-wl-card__body">
-				<p class="ysca-wl-field__hint">
-					上傳的 LOGO 會作為「YS 選單管理」頂層選單的圖示，取代預設 dashicon。
+		<div class="ysca-wl-tabs ys-am-wl-tabs" role="tablist" aria-label="白牌設定分頁" data-ys-am-tabs hidden>
+			<?php foreach ( $tabs as $tab_key => $tab_label ) : ?>
+				<button type="button" role="tab" class="ysca-wl-tab"
+					id="ys-am-wl-tab-<?php echo esc_attr( $tab_key ); ?>"
+					aria-controls="ys-am-wl-panel-<?php echo esc_attr( $tab_key ); ?>"
+					aria-selected="<?php echo $tab_key === $active_tab ? 'true' : 'false'; ?>"
+					tabindex="<?php echo $tab_key === $active_tab ? '0' : '-1'; ?>"
+					data-tab="<?php echo esc_attr( $tab_key ); ?>"><?php echo esc_html( $tab_label ); ?></button>
+			<?php endforeach; ?>
+		</div>
+
+		<?php /* ═══════════════════════ 分頁 1：後台品牌 ═══════════════════════ */ ?>
+		<section class="ys-am-wl-panel" id="ys-am-wl-panel-brand" role="tabpanel" aria-labelledby="ys-am-wl-tab-brand" data-panel="brand">
+
+			<div class="ysca-wl-notice ysca-wl-notice--info">
+				<p>
+					<strong>說明：</strong>
+					LOGO 會作為「YS 選單管理」頂層選單的圖示，也可以放在左側選單最上方；Footer 文字會取代 wp-admin 所有頁面右下角的頁尾文字。
+					未設定時，頂層選單使用預設圖示，頁尾維持 WordPress 預設。
 				</p>
+			</div>
 
-				<div class="ysca-wl-field">
-					<div class="ysca-wl-whitelabel-logo-row">
-						<div class="ysca-wl-whitelabel-logo-preview">
-							<img id="ys-ec-logo-preview"
-								src="<?php echo esc_attr( $logo_url ); ?>"
-								alt=""
-								class="ysca-wl-whitelabel-logo-img" width="180" <?php echo $has_logo ? '' : 'hidden'; ?>>
-							<p id="ys-ec-logo-empty" class="ysca-wl-field__hint" <?php echo $has_logo ? 'hidden' : ''; ?>>
-								（尚未上傳 LOGO）
-							</p>
-						</div>
-						<div class="ysca-wl-field">
-							<label for="ys-ec-whitelabel-logo-url" class="screen-reader-text">後台 LOGO URL</label>
-							<input type="text" id="ys-ec-whitelabel-logo-url" name="logo_url"
-								value="<?php echo esc_attr( $logo_url ); ?>"
-								class="ysca-wl-input"
-								placeholder="https://example.com/logo.png">
-							<div class="ysca-wl-actions">
-								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost" id="ys-ec-upload-logo">
-									從媒體庫選擇
-								</button>
-								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost" id="ys-ec-remove-logo">
-									移除 LOGO
-								</button>
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">後台 LOGO</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<p class="ysca-wl-field__hint">
+						上傳的 LOGO 會作為「YS 選單管理」頂層選單的圖示，取代預設 dashicon。
+					</p>
+
+					<div class="ysca-wl-field">
+						<div class="ysca-wl-whitelabel-logo-row">
+							<div class="ysca-wl-whitelabel-logo-preview">
+								<img id="ys-ec-logo-preview"
+									src="<?php echo esc_attr( $logo_url ); ?>"
+									alt=""
+									class="ysca-wl-whitelabel-logo-img" width="180" <?php echo $has_logo ? '' : 'hidden'; ?>>
+								<p id="ys-ec-logo-empty" class="ysca-wl-field__hint" <?php echo $has_logo ? 'hidden' : ''; ?>>
+									（尚未上傳 LOGO）
+								</p>
 							</div>
-							<p class="ysca-wl-field__hint">建議尺寸：寬度 ≤ 180px、高度 ≤ 80px（PNG 含透明度尤佳）。</p>
+							<div class="ysca-wl-field">
+								<label for="ys-ec-whitelabel-logo-url" class="screen-reader-text">後台 LOGO URL</label>
+								<input type="text" id="ys-ec-whitelabel-logo-url" name="logo_url"
+									value="<?php echo esc_attr( $logo_url ); ?>"
+									class="ysca-wl-input"
+									placeholder="https://example.com/logo.png">
+								<div class="ysca-wl-actions">
+									<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost" id="ys-ec-upload-logo">
+										從媒體庫選擇
+									</button>
+									<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost" id="ys-ec-remove-logo">
+										移除 LOGO
+									</button>
+								</div>
+								<p class="ysca-wl-field__hint">建議尺寸：寬度 ≤ 180px、高度 ≤ 80px（PNG 含透明度尤佳）。</p>
+							</div>
+						</div>
+					</div>
+
+					<div class="ysca-wl-field ys-am-wl-subfield">
+						<label class="ys-am-toggle-field">
+							<span class="ys-am-toggle">
+								<input type="checkbox" name="show_menu_logo" value="yes" <?php checked( $show_menu_logo ); ?>>
+								<span class="ys-am-toggle__slider"></span>
+							</span>
+							<span class="ys-am-toggle-field__text"><strong>在左側選單最上方顯示 LOGO 區塊</strong>第一個選單項之前多一塊品牌區，點了回到控制台；側欄收成圖示列時只留小圖。和上面的頂層選單圖示是兩回事，可以同時使用。</span>
+						</label>
+						<div class="ysca-wl-field" style="margin-top:12px;">
+							<label for="ys-am-menu-logo-text" class="ysca-wl-field__label">LOGO 旁的站名文字（選填）</label>
+							<input type="text" id="ys-am-menu-logo-text" name="menu_logo_text" maxlength="60"
+								value="<?php echo esc_attr( $menu_logo_text ); ?>"
+								class="ysca-wl-input"
+								placeholder="<?php echo esc_attr( '例如：' . $site_name ); ?>">
+							<p class="ysca-wl-field__hint">留空只顯示 LOGO；沒有上傳 LOGO、也沒有填這裡時，改顯示網站標題。顏色跟著側欄（啟用「原生選單樣式」時用它的側欄配色）。</p>
 						</div>
 					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="ysca-wl-card">
-			<div class="ysca-wl-card__header">
-				<h3 class="ysca-wl-card__title">後台 Footer 文字</h3>
-			</div>
-			<div class="ysca-wl-card__body">
-				<p class="ysca-wl-field__hint">
-					顯示於 wp-admin 所有頁面右下角的頁尾，例如版權聲明、品牌標語。
-				</p>
-
-				<div class="ysca-wl-field">
-					<label for="ys-ec-whitelabel-footer-text" class="ysca-wl-field__label">Footer HTML 內容</label>
-					<textarea id="ys-ec-whitelabel-footer-text" name="footer_text"
-						rows="4" class="ysca-wl-textarea"
-						placeholder="例如：&copy; 2026 Your Company Name. All rights reserved."><?php echo esc_textarea( $footer_text ); ?></textarea>
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">後台 Footer 文字</h3>
+				</div>
+				<div class="ysca-wl-card__body">
 					<p class="ysca-wl-field__hint">
-						允許基本 HTML（&lt;a&gt;、&lt;strong&gt;、&lt;br&gt; 等）。留空則完全不顯示 Footer。
+						顯示於 wp-admin 所有頁面右下角的頁尾，例如版權聲明、品牌標語。
+					</p>
+
+					<div class="ysca-wl-field">
+						<label for="ys-ec-whitelabel-footer-text" class="ysca-wl-field__label">Footer HTML 內容</label>
+						<textarea id="ys-ec-whitelabel-footer-text" name="footer_text"
+							rows="4" class="ysca-wl-textarea"
+							placeholder="例如：&copy; 2026 Your Company Name. All rights reserved."><?php echo esc_textarea( $footer_text ); ?></textarea>
+						<p class="ysca-wl-field__hint">
+							允許基本 HTML（&lt;a&gt;、&lt;strong&gt;、&lt;br&gt; 等）。留空則完全不顯示 Footer。
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">後台頁尾</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="hide_footer" value="yes" <?php checked( $hide_footer ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>完全隱藏後台頁尾</strong>移除「感謝使用 WordPress」與右側版本號。</span>
+					</label>
+					<p class="ysca-wl-field__hint">勾選後整個 wp-admin 頁尾列都不顯示；此時上方「Footer 文字」不會出現。</p>
+				</div>
+			</div>
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">介面外觀</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<div class="ysca-wl-field">
+						<label for="ys-am-admin-bg-color" class="ysca-wl-field__label">整個後台背景色</label>
+						<br>
+						<input type="text" id="ys-am-admin-bg-color" name="admin_bg_color"
+							value="<?php echo esc_attr( $admin_bg_color ); ?>"
+							class="ys-am-color-field" data-default-color=""
+							placeholder="#f0f0f1">
+						<p class="ysca-wl-field__hint">設定後立即套用到整個 wp-admin 背景（不需啟用主題皮膚）。留空則恢復 WordPress 預設色。</p>
+					</div>
+					<p class="ysca-wl-field__hint">「隱藏左上角 WordPress LOGO」移到「Admin Bar」分頁。</p>
+				</div>
+			</div>
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">資料清除</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="purge_on_uninstall" value="yes" <?php checked( $purge_on_uninstall ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>刪除外掛時一併清除所有設定</strong>預設不勾＝刪除外掛會保留所有設定、重新安裝即沿用；勾選後刪除外掛才會一併清除。</span>
+					</label>
+					<p class="ysca-wl-field__hint">建議保持不勾，避免誤刪外掛時遺失所有選單與樣式設定。</p>
+				</div>
+			</div>
+		</section>
+
+		<?php /* ═══════════════════════ 分頁 2：Admin Bar ═══════════════════════ */ ?>
+		<section class="ys-am-wl-panel" id="ys-am-wl-panel-adminbar" role="tabpanel" aria-labelledby="ys-am-wl-tab-adminbar" data-panel="adminbar">
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">Admin Bar 標誌與選單</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="hide_wp_logo" value="yes" id="ys-am-hide-wp-logo" <?php checked( $hide_wp_logo ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>隱藏左上角 WordPress LOGO</strong>含關於、官網、文件等子選單，前後台皆生效。</span>
+					</label>
+					<p class="ysca-wl-field__hint">勾選後 admin bar 左上角的 WordPress 標誌會完全移除（不論下表怎麼勾）。</p>
+
+					<div class="ys-am-wl-table-wrap">
+						<table class="ysca-wl-table ys-am-wl-nodes">
+							<caption class="screen-reader-text">Admin Bar 頂層節點：後台與前台各自要不要隱藏</caption>
+							<thead>
+								<tr>
+									<th scope="col">節點</th>
+									<th scope="col">後台隱藏</th>
+									<th scope="col">前台隱藏</th>
+									<th scope="col">偵測到</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( (array) ( $adminbar['nodes'] ?? [] ) as $node_id => $node ) : ?>
+									<?php
+									$node_id    = (string) $node_id;
+									$node_label = (string) ( $node['label'] ?? $node_id );
+									?>
+									<tr data-node="<?php echo esc_attr( $node_id ); ?>">
+										<th scope="row">
+											<span class="ys-am-wl-node-label"><?php echo esc_html( $node_label ); ?></span>
+											<code><?php echo esc_html( $node_id ); ?></code>
+											<?php if ( 'wp-logo' === $node_id ) : ?>
+												<span class="ysca-wl-field__hint ys-am-wl-node-note">上方開關開著時前後台都會隱藏。</span>
+											<?php elseif ( 'my-account' === $node_id ) : ?>
+												<span class="ysca-wl-field__hint ys-am-wl-node-note">藏起來後工具列上就沒有登出連結。</span>
+											<?php endif; ?>
+										</th>
+										<td>
+											<input type="checkbox" name="adminbar_hide_admin[]" value="<?php echo esc_attr( $node_id ); ?>"
+												aria-label="<?php echo esc_attr( '後台隱藏：' . $node_label ); ?>" <?php checked( ! empty( $node['hide_admin'] ) ); ?>>
+										</td>
+										<td>
+											<input type="checkbox" name="adminbar_hide_front[]" value="<?php echo esc_attr( $node_id ); ?>"
+												aria-label="<?php echo esc_attr( '前台隱藏：' . $node_label ); ?>" <?php checked( ! empty( $node['hide_front'] ) ); ?>>
+										</td>
+										<td>
+											<?php if ( ! empty( $node['seen_admin'] ) ) : ?>
+												<span class="ysca-wl-badge">後台</span>
+											<?php endif; ?>
+											<?php if ( ! empty( $node['seen_front'] ) ) : ?>
+												<span class="ysca-wl-badge">前台</span>
+											<?php endif; ?>
+											<?php if ( empty( $node['seen_admin'] ) && empty( $node['seen_front'] ) ) : ?>
+												<span class="ysca-wl-field__hint">尚未偵測到</span>
+											<?php endif; ?>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+
+					<p class="ysca-wl-field__hint"><strong>隱藏不是停用功能：</strong>只是讓工具列上看不到，功能本身照常可以用（例如直接輸入網址仍然打得開）。真正要禁止的功能請調整角色權限。</p>
+					<p class="ysca-wl-field__hint">「前台隱藏」只在下方選「載入，並套用前台隱藏清單」時生效。外掛加的節點：後台在打開這一頁時偵測；前台要用管理員帳號瀏覽過前台才偵測得到。手機版的選單按鈕不能隱藏（藏了就打不開後台選單）。</p>
+				</div>
+			</div>
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">前台 Admin Bar</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<div class="ysca-wl-field">
+						<label for="ys-am-frontend-adminbar" class="ysca-wl-field__label">前台的 Admin Bar</label>
+						<select id="ys-am-frontend-adminbar" name="frontend_adminbar" class="ysca-wl-input">
+							<option value="default" <?php selected( $adminbar['mode'] ?? 'default', 'default' ); ?>>照 WordPress 預設（依各帳號「瀏覽網站時顯示工具列」的設定）</option>
+							<option value="hide" <?php selected( $adminbar['mode'] ?? 'default', 'hide' ); ?>>完全不載入（前台不輸出工具列，也不載入它的 CSS／JS）</option>
+							<option value="filtered" <?php selected( $adminbar['mode'] ?? 'default', 'filtered' ); ?>>載入，並套用上方的「前台隱藏」清單</option>
+						</select>
+					</div>
+
+					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
+						<legend class="ysca-wl-field__label">只讓這些角色在前台看到 Admin Bar</legend>
+						<div class="ys-am-wl-checks">
+							<?php foreach ( (array) ( $adminbar['role_names'] ?? [] ) as $role_slug => $role_name ) : ?>
+								<label class="ys-am-wl-check">
+									<input type="checkbox" name="frontend_adminbar_roles[]" value="<?php echo esc_attr( (string) $role_slug ); ?>"
+										<?php checked( in_array( (string) $role_slug, (array) ( $adminbar['roles'] ?? [] ), true ) ); ?>>
+									<?php echo esc_html( (string) $role_name ); ?>
+								</label>
+							<?php endforeach; ?>
+						</div>
+						<p class="ysca-wl-field__hint">都不勾＝不限制。選「完全不載入」時這裡沒有作用。只影響前台；後台的工具列不受影響。</p>
+					</fieldset>
+				</div>
+			</div>
+		</section>
+
+		<?php /* ═══════════════════════ 分頁 3：登入頁 ═══════════════════════ */ ?>
+		<section class="ys-am-wl-panel" id="ys-am-wl-panel-login" role="tabpanel" aria-labelledby="ys-am-wl-tab-login" data-panel="login">
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">自訂登入頁</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="login_enabled" value="yes" <?php checked( ! empty( $login_page['enabled'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>啟用自訂登入頁</strong>wp-login.php 改成深藍品牌版面：左側品牌區、右側登入卡片，手機上改成單欄。只改外觀與文字，登入流程、帳號密碼的驗證都不變。</span>
+					</label>
+					<p class="ysca-wl-field__hint">
+						檢視方式：用無痕視窗開啟 <a href="<?php echo esc_url( (string) ( $login_page['login_url'] ?? wp_login_url() ) ); ?>" target="_blank" rel="noopener noreferrer">登入頁</a>（已登入時打開登入頁會直接轉到後台）。忘記密碼、註冊、設定新密碼的畫面也套用同一套配色。
+					</p>
+
+					<div class="ysca-page-settings-grid ys-am-wl-grid">
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-brand" class="ysca-wl-field__label">品牌名稱</label>
+							<input type="text" id="ys-am-login-brand" name="login_brand" maxlength="120" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['brand'] ?? '' ) ); ?>"
+								placeholder="<?php echo esc_attr( (string) ( $login_page['brand_default'] ?? '' ) ); ?>">
+							<p class="ysca-wl-field__hint">左側的大標，也是卡片上方的小字。留空用網站標題。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-tagline" class="ysca-wl-field__label">標語</label>
+							<input type="text" id="ys-am-login-tagline" name="login_tagline" maxlength="120" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['tagline'] ?? '' ) ); ?>"
+								placeholder="例如：客戶・報價・工作・帳務 一站管理">
+							<p class="ysca-wl-field__hint">左側大標下面那一行。留空不顯示；手機上不顯示。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-title" class="ysca-wl-field__label">標題</label>
+							<input type="text" id="ys-am-login-title" name="login_title" maxlength="120" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['title'] ?? '' ) ); ?>"
+								placeholder="<?php echo esc_attr( (string) ( $login_page['title_default'] ?? '登入' ) ); ?>">
+							<p class="ysca-wl-field__hint">卡片上的標題。留空用「<?php echo esc_html( (string) ( $login_page['title_default'] ?? '登入' ) ); ?>」。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-subtitle" class="ysca-wl-field__label">副標</label>
+							<input type="text" id="ys-am-login-subtitle" name="login_subtitle" maxlength="120" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['subtitle'] ?? '' ) ); ?>"
+								placeholder="<?php echo esc_attr( (string) ( $login_page['subtitle_default'] ?? '' ) ); ?>">
+							<p class="ysca-wl-field__hint">標題下面那一行。清空就不顯示。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-logo" class="ysca-wl-field__label">登入頁 LOGO</label>
+							<input type="text" id="ys-am-login-logo" name="login_logo_url" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['logo_url'] ?? '' ) ); ?>"
+								placeholder="https://example.com/logo.png">
+							<div class="ysca-wl-actions">
+								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-logo">從媒體庫選擇</button>
+								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-logo">清除</button>
+							</div>
+							<p class="ysca-wl-field__hint">留空沿用「後台品牌」分頁的後台 LOGO。只接受 http／https 網址。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-login-bg" class="ysca-wl-field__label">背景圖</label>
+							<input type="text" id="ys-am-login-bg" name="login_bg_url" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $login_page['bg_url'] ?? '' ) ); ?>"
+								placeholder="https://example.com/background.jpg">
+							<div class="ysca-wl-actions">
+								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-bg">從媒體庫選擇</button>
+								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-bg">清除</button>
+							</div>
+							<p class="ysca-wl-field__hint">留空用深藍漸層。圖片上會疊一層深藍，文字才看得清楚。</p>
+						</div>
+					</div>
+
+					<div class="ysca-wl-field">
+						<label for="ys-am-login-footer" class="ysca-wl-field__label">頁尾文字</label>
+						<textarea id="ys-am-login-footer" name="login_footer_text" rows="3" class="ysca-wl-textarea"
+							placeholder="例如：由 ○○ 公司開發與維護"><?php echo esc_textarea( (string) ( $login_page['footer'] ?? '' ) ); ?></textarea>
+						<p class="ysca-wl-field__hint">可以用 &lt;a&gt;、&lt;br&gt;、&lt;strong&gt;、&lt;em&gt;、&lt;span&gt;，其他標籤與 style、onclick 之類的屬性會被拿掉。留空不顯示。</p>
+					</div>
+
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="login_back_link" value="yes" <?php checked( ! empty( $login_page['back_link'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>顯示「← 返回首頁」連結</strong>卡片下方回到網站首頁的連結。</span>
+					</label>
+				</div>
+			</div>
+		</section>
+
+		<?php /* ═══════════════════════ 分頁 4：登入防護（Turnstile） ═══════════════════════ */ ?>
+		<section class="ys-am-wl-panel" id="ys-am-wl-panel-turnstile" role="tabpanel" aria-labelledby="ys-am-wl-tab-turnstile" data-panel="turnstile">
+
+			<?php $ts_status = (array) ( $turnstile['status'] ?? [] ); ?>
+			<?php if ( ! empty( $ts_status['active'] ) ) : ?>
+				<div class="ysca-wl-notice ysca-wl-notice--success">
+					<p>
+						<strong>已生效：</strong>
+						<?php
+						$active_scopes = [];
+						foreach ( (array) ( $turnstile['scope'] ?? [] ) as $scope_key ) {
+							$active_scopes[] = explode( '（', (string) ( $scope_labels[ $scope_key ] ?? $scope_key ) )[0];
+						}
+						echo esc_html( implode( '、', $active_scopes ) );
+						?>
+						表單會顯示 Turnstile，送出時伺服器端向 Cloudflare 驗證。連不到 Cloudflare 時：<?php echo 'strict' === ( $turnstile['mode'] ?? '' ) ? '擋下（嚴格）' : '放行並記錄（寬鬆）'; ?>。
 					</p>
 				</div>
-			</div>
-		</div>
+			<?php else : ?>
+				<div class="ysca-wl-notice ysca-wl-notice--info">
+					<p><strong>目前沒有生效</strong>（登入頁不顯示 Turnstile，也不驗證）：</p>
+					<?php foreach ( (array) ( $ts_status['reasons'] ?? [] ) as $reason ) : ?>
+						<p>・<?php echo esc_html( (string) $reason ); ?></p>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
 
-		<div class="ysca-wl-card">
-			<div class="ysca-wl-card__header">
-				<h3 class="ysca-wl-card__title">後台頁尾</h3>
-			</div>
-			<div class="ysca-wl-card__body">
-				<label class="ys-am-toggle-field">
-					<span class="ys-am-toggle">
-						<input type="checkbox" name="hide_footer" value="yes" <?php checked( $hide_footer ); ?>>
-						<span class="ys-am-toggle__slider"></span>
-					</span>
-					<span class="ys-am-toggle-field__text"><strong>完全隱藏後台頁尾</strong>移除「感謝使用 WordPress」與右側版本號。</span>
-				</label>
-				<p class="ysca-wl-field__hint">勾選後整個 wp-admin 頁尾列都不顯示；此時上方「Footer 文字」不會出現。</p>
-			</div>
-		</div>
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">Cloudflare Turnstile</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="turnstile_enabled" value="yes" <?php checked( ! empty( $turnstile['enabled'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>啟用 Turnstile</strong>Site Key 與 Secret Key 都填好才會生效；少一個就不顯示、也不擋登入。建議先存好兩把 Key、用下方「測試設定」確認通過，再打開這個開關。</span>
+					</label>
 
-		<div class="ysca-wl-card">
-			<div class="ysca-wl-card__header">
-				<h3 class="ysca-wl-card__title">介面外觀</h3>
-			</div>
-			<div class="ysca-wl-card__body">
-				<label class="ys-am-toggle-field">
-					<span class="ys-am-toggle">
-						<input type="checkbox" name="hide_wp_logo" value="yes" <?php checked( $hide_wp_logo ); ?>>
-						<span class="ys-am-toggle__slider"></span>
-					</span>
-					<span class="ys-am-toggle-field__text"><strong>隱藏左上角 WordPress LOGO</strong>含關於、官網、文件等子選單，前後台皆生效。</span>
-				</label>
-				<p class="ysca-wl-field__hint">勾選後 admin bar 左上角的 WordPress 標誌會完全移除。</p>
+					<div class="ysca-page-settings-grid ys-am-wl-grid">
+						<div class="ysca-wl-field">
+							<label for="ys-am-turnstile-site-key" class="ysca-wl-field__label">Site Key（公開金鑰）</label>
+							<input type="text" id="ys-am-turnstile-site-key" name="turnstile_site_key" class="ysca-wl-input"
+								value="<?php echo esc_attr( (string) ( $turnstile['site_key'] ?? '' ) ); ?>"
+								autocomplete="off" spellcheck="false" maxlength="100" placeholder="0x4AAAAAAA…">
+							<p class="ysca-wl-field__hint">Cloudflare 後台 → Turnstile → 這個 widget 的 Site Key。</p>
+						</div>
+						<div class="ysca-wl-field">
+							<label for="ys-am-turnstile-secret" class="ysca-wl-field__label">Secret Key（私密金鑰）</label>
+							<input type="password" id="ys-am-turnstile-secret" name="turnstile_secret_key" class="ysca-wl-input"
+								value="" autocomplete="new-password" spellcheck="false" maxlength="100"
+								placeholder="<?php echo ! empty( $turnstile['has_secret'] ) ? '已設定（留白＝保留）' : '尚未設定'; ?>"
+								aria-describedby="ys-am-turnstile-secret-hint">
+							<p class="ysca-wl-field__hint" id="ys-am-turnstile-secret-hint">
+								目前：<strong><?php echo ! empty( $turnstile['has_secret'] ) ? '已設定' : '未設定'; ?></strong>。留白＝保留已存的值；Secret 不會顯示在這裡，也不會放進匯出檔。
+							</p>
+							<label class="ys-am-wl-check">
+								<input type="checkbox" name="turnstile_secret_clear" value="1">
+								清除已儲存的 Secret Key（會忽略上面同時輸入的值）
+							</label>
+						</div>
+					</div>
 
-				<div class="ysca-wl-field" style="margin-top:16px;">
-					<label for="ys-am-admin-bg-color" class="ysca-wl-field__label">整個後台背景色</label>
-					<br>
-					<input type="text" id="ys-am-admin-bg-color" name="admin_bg_color"
-						value="<?php echo esc_attr( $admin_bg_color ); ?>"
-						class="ys-am-color-field" data-default-color=""
-						placeholder="#f0f0f1">
-					<p class="ysca-wl-field__hint">設定後立即套用到整個 wp-admin 背景（不需啟用主題皮膚）。留空則恢復 WordPress 預設色。</p>
+					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
+						<legend class="ysca-wl-field__label">套用範圍</legend>
+						<div class="ys-am-wl-checks">
+							<?php foreach ( $scope_labels as $scope_key => $scope_label ) : ?>
+								<label class="ys-am-wl-check">
+									<input type="checkbox" name="turnstile_scope[]" value="<?php echo esc_attr( $scope_key ); ?>"
+										<?php checked( in_array( $scope_key, (array) ( $turnstile['scope'] ?? [] ), true ) ); ?>>
+									<?php echo esc_html( $scope_label ); ?>
+								</label>
+							<?php endforeach; ?>
+						</div>
+						<p class="ysca-wl-field__hint">只保護 wp-login.php 的表單（包括送到 wp-login.php 的前台 wp_login_form()）。XML-RPC、REST API、WooCommerce「我的帳號」等自己的登入表單不在範圍內。</p>
+					</fieldset>
+
+					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
+						<legend class="ysca-wl-field__label">伺服器連不到 Cloudflare 時</legend>
+						<label class="ys-am-wl-radio">
+							<input type="radio" name="turnstile_mode" value="lenient" <?php checked( 'strict' !== ( $turnstile['mode'] ?? 'lenient' ) ); ?>>
+							<span><strong>寬鬆（預設）：放行並記錄。</strong>Cloudflare 停擺或主機暫時連不出去時，大家仍登得進來（管理員不會被鎖在外面）；代價是那段時間只靠帳號密碼保護，事件會記在下方。</span>
+						</label>
+						<label class="ys-am-wl-radio">
+							<input type="radio" name="turnstile_mode" value="strict" <?php checked( 'strict' === ( $turnstile['mode'] ?? 'lenient' ) ); ?>>
+							<span><strong>嚴格：擋下。</strong>連不到就不讓登入，安全性較高；但 Cloudflare 或主機對外連線出問題時，所有人（包括管理員）都登不進來，只能用下方的緊急關閉。</span>
+						</label>
+						<p class="ysca-wl-field__hint">「連不到」指連線失敗、逾時或 Cloudflare 回 5xx。Cloudflare 有回應但判定失敗（沒完成驗證、token 無效或用過、Secret Key 錯誤）時，兩種模式都會擋下。</p>
+					</fieldset>
+
+					<div class="ysca-wl-notice ys-am-wl-emergency">
+						<p><strong>被擋在外面時：</strong>在 wp-config.php 加一行 <code>define( 'YS_ADMIN_MENU_TURNSTILE_DISABLED', true );</code>，或用 WP-CLI 執行 <code>wp option update ys_admin_menu_turnstile_enabled no</code>，Turnstile 就會暫停。</p>
+						<?php if ( ! empty( $turnstile['constant_off'] ) ) : ?>
+							<p><strong>目前 wp-config.php 已經定義了這個常數，Turnstile 暫停中。</strong></p>
+						<?php endif; ?>
+					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="ysca-wl-card">
-			<div class="ysca-wl-card__header">
-				<h3 class="ysca-wl-card__title">資料清除</h3>
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">測試設定</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<?php if ( ! empty( $turnstile['can_test'] ) ) : ?>
+						<p class="ysca-wl-field__hint">用已儲存的 Site Key 與 Secret Key，在這個網域跑一次完整驗證（widget → 伺服器 → Cloudflare）。改過 Key 請先儲存再測。不會影響登入，也不會記錄。</p>
+						<div class="ys-am-wl-test-widget">
+							<div class="cf-turnstile"
+								data-sitekey="<?php echo esc_attr( (string) $turnstile['site_key'] ); ?>"
+								data-action="settings-test"
+								data-response-field="false"
+								data-callback="ysAmTurnstileTestToken"
+								data-expired-callback="ysAmTurnstileTestExpired"
+								data-error-callback="ysAmTurnstileTestError"></div>
+						</div>
+						<div class="ysca-wl-actions">
+							<button type="button" class="ysca-wl-btn" id="ys-am-turnstile-test" disabled>驗證測試</button>
+						</div>
+						<p class="ys-am-wl-test-result" id="ys-am-turnstile-test-result" role="status" aria-live="polite"></p>
+					<?php else : ?>
+						<p class="ysca-wl-field__hint">先填好 Site Key 與 Secret Key 並儲存，這裡就會出現測試用的 widget。</p>
+					<?php endif; ?>
+				</div>
 			</div>
-			<div class="ysca-wl-card__body">
-				<label class="ys-am-toggle-field">
-					<span class="ys-am-toggle">
-						<input type="checkbox" name="purge_on_uninstall" value="yes" <?php checked( $purge_on_uninstall ); ?>>
-						<span class="ys-am-toggle__slider"></span>
-					</span>
-					<span class="ys-am-toggle-field__text"><strong>刪除外掛時一併清除所有設定</strong>預設不勾＝刪除外掛會保留所有設定、重新安裝即沿用；勾選後刪除外掛才會一併清除。</span>
-				</label>
-				<p class="ysca-wl-field__hint">建議保持不勾，避免誤刪外掛時遺失所有選單與樣式設定。</p>
+
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">最近事件</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<p class="ysca-wl-field__hint">只記錄「連不到 Cloudflare」與「Secret Key 不正確」，最多 20 筆；一般的驗證失敗（例如機器人沒完成驗證）不記錄。不記錄帳號、IP 與 Secret。</p>
+					<?php if ( empty( $turnstile['log'] ) ) : ?>
+						<p class="ysca-wl-field__hint">目前沒有紀錄。</p>
+					<?php else : ?>
+						<div class="ys-am-wl-table-wrap">
+							<table class="ysca-wl-table ys-am-wl-log">
+								<thead>
+									<tr>
+										<th scope="col">時間</th>
+										<th scope="col">表單</th>
+										<th scope="col">結果</th>
+										<th scope="col">原因</th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php foreach ( (array) $turnstile['log'] as $row ) : ?>
+										<tr>
+											<td><?php echo esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['time'] ) ); ?></td>
+											<td><?php echo esc_html( $log_labels['context'][ $row['context'] ] ?? '—' ); ?></td>
+											<td><?php echo esc_html( $log_labels['outcome'][ $row['outcome'] ] ?? '—' ); ?></td>
+											<td><?php echo esc_html( $log_labels['reason'][ $row['reason'] ] ?? '—' ); ?></td>
+										</tr>
+									<?php endforeach; ?>
+								</tbody>
+							</table>
+						</div>
+					<?php endif; ?>
+				</div>
 			</div>
-		</div>
+		</section>
 
 		<div class="ysca-wl-actions">
 			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設置</button>

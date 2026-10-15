@@ -1,0 +1,705 @@
+/**
+ * YS Admin Menu — 自訂 wp-login.php 登入頁（v1.4.0）。YS CRM 的深藍品牌版面。
+ *
+ * 只在白牌設定打開「啟用自訂登入頁」時載入（login_enqueue_scripts，依賴核心 login.css 之後）。
+ * 所有規則都在 body.ys-am-login 底下；核心的表單結構與欄位 id 不動，只重排版與配色。
+ *
+ * 版面：
+ *   - 寬 ≥ 1024px：左半是固定的品牌區（LOGO、品牌名稱、標語、頁尾文字），右半是登入卡片。
+ *   - 窄螢幕：單欄；品牌區縮成上方的 LOGO＋品牌名稱，卡片置中，頁尾在最下面。
+ *   - 卡片由三段接成一張：卡片標題（login_message）＋錯誤／提示訊息＋表單。
+ *
+ * 配色：品牌深藍 #17408A／#102F68 系，不用黑色或接近黑色。文字對比皆 ≥ 4.5:1。
+ */
+
+body.ys-am-login.login {
+	--ys-login-blue-700: #17408a;
+	--ys-login-blue-800: #133878;
+	--ys-login-blue-900: #102f68;
+	--ys-login-card: rgba(9, 30, 74, 0.62);
+	--ys-login-card-border: rgba(165, 192, 255, 0.24);
+	--ys-login-text: #f1f5ff;
+	--ys-login-muted: #c5d3f2;
+	--ys-login-label: #dce6ff;
+	--ys-login-accent: #93b9ff;
+	--ys-login-input-bg: rgba(255, 255, 255, 0.07);
+	--ys-login-input-border: rgba(165, 192, 255, 0.34);
+	--ys-login-focus: #9cc0ff;
+	--ys-login-focus-ring: rgba(156, 192, 255, 0.38);
+	--ys-login-button: #2563eb;
+	--ys-login-button-hover: #1d4ed8;
+	--ys-login-radius: 20px;
+	--wp-admin-theme-color: #9cc0ff;
+	--wp-admin-theme-color-darker-10: #c5d8ff;
+	--wp-admin-theme-color-darker-20: #ffffff;
+
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+	height: auto;
+	margin: 0;
+	padding: 40px 24px;
+	box-sizing: border-box;
+	/* 底色後援：html 沒有背景時這個顏色會鋪滿整張畫布（捲動、列印、整頁截圖都不會露出白底）；
+	   上面再疊固定的漸層背景層。 */
+	background: var(--ys-login-blue-900);
+	color: var(--ys-login-text);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", Roboto, "Helvetica Neue", Arial, sans-serif;
+	font-size: 14px;
+	line-height: 1.55;
+}
+
+/* ── 背景層（固定、在所有內容後面） ── */
+
+body.ys-am-login .ys-am-login-bg {
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	overflow: hidden;
+	pointer-events: none;
+	background:
+		radial-gradient(900px 700px at 12% 8%, rgba(77, 139, 255, 0.34), rgba(77, 139, 255, 0) 62%),
+		radial-gradient(800px 640px at 88% 92%, rgba(56, 160, 248, 0.16), rgba(56, 160, 248, 0) 60%),
+		linear-gradient(140deg, var(--ys-login-blue-700) 0%, var(--ys-login-blue-800) 46%, var(--ys-login-blue-900) 100%);
+}
+
+body.ys-am-login .ys-am-login-bg__img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+/* 有背景圖時疊一層深藍，文字才看得清楚。 */
+body.ys-am-login--has-bg .ys-am-login-bg::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(140deg, rgba(23, 64, 138, 0.8) 0%, rgba(16, 47, 104, 0.88) 100%);
+}
+
+/* ── 品牌區 ── */
+
+body.ys-am-login .ys-am-login-brand {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	box-sizing: border-box;
+	color: var(--ys-login-text);
+}
+
+body.ys-am-login .ys-am-login-brand__logo {
+	display: block;
+	width: auto;
+	height: auto;
+	max-width: 220px;
+	max-height: 48px;
+	object-fit: contain;
+}
+
+body.ys-am-login .ys-am-login-brand__title {
+	margin: 0;
+	color: #ffffff;
+	font-size: 46px;
+	font-weight: 800;
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	overflow-wrap: anywhere;
+}
+
+body.ys-am-login .ys-am-login-brand__tagline {
+	margin: 14px 0 0;
+	color: var(--ys-login-muted);
+	font-size: 18px;
+	line-height: 1.6;
+}
+
+/* 核心的 WordPress 標誌：品牌區已經有 LOGO 與名稱（真正的頁面標題是核心的 h1.screen-reader-text）。 */
+body.ys-am-login .wp-login-logo {
+	display: none;
+}
+
+/* ── 卡片容器 ── */
+
+body.ys-am-login #login {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
+	margin: auto;
+	padding: 0;
+}
+
+/*
+ * 選擇器一律從 #login > 開始：「有卡片標題」的規則（多一個 .ys-am-login-head）一定比
+ * 「沒有卡片標題」的規則具體，兩種情況不會互相蓋掉。
+ */
+
+/* 沒有卡片標題時（例如管理員電子郵件確認畫面）：訊息是卡片外面獨立的一塊。 */
+body.ys-am-login #login > .notice,
+body.ys-am-login #login > .message,
+body.ys-am-login #login > .success {
+	margin: 0 0 16px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--ys-login-text);
+	word-wrap: break-word;
+}
+
+/* 卡片三段共用：背景、左右框線。 */
+body.ys-am-login #login > .ys-am-login-head,
+body.ys-am-login #login > form,
+body.ys-am-login #login > .ys-am-login-head ~ .notice,
+body.ys-am-login #login > .ys-am-login-head ~ .message,
+body.ys-am-login #login > .ys-am-login-head ~ .success {
+	background: var(--ys-login-card);
+	border: 1px solid var(--ys-login-card-border);
+	/* 不用 backdrop-filter：三段各自模糊時交界會出現一條接縫。 */
+	box-shadow: none;
+}
+
+/* 第一段：卡片標題。 */
+body.ys-am-login #login > .ys-am-login-head {
+	margin: 0;
+	padding: 32px 32px 6px;
+	border-bottom: 0;
+	border-radius: var(--ys-login-radius) var(--ys-login-radius) 0 0;
+}
+
+body.ys-am-login .ys-am-login-head p {
+	margin: 0;
+}
+
+body.ys-am-login .ys-am-login-head__brand {
+	color: var(--ys-login-accent);
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+body.ys-am-login .ys-am-login-head__title {
+	margin-top: 4px !important;
+	color: #ffffff;
+	font-size: 26px;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+body.ys-am-login .ys-am-login-head__sub {
+	margin-top: 6px !important;
+	color: var(--ys-login-muted);
+	font-size: 14px;
+}
+
+/* 中段：錯誤與提示訊息（在卡片裡面）。 */
+body.ys-am-login #login > .ys-am-login-head ~ .notice,
+body.ys-am-login #login > .ys-am-login-head ~ .message,
+body.ys-am-login #login > .ys-am-login-head ~ .success {
+	margin: 0;
+	padding: 14px 32px 0;
+	border-top: 0;
+	border-bottom: 0;
+	border-radius: 0;
+}
+
+body.ys-am-login #login > .notice > p,
+body.ys-am-login #login > .notice > ul,
+body.ys-am-login #login > .message > p,
+body.ys-am-login #login > .success > p {
+	margin: 0;
+	padding: 10px 14px;
+	border: 1px solid rgba(147, 197, 253, 0.42);
+	border-radius: 12px;
+	background: rgba(147, 197, 253, 0.12);
+	color: #e6efff;
+	font-size: 14px;
+	line-height: 1.6;
+}
+
+body.ys-am-login #login > .notice > p + p,
+body.ys-am-login #login > .message > p + p {
+	margin-top: 8px;
+}
+
+body.ys-am-login #login > #login_error > p,
+body.ys-am-login #login > #login_error > ul {
+	border-color: rgba(252, 165, 165, 0.5);
+	background: rgba(248, 113, 113, 0.14);
+	color: #ffe4e4;
+}
+
+body.ys-am-login #login > .notice a,
+body.ys-am-login #login > .message a {
+	color: #ffffff;
+	text-decoration: underline;
+}
+
+body.ys-am-login .login-error-list {
+	margin: 0;
+	padding-left: 0;
+	list-style: none;
+}
+
+/* 最後一段：表單。 */
+body.ys-am-login #login > form {
+	margin: 0;
+	padding: 22px 32px 32px;
+	border-radius: var(--ys-login-radius);
+	overflow: visible;
+	color: var(--ys-login-text);
+	font-weight: 400;
+}
+
+body.ys-am-login #login > .ys-am-login-head ~ form {
+	border-top: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+/* ── 表單欄位 ── */
+
+body.ys-am-login #login form p,
+body.ys-am-login #login form .user-pass-wrap {
+	margin: 0 0 18px;
+}
+
+body.ys-am-login #login form label {
+	display: block;
+	margin: 0 0 6px;
+	color: var(--ys-login-label);
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.5;
+}
+
+body.ys-am-login #login form .input,
+body.ys-am-login #login form input[type="text"],
+body.ys-am-login #login form input[type="email"],
+body.ys-am-login #login form input[type="password"] {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 46px;
+	max-height: none;
+	margin: 0;
+	padding: 10px 14px;
+	border: 1px solid var(--ys-login-input-border);
+	border-radius: 10px;
+	background: var(--ys-login-input-bg);
+	box-shadow: none;
+	color: var(--ys-login-text);
+	font-size: 16px;
+	line-height: 1.5;
+}
+
+body.ys-am-login #login form input.password-input {
+	font-family: inherit;
+}
+
+body.ys-am-login.js #login form input.password-input {
+	padding-right: 52px;
+}
+
+body.ys-am-login #login form .input:focus,
+body.ys-am-login #login form input[type="text"]:focus,
+body.ys-am-login #login form input[type="email"]:focus,
+body.ys-am-login #login form input[type="password"]:focus {
+	border-color: var(--ys-login-focus);
+	box-shadow: 0 0 0 3px var(--ys-login-focus-ring);
+	outline: 2px solid transparent;
+}
+
+/* 瀏覽器自動填入時不要跳回白底。 */
+body.ys-am-login #login form input:-webkit-autofill,
+body.ys-am-login #login form input:-webkit-autofill:hover,
+body.ys-am-login #login form input:-webkit-autofill:focus {
+	-webkit-text-fill-color: var(--ys-login-text);
+	caret-color: var(--ys-login-text);
+	transition: background-color 9999s ease-out 0s;
+	box-shadow: 0 0 0 1000px #183b78 inset;
+}
+
+/* 密碼顯示切換（核心的按鈕與腳本，只換外觀）。 */
+body.ys-am-login .wp-pwd {
+	position: relative;
+}
+
+body.ys-am-login .button.wp-hide-pw {
+	top: 3px;
+	right: 4px;
+	width: 40px;
+	height: 40px;
+	min-width: 40px;
+	min-height: 40px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--ys-login-muted);
+}
+
+body.ys-am-login .button.wp-hide-pw:hover {
+	background: rgba(255, 255, 255, 0.08);
+	color: #ffffff;
+}
+
+body.ys-am-login .button.wp-hide-pw:focus {
+	border-color: var(--ys-login-focus);
+	box-shadow: 0 0 0 2px var(--ys-login-focus-ring);
+	background: transparent;
+	color: #ffffff;
+}
+
+body.ys-am-login .button.wp-hide-pw .dashicons {
+	width: 20px;
+	height: 20px;
+	font-size: 20px;
+	line-height: 20px;
+	top: 0;
+}
+
+/* 記住我 */
+body.ys-am-login #login form .forgetmenot {
+	float: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 0;
+	margin: 0 0 20px;
+}
+
+body.ys-am-login #login form .forgetmenot label {
+	display: inline;
+	margin: 0;
+	color: var(--ys-login-label);
+}
+
+body.ys-am-login #login form input[type="checkbox"] {
+	border-color: var(--ys-login-input-border);
+	background: rgba(255, 255, 255, 0.92);
+}
+
+body.ys-am-login #login form input[type="checkbox"]:focus {
+	border-color: var(--ys-login-focus);
+	box-shadow: 0 0 0 2px var(--ys-login-focus-ring);
+}
+
+body.ys-am-login .wp-toggletip button,
+body.ys-am-login #login form .forgetmenot button {
+	color: var(--ys-login-muted);
+}
+
+/* 送出鈕與次要按鈕 */
+body.ys-am-login #login form p.submit {
+	margin: 0;
+	padding: 0;
+}
+
+body.ys-am-login #login form .button-primary {
+	float: none;
+	display: block;
+	width: 100%;
+	min-height: 46px;
+	margin: 0;
+	padding: 0 16px;
+	border: 1px solid var(--ys-login-button);
+	border-radius: 10px;
+	background: var(--ys-login-button);
+	box-shadow: 0 10px 24px -8px rgba(37, 99, 235, 0.6);
+	color: #ffffff;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.4;
+	text-shadow: none;
+}
+
+body.ys-am-login #login form .button-primary:hover {
+	border-color: var(--ys-login-button-hover);
+	background: var(--ys-login-button-hover);
+	color: #ffffff;
+}
+
+body.ys-am-login #login form .button-primary:focus {
+	border-color: #ffffff;
+	box-shadow: 0 0 0 3px var(--ys-login-focus-ring);
+	outline: 2px solid transparent;
+}
+
+body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw) {
+	min-height: 40px;
+	border: 1px solid var(--ys-login-input-border);
+	border-radius: 10px;
+	background: transparent;
+	color: var(--ys-login-label);
+}
+
+body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw):hover,
+body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw):focus {
+	border-color: var(--ys-login-focus);
+	background: rgba(255, 255, 255, 0.06);
+	color: #ffffff;
+}
+
+body.ys-am-login .reset-pass-submit {
+	gap: 10px;
+}
+
+body.ys-am-login .reset-pass-submit .button {
+	width: auto;
+}
+
+body.ys-am-login #login #reg_passmail,
+body.ys-am-login #login form .indicator-hint,
+body.ys-am-login #login form .description {
+	color: var(--ys-login-muted);
+}
+
+body.ys-am-login .pw-weak label {
+	display: inline !important;
+}
+
+/* 密碼強度（設定新密碼、註冊後設定密碼）：沿用 YS CRM 的配色，強度「高」用藍青色、不用綠色。 */
+body.ys-am-login #pass-strength-result {
+	border-radius: 8px;
+	color: #102f68;
+	font-weight: 600;
+}
+
+body.ys-am-login #pass-strength-result.strong {
+	border-color: #38bdf8;
+	background-color: #bae6fd;
+}
+
+body.ys-am-login #pass-strength-result.good {
+	border-color: #f59e0b;
+	background-color: #fde68a;
+}
+
+/* 管理員電子郵件確認畫面：核心的標題是灰字，換成卡片上的淺色字。 */
+body.ys-am-login .admin-email__heading {
+	border-bottom-color: var(--ys-login-card-border);
+	color: #ffffff;
+	font-weight: 600;
+}
+
+body.ys-am-login #login form p.admin-email__details,
+body.ys-am-login .admin-email-confirm-form p {
+	color: var(--ys-login-muted);
+}
+
+/* Turnstile widget（在送出鈕上方）。 */
+body.ys-am-login #login form .ys-am-turnstile {
+	margin: 0 0 18px;
+	min-height: 65px;
+}
+
+/* ── 卡片下方的連結 ── */
+
+body.ys-am-login #nav,
+body.ys-am-login #backtoblog,
+body.ys-am-login .privacy-policy-page-link {
+	margin: 18px 0 0;
+	padding: 0;
+	text-align: center;
+	font-size: 14px;
+}
+
+body.ys-am-login #nav a,
+body.ys-am-login #backtoblog a,
+body.ys-am-login .privacy-policy-page-link a {
+	color: var(--ys-login-muted);
+	text-decoration: none;
+}
+
+body.ys-am-login #nav a:hover,
+body.ys-am-login #backtoblog a:hover,
+body.ys-am-login .privacy-policy-page-link a:hover {
+	color: #ffffff;
+	text-decoration: underline;
+}
+
+body.ys-am-login a:focus {
+	border-radius: 4px;
+	box-shadow: 0 0 0 2px var(--ys-login-focus);
+	color: #ffffff;
+	outline: 2px solid transparent;
+}
+
+body.ys-am-login--no-back #backtoblog {
+	display: none;
+}
+
+/* ── 語言切換 ── */
+
+body.ys-am-login .language-switcher {
+	margin: 24px auto 0;
+	color: var(--ys-login-muted);
+}
+
+body.ys-am-login .language-switcher label,
+body.ys-am-login .language-switcher label .dashicons {
+	color: var(--ys-login-muted);
+}
+
+body.ys-am-login #language-switcher select {
+	border-color: var(--ys-login-input-border);
+	background-color: rgba(255, 255, 255, 0.08);
+	color: var(--ys-login-text);
+}
+
+body.ys-am-login #language-switcher select option {
+	color: #102f68;
+}
+
+body.ys-am-login .language-switcher .button {
+	border-color: var(--ys-login-input-border);
+	background: transparent;
+	color: var(--ys-login-label);
+}
+
+/* ── 頁尾文字 ── */
+
+body.ys-am-login .ys-am-login-footer {
+	color: #b8c8ea;
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+body.ys-am-login .ys-am-login-footer p {
+	margin: 0;
+}
+
+body.ys-am-login .ys-am-login-footer a {
+	color: #e3ebff;
+	text-decoration: underline;
+}
+
+body.ys-am-login .ys-am-login-footer a:hover {
+	color: #ffffff;
+}
+
+/* ═════════ 寬螢幕：左品牌區、右登入卡片 ═════════ */
+@media screen and (min-width: 1024px) {
+	body.ys-am-login:not(.interim-login) {
+		padding-left: calc(50% + 32px);
+		padding-right: 32px;
+	}
+
+	body.ys-am-login .ys-am-login-brand {
+		position: fixed;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 50%;
+		padding: 48px 56px 128px;
+		overflow: hidden;
+	}
+
+	/* 品牌區稍微亮一點，和右半邊分開。 */
+	body.ys-am-login .ys-am-login-brand::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		border-right: 1px solid rgba(189, 208, 255, 0.14);
+		background:
+			radial-gradient(520px 520px at 82% 18%, rgba(120, 170, 255, 0.22), rgba(120, 170, 255, 0) 70%),
+			linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+	}
+
+	body.ys-am-login .ys-am-login-brand__hero {
+		margin-block: auto;
+		max-width: 560px;
+	}
+
+	body.ys-am-login .ys-am-login-footer {
+		position: fixed;
+		left: 56px;
+		bottom: 40px;
+		width: calc(50% - 112px);
+	}
+}
+
+/* ═════════ 窄螢幕：單欄，品牌區縮成上方 LOGO＋品牌名稱 ═════════ */
+@media screen and (max-width: 1023px) {
+	body.ys-am-login.login {
+		padding: 32px 16px;
+	}
+
+	body.ys-am-login .ys-am-login-brand {
+		align-items: center;
+		width: 100%;
+		max-width: 420px;
+		margin: auto auto 22px;
+		text-align: center;
+	}
+
+	body.ys-am-login .ys-am-login-brand__logo {
+		max-height: 44px;
+		margin: 0 auto;
+	}
+
+	body.ys-am-login .ys-am-login-brand__title {
+		font-size: 26px;
+		font-weight: 700;
+	}
+
+	body.ys-am-login .ys-am-login-brand__tagline {
+		display: none;
+	}
+
+	body.ys-am-login #login {
+		margin: 0 auto;
+	}
+
+	body.ys-am-login .ys-am-login-footer {
+		width: 100%;
+		max-width: 420px;
+		margin: 24px auto 0;
+		text-align: center;
+	}
+
+	/* 讓「品牌區＋卡片＋頁尾」整組垂直置中：上方空間給品牌區的 margin-top:auto，下方給這個空元素。 */
+	body.ys-am-login:not(.interim-login)::after {
+		content: "";
+		margin-bottom: auto;
+	}
+}
+
+@media screen and (max-width: 480px) {
+	body.ys-am-login #login > .ys-am-login-head {
+		padding: 26px 22px 4px;
+	}
+
+	body.ys-am-login #login > .ys-am-login-head ~ .notice,
+	body.ys-am-login #login > .ys-am-login-head ~ .message,
+	body.ys-am-login #login > .ys-am-login-head ~ .success {
+		padding: 12px 22px 0;
+	}
+
+	body.ys-am-login #login > form {
+		padding: 20px 22px 26px;
+	}
+
+	body.ys-am-login .ys-am-login-head__title {
+		font-size: 23px;
+	}
+}
+
+/* ═════════ 後台登入逾時的小視窗（interim-login） ═════════ */
+body.ys-am-login.interim-login {
+	display: block;
+	min-height: 0;
+	padding: 16px;
+}
+
+body.ys-am-login.interim-login #login {
+	margin: 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	body.ys-am-login * {
+		transition: none !important;
+	}
+}

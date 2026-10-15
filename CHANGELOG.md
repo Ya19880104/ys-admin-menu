@@ -4,6 +4,23 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.4.0] - 2026-10-15
+
+### 新增
+- **白牌：左側選單最上方的 LOGO 區塊**：在側欄第一個選單項之前加一塊品牌區，顯示上傳的 LOGO 與可選的站名文字，點了回到控制台。側欄收成圖示列時只留小圖（沒有 LOGO 時顯示名稱的第一個字），不破版。開關 `ys_admin_menu_show_menu_logo`（預設關），和「LOGO 作為頂層選單圖示」是兩回事、可以並用。
+- **白牌：管理 Admin Bar 選單**：在白牌設定的「Admin Bar」分頁列出工具列的頂層節點（WordPress 標誌、站點名稱、更新、留言、新增項目、搜尋、你好使用者等，以及外掛加的節點），每一項都可以分別勾「後台隱藏」「前台隱藏」。外掛加的節點會在打開設定頁（後台）與管理員瀏覽前台時自動偵測並列出。
+- **白牌：前台 Admin Bar 載入方式**：可選「照 WordPress 預設」「完全不載入」「載入並套用前台隱藏清單」，並可限定只有指定角色在前台看得到工具列。只影響前台，後台的工具列不受影響。
+- **自訂登入頁（wp-login.php）**：採 YS CRM 的深藍品牌版面（左側品牌區、右側登入卡片，窄螢幕改單欄）。可設定標題、副標、標語、品牌名稱、登入頁專用 LOGO、背景圖與頁尾文字（可放「由某公司開發與維護」這類說明），並可切換「返回首頁」連結。忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。總開關 `ys_admin_menu_login_enabled`（預設關）。只改外觀與文字，不改登入流程、不碰帳號密碼的驗證。
+- **Cloudflare Turnstile 登入防護**：在 wp-login.php 的登入（可另外涵蓋註冊、忘記密碼）表單加入 Turnstile 驗證，送出時由伺服器端向 Cloudflare 驗證後才放行。可設定啟用開關、Site Key、Secret Key、套用範圍，以及「連不到 Cloudflare 時」的處理方式（寬鬆＝放行並記錄，預設；嚴格＝擋下）。設定頁有「測試設定」可當場確認金鑰正確。啟用開關與 Site Key、Secret Key 都填好才會生效，少一個就不顯示、也不會擋登入，避免把自己鎖在外面。
+
+### 說明
+- 所有新增的開關預設值都讓升級後外觀不變：選單 LOGO 區塊預設關、沒有任何 Admin Bar 節點被隱藏、前台 Admin Bar 照 WordPress 預設、自訂登入頁與 Turnstile 都預設關。
+- 新增 option 前綴一律 `ys_admin_menu_`：白牌 `show_menu_logo`／`menu_logo_text`／`adminbar_hidden`／`adminbar_seen`／`frontend_adminbar`／`frontend_adminbar_roles`；登入頁 `login_enabled`／`login_brand`／`login_title`／`login_subtitle`／`login_tagline`／`login_logo_url`／`login_bg_url`／`login_footer_text`／`login_back_link`；Turnstile `turnstile_enabled`／`turnstile_site_key`／`turnstile_secret_key`／`turnstile_scope`／`turnstile_mode`／`turnstile_log`。解除安裝清除時一併涵蓋這些。
+- Turnstile 的 Secret Key 以密碼欄位輸入，不會回填、不會顯示在設定頁、不會寫進紀錄或匯出檔；留白＝保留已存的值，另有「清除」選項。送往 Cloudflare 的訪客 IP 只採用 `REMOTE_ADDR`，不信任 `X-Forwarded-For` 等標頭（站台在可信任的反向代理後面時，可用 `ys_admin_menu_turnstile_remote_ip` filter 自行提供）。
+- 後端驗證掛在 `authenticate`，優先序早於 WordPress 的帳號密碼檢查；驗證沒過時一定擋下登入，不會因帳號是否存在而給出不同的回應。
+- 緊急關閉：在 wp-config.php 定義 `YS_ADMIN_MENU_TURNSTILE_DISABLED` 為 true，或把 `ys_admin_menu_turnstile_enabled` 設回 `no`，即可暫停 Turnstile。
+- 「隱藏」是整理介面用的，不是權限：隱藏 Admin Bar 節點只是工具列上看不到，功能本身照常可以用。
+
 ## [1.3.2] - 2026-10-15
 
 ### 變更

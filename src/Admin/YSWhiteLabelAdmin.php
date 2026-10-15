@@ -41,9 +41,22 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Login\YSLoginPage;
+use YangSheep\AdminMenu\Login\YSTurnstile;
+use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
+
 defined( 'ABSPATH' ) || exit;
 
 class YSWhiteLabelAdmin {
+
+	/** v1.4.0 wp_options key — 是否在左側選單最上方顯示 LOGO 區塊（yes／no，預設 no）。 */
+	public const OPTION_SHOW_MENU_LOGO = 'ys_admin_menu_show_menu_logo';
+
+	/** v1.4.0 wp_options key — LOGO 區塊旁的站名文字（空白＝只顯示 LOGO）。 */
+	public const OPTION_MENU_LOGO_TEXT = 'ys_admin_menu_menu_logo_text';
+
+	/** v1.4.0：白牌設定頁的分頁。 */
+	public const TABS = [ 'brand', 'adminbar', 'login', 'turnstile' ];
 
 	/** wp_options key — LOGO URL */
 	public const OPTION_LOGO_URL = 'ys_admin_menu_logo_url';
@@ -92,6 +105,126 @@ class YSWhiteLabelAdmin {
 		} else {
 			// 否則：以 Footer 文字取代 wp-admin 所有頁面右下角頁尾。
 			add_filter( 'admin_footer_text', [ self::class, 'filter_admin_footer_text' ] );
+		}
+
+		// v1.4.0：左側選單最上方的 LOGO 區塊（開關在 callback 裡讀，預設關）。
+		add_action( 'adminmenu', [ self::class, 'print_menu_brand' ] );
+		add_action( 'admin_enqueue_scripts', [ self::class, 'enqueue_menu_brand_style' ] );
+
+		// v1.4.0：白牌設定頁的分頁、媒體庫按鈕、Turnstile 測試。
+		add_action( 'admin_enqueue_scripts', [ self::class, 'enqueue_settings_assets' ] );
+	}
+
+	/* ─────────────────────────── v1.4.0 選單上方 LOGO 區塊 ─────────────────────────── */
+
+	public static function get_show_menu_logo(): bool {
+		return 'yes' === get_option( self::OPTION_SHOW_MENU_LOGO, 'no' );
+	}
+
+	public static function get_menu_logo_text(): string {
+		return trim( (string) get_option( self::OPTION_MENU_LOGO_TEXT, '' ) );
+	}
+
+	/**
+	 * adminmenu（#adminmenu 的最後面）：輸出 LOGO 區塊，再用一小段同步腳本把它移到第一個選單項之前。
+	 *
+	 * 區塊是一個連到控制台的連結：文字顏色跟著 WordPress 的後台配色或原生選單樣式走。
+	 * 沒有 LOGO 也沒有站名文字時，顯示網站標題。
+	 */
+	public static function print_menu_brand(): void {
+		if ( ! self::get_show_menu_logo() ) {
+			return;
+		}
+
+		$logo = self::get_logo_url();
+		$text = self::get_menu_logo_text();
+		if ( '' === $logo && '' === $text ) {
+			$text = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+		}
+		$site = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+
+		echo '<li id="ys-am-menu-brand" class="ys-am-menu-brand">';
+		printf( '<a class="ys-am-menu-brand__link" href="%s">', esc_url( admin_url() ) );
+		if ( '' !== $logo ) {
+			// 有站名文字時 LOGO 只是裝飾；沒有文字時 LOGO 就是這個連結的名稱。
+			printf(
+				'<img class="ys-am-menu-brand__logo" src="%s" alt="%s" decoding="async">',
+				esc_url( $logo ),
+				esc_attr( '' !== $text ? '' : $site )
+			);
+		} else {
+			// 沒有 LOGO：收合成圖示列時顯示第一個字。
+			printf(
+				'<span class="ys-am-menu-brand__mark" aria-hidden="true">%s</span>',
+				esc_html( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 1 ) : substr( $text, 0, 1 ) )
+			);
+		}
+		if ( '' !== $text ) {
+			printf( '<span class="ys-am-menu-brand__text">%s</span>', esc_html( $text ) );
+		}
+		echo '</a></li>';
+
+		wp_print_inline_script_tag(
+			"(function(){var b=document.getElementById('ys-am-menu-brand'),m=b&&b.parentNode;if(m&&m.firstElementChild!==b){m.insertBefore(b,m.firstElementChild);}})();"
+		);
+	}
+
+	/**
+	 * LOGO 區塊的樣式（開關有開才載入）。
+	 *
+	 * @param string $hook
+	 */
+	public static function enqueue_menu_brand_style( $hook = '' ): void {
+		if ( ! self::get_show_menu_logo() ) {
+			return;
+		}
+		wp_enqueue_style(
+			'ys-admin-menu-menu-brand',
+			YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/ys-admin-menu-menu-brand.css',
+			[ 'admin-menu' ],
+			YS_ADMIN_MENU_VERSION
+		);
+	}
+
+	/**
+	 * 白牌設定頁的腳本：分頁、媒體庫、WordPress 標誌同步、Turnstile 測試。
+	 *
+	 * @param string $hook
+	 */
+	public static function enqueue_settings_assets( $hook = '' ): void {
+		if ( false === strpos( (string) $hook, YSMenuPage::SLUG_SETTINGS ) ) {
+			return;
+		}
+
+		wp_enqueue_script(
+			'ys-admin-menu-whitelabel',
+			YS_ADMIN_MENU_PLUGIN_URL . 'assets/js/ys-admin-menu-whitelabel.js',
+			[],
+			YS_ADMIN_MENU_VERSION,
+			true
+		);
+		wp_localize_script(
+			'ys-admin-menu-whitelabel',
+			'ysAmWhiteLabel',
+			[
+				'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+				'testAction' => YSTurnstile::AJAX_TEST_ACTION,
+				'testNonce'  => wp_create_nonce( YSTurnstile::AJAX_TEST_ACTION ),
+				'i18n'       => [
+					'mediaTitle'   => __( '選擇圖片', 'ys-admin-menu' ),
+					'mediaButton'  => __( '使用這張圖片', 'ys-admin-menu' ),
+					'testing'      => __( '驗證中…', 'ys-admin-menu' ),
+					'needToken'    => __( '請先完成上方的 Turnstile 驗證。', 'ys-admin-menu' ),
+					'requestError' => __( '測試請求失敗，請重新整理頁面後再試。', 'ys-admin-menu' ),
+					'widgetError'  => __( 'Turnstile widget 載入失敗：多半是 Site Key 不正確，或這個網域沒有加進 Cloudflare 這個 widget 的網域清單。', 'ys-admin-menu' ),
+				],
+			]
+		);
+
+		// 已存好 Site Key 與 Secret Key 才載入 Cloudflare 的腳本（給「測試設定」用）。
+		$view = YSTurnstile::settings_view();
+		if ( ! empty( $view['can_test'] ) ) {
+			YSTurnstile::enqueue_script();
 		}
 	}
 
@@ -222,12 +355,21 @@ class YSWhiteLabelAdmin {
 			$notice = '白牌設置已儲存。';
 		}
 
+		// v1.4.0：選單上方 LOGO 區塊、Admin Bar、登入頁、Turnstile。
+		$show_menu_logo = self::get_show_menu_logo();
+		$menu_logo_text = self::get_menu_logo_text();
+		$adminbar       = YSAdminBarFilter::settings_view();
+		$login_page     = YSLoginPage::settings_view();
+		$turnstile      = YSTurnstile::settings_view();
+		$field_errors   = self::read_field_errors();
+		$active_tab     = self::read_tab( $_GET['tab'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定先顯示哪個分頁
+
 		// v2.45.29: 完全純 WP-native UI（user 明確要求：白牌設置是給架站者用、
 		// 應該完全使用 WP 原生介面、不共用 YS CART 樣式、避免污染 native pages）。
 		// 不開 YSAdminApp shell、不套 .ysca-page-root、不加 .ysca-card class。
 		// is_ys_cart_admin_page() 排除這 3 page、YS CSS 不會載入、無樣式 cascade 風險。
 		echo '<div class="wrap">';
-		echo YSMenuPage::pagehead_html( 'admin-customizer', '白牌設定', 'LOGO、頁尾文字、隱藏 WordPress 標誌與後台背景色，打造專屬後台品牌。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
+		echo YSMenuPage::pagehead_html( 'admin-customizer', '白牌設定', 'LOGO、頁尾文字、Admin Bar、自訂登入頁與 Turnstile 登入防護，打造專屬後台品牌。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
 
 		$template = YS_ADMIN_MENU_PLUGIN_DIR . 'templates/admin/whitelabel-settings.php';
 		if ( file_exists( $template ) ) {
@@ -284,15 +426,49 @@ class YSWhiteLabelAdmin {
 		$purge = isset( $_POST['purge_on_uninstall'] ) ? 'yes' : 'no';
 		update_option( self::OPTION_PURGE_ON_UNINSTALL, $purge, true );
 
-		wp_safe_redirect(
-			add_query_arg(
-				[
-					'page'             => YSMenuPage::SLUG_SETTINGS,
-					'ys_ec_wl_saved'   => '1',
-				],
-				admin_url( 'admin.php' )
-			)
-		);
+		// v1.4.0：以下各模組只在這裡（已驗過 manage_options 與 nonce）被呼叫；各自再檢查一次權限。
+		$post = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- 各模組逐欄消毒
+
+		// 左側選單最上方的 LOGO 區塊。
+		update_option( self::OPTION_SHOW_MENU_LOGO, ! empty( $post['show_menu_logo'] ) ? 'yes' : 'no', true );
+		$menu_logo_text = sanitize_text_field( is_string( $post['menu_logo_text'] ?? null ) ? $post['menu_logo_text'] : '' );
+		update_option( self::OPTION_MENU_LOGO_TEXT, function_exists( 'mb_substr' ) ? mb_substr( $menu_logo_text, 0, 60 ) : substr( $menu_logo_text, 0, 60 ), true );
+
+		YSAdminBarFilter::save_settings( $post );
+		YSLoginPage::save_settings( $post );
+		$errors = YSTurnstile::save_settings( $post );
+
+		$args = [
+			'page'           => YSMenuPage::SLUG_SETTINGS,
+			'ys_ec_wl_saved' => '1',
+			'tab'            => self::read_tab( $post['ys_am_tab'] ?? '' ),
+		];
+		if ( ! empty( $errors ) ) {
+			$args['ys_am_wl_err'] = implode( ',', $errors );
+		}
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
+	}
+
+	/**
+	 * 白牌設定頁的分頁代稱（白名單；不認得就回第一個分頁）。
+	 *
+	 * @param mixed $value
+	 */
+	private static function read_tab( $value ): string {
+		$value = is_string( $value ) ? sanitize_key( $value ) : '';
+		return in_array( $value, self::TABS, true ) ? $value : self::TABS[0];
+	}
+
+	/**
+	 * 儲存後被擋下來的欄位（只認得已知的代碼）。
+	 *
+	 * @return string[]
+	 */
+	private static function read_field_errors(): array {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要顯示提示
+		$raw = isset( $_GET['ys_am_wl_err'] ) && is_string( $_GET['ys_am_wl_err'] ) ? sanitize_text_field( wp_unslash( $_GET['ys_am_wl_err'] ) ) : '';
+		return array_values( array_intersect( [ 'site_key_format', 'secret_format' ], explode( ',', $raw ) ) );
 	}
 }

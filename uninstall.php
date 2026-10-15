@@ -34,6 +34,28 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_config_bridge_version',
 	'ys_admin_menu_config_bridge_fingerprint',
 	'ys_admin_menu_theme_stand_down_logged_version',
+	// v1.4.0：選單上方 LOGO 區塊、Admin Bar、自訂登入頁、Turnstile（含 Secret Key 與事件紀錄）。
+	'ys_admin_menu_show_menu_logo',
+	'ys_admin_menu_menu_logo_text',
+	'ys_admin_menu_adminbar_hidden',
+	'ys_admin_menu_adminbar_seen',
+	'ys_admin_menu_frontend_adminbar',
+	'ys_admin_menu_frontend_adminbar_roles',
+	'ys_admin_menu_login_enabled',
+	'ys_admin_menu_login_brand',
+	'ys_admin_menu_login_title',
+	'ys_admin_menu_login_subtitle',
+	'ys_admin_menu_login_tagline',
+	'ys_admin_menu_login_logo_url',
+	'ys_admin_menu_login_bg_url',
+	'ys_admin_menu_login_footer_text',
+	'ys_admin_menu_login_back_link',
+	'ys_admin_menu_turnstile_enabled',
+	'ys_admin_menu_turnstile_site_key',
+	'ys_admin_menu_turnstile_secret_key',
+	'ys_admin_menu_turnstile_scope',
+	'ys_admin_menu_turnstile_mode',
+	'ys_admin_menu_turnstile_log',
 ];
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；
