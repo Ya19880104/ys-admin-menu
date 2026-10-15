@@ -59,6 +59,7 @@ $log_labels = [
 	],
 	'reason'  => [
 		'unreachable'    => '連不到 Cloudflare',
+		'config_blocked' => '站台設定擋住了對 Cloudflare 的連線',
 		'secret_invalid' => 'Secret Key 不正確',
 	],
 ];
@@ -439,7 +440,12 @@ $log_labels = [
 		<section class="ys-am-wl-panel" id="ys-am-wl-panel-turnstile" role="tabpanel" aria-labelledby="ys-am-wl-tab-turnstile" data-panel="turnstile">
 
 			<?php $ts_status = (array) ( $turnstile['status'] ?? [] ); ?>
-			<?php if ( ! empty( $ts_status['active'] ) ) : ?>
+			<?php if ( ! empty( $ts_status['active'] ) && empty( $ts_status['effective'] ) ) : ?>
+				<div class="ysca-wl-notice ysca-wl-notice--error">
+					<p><strong>已啟用，但</strong><?php echo esc_html( (string) ( $ts_status['config_problem'] ?? '' ) ); ?></p>
+					<p><?php echo 'strict' === ( $turnstile['mode'] ?? '' ) ? '目前是嚴格模式：所有人（包括管理員）都登不進來。' : '目前是寬鬆模式：登入會被放行，只靠帳號密碼保護。'; ?>修好連線後，用下方「測試設定」驗證一次，這個提醒就會消失。</p>
+				</div>
+			<?php elseif ( ! empty( $ts_status['active'] ) ) : ?>
 				<div class="ysca-wl-notice ysca-wl-notice--success">
 					<p>
 						<strong>已生效：</strong>
@@ -474,6 +480,15 @@ $log_labels = [
 						</span>
 						<span class="ys-am-toggle-field__text"><strong>啟用 Turnstile</strong>Site Key 與 Secret Key 都填好才會生效；少一個就不顯示、也不擋登入。建議先存好兩把 Key、用下方「測試設定」確認通過，再打開這個開關。</span>
 					</label>
+					<p class="ysca-wl-field__hint"><strong>一個客戶站一個 widget：</strong>在 Cloudflare 為這個站建立自己的 Turnstile widget，並把網域白名單設成這個站的網域；不要多個站共用同一組金鑰。（需要額外比對網域時，可用 <code>ys_admin_menu_turnstile_expected_hostnames</code> filter 回傳網域清單，預設不比對。）</p>
+					<p class="ysca-wl-field__hint">
+						最後一次驗證成功：
+						<?php
+						$ts_last_ok = (int) ( $ts_status['last_ok'] ?? 0 );
+						echo esc_html( $ts_last_ok > 0 ? wp_date( 'Y-m-d H:i:s', $ts_last_ok ) : '尚無紀錄' );
+						?>
+						（登入、註冊、忘記密碼或下方「測試設定」驗證成功時更新，最多每 5 分鐘記一次。）
+					</p>
 
 					<div class="ysca-page-settings-grid ys-am-wl-grid">
 						<div class="ysca-wl-field">
@@ -510,7 +525,8 @@ $log_labels = [
 								</label>
 							<?php endforeach; ?>
 						</div>
-						<p class="ysca-wl-field__hint">只保護 wp-login.php 的表單（包括送到 wp-login.php 的前台 wp_login_form()）。XML-RPC、REST API、WooCommerce「我的帳號」等自己的登入表單不在範圍內。</p>
+						<p class="ysca-wl-field__hint">只涵蓋 wp-login.php 的表單送出（包括送到 wp-login.php 的前台 wp_login_form()）。XML-RPC、REST API、WooCommerce「我的帳號」等其他前台自訂登入表單，以及社群登入／SSO 的 GET 回呼，不在範圍內。</p>
+						<p class="ysca-wl-field__hint">隱私提醒：啟用後，登入頁與前台使用 wp_login_form() 的頁面都會載入 Cloudflare 的腳本（challenges.cloudflare.com）。</p>
 					</fieldset>
 
 					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
@@ -523,7 +539,8 @@ $log_labels = [
 							<input type="radio" name="turnstile_mode" value="strict" <?php checked( 'strict' === ( $turnstile['mode'] ?? 'lenient' ) ); ?>>
 							<span><strong>嚴格：擋下。</strong>連不到就不讓登入，安全性較高；但 Cloudflare 或主機對外連線出問題時，所有人（包括管理員）都登不進來，只能用下方的緊急關閉。</span>
 						</label>
-						<p class="ysca-wl-field__hint">「連不到」指連線失敗、逾時或 Cloudflare 回 5xx。Cloudflare 有回應但判定失敗（沒完成驗證、token 無效或用過、Secret Key 錯誤）時，兩種模式都會擋下。</p>
+						<p class="ysca-wl-field__hint">「連不到」指連線失敗、逾時或 Cloudflare 回 5xx。Cloudflare 有回應且判定失敗（沒完成驗證、token 無效或用過、Secret Key 錯誤，以及重試後仍是 internal-error）時，兩種模式都會擋下。</p>
+						<p class="ysca-wl-field__hint">站台設定擋住了對 Cloudflare 的連線（WP_HTTP_BLOCK_EXTERNAL、主機防火牆，或攔截 HTTP 請求的外掛）時，Turnstile 實際上沒有作用：寬鬆模式等於只靠帳號密碼、嚴格模式所有人都登不進來。這種情況上方與後台都會出現提醒。</p>
 					</fieldset>
 
 					<div class="ysca-wl-notice ys-am-wl-emergency">
@@ -566,7 +583,7 @@ $log_labels = [
 					<h3 class="ysca-wl-card__title">最近事件</h3>
 				</div>
 				<div class="ysca-wl-card__body">
-					<p class="ysca-wl-field__hint">只記錄「連不到 Cloudflare」與「Secret Key 不正確」，最多 20 筆；一般的驗證失敗（例如機器人沒完成驗證）不記錄。不記錄帳號、IP 與 Secret。</p>
+					<p class="ysca-wl-field__hint">只記錄「連不到 Cloudflare」「站台設定擋住了對 Cloudflare 的連線」與「Secret Key 不正確」，同一個原因每分鐘最多記一次，最多 20 筆；一般的驗證失敗（例如機器人沒完成驗證）不記錄。不記錄帳號、IP 與 Secret。</p>
 					<?php if ( empty( $turnstile['log'] ) ) : ?>
 						<p class="ysca-wl-field__hint">目前沒有紀錄。</p>
 					<?php else : ?>

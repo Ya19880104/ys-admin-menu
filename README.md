@@ -13,7 +13,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 | **原生選單樣式** | 美化側欄與 admin bar（背景／文字／圖示／hover 配色、字級、行高），含即時預覽，套用至全站 wp-admin。預設啟用：桌機寬版的側欄寬度為 300px，子選單改為點箭頭收放 |
 | **白牌** | 上傳 LOGO 作為頂層選單圖示、左側選單最上方的 LOGO 區塊、自訂 wp-admin 頁尾文字、隱藏 WordPress 標誌、後台背景色；管理 Admin Bar 節點（後台／前台各自隱藏）與前台 Admin Bar 載入方式（含角色限定） |
 | **自訂登入頁** | wp-login.php 改成 YS CRM 的深藍品牌版面（標題／副標／標語／LOGO／背景圖／頁尾文字可設定，一個總開關控制）。只改外觀與文字，不改登入流程 |
-| **登入防護** | 整合 Cloudflare Turnstile：在登入（可另涵蓋註冊、忘記密碼）表單加入人機驗證，伺服器端向 Cloudflare 驗證後才放行；連不到 Cloudflare 時可選寬鬆（放行並記錄）或嚴格（擋下） |
+| **登入防護** | 整合 Cloudflare Turnstile：在 wp-login.php 的登入（可另涵蓋註冊、忘記密碼）表單加入人機驗證，伺服器端向 Cloudflare 驗證；Cloudflare 判定失敗時擋下，連不到時可選寬鬆（放行並記錄）或嚴格（擋下）。不含 XML-RPC 與前台自訂登入表單 |
 
 ## 安裝
 
@@ -39,8 +39,12 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 ### 登入防護（Cloudflare Turnstile）
 
 - 啟用開關、Site Key、Secret Key 都填好才會生效；少一個就不顯示、也不擋登入。
-- 後端驗證掛在 `authenticate`、早於帳號密碼檢查；驗證沒過一定擋下，且不因帳號是否存在而給出不同回應。
-- Secret Key 不會回填、不顯示、不寫進紀錄或匯出檔；送往 Cloudflare 的 IP 只用 `REMOTE_ADDR`（反向代理可用 `ys_admin_menu_turnstile_remote_ip` filter 覆寫）。
+- 後端驗證掛在 `authenticate`、早於帳號密碼檢查。**Cloudflare 有回應且判定失敗時擋下**（沒完成驗證、token 無效或用過、Secret Key 錯誤，以及重試後仍是 `internal-error`——寬鬆模式也擋）；**連不到 Cloudflare 時依模式處理**：寬鬆（預設）放行並記錄、嚴格擋下。擋下時不因帳號是否存在而給出不同回應。
+- **只涵蓋 wp-login.php 的表單送出**（含送到 wp-login.php 的前台 `wp_login_form()`）；不含 XML-RPC、REST API、WooCommerce「我的帳號」等前台自訂登入表單，也不含社群登入／SSO 在 wp-login.php 的 GET 回呼。
+- **站台設定擋住了對 Cloudflare 的連線**（`WP_HTTP_BLOCK_EXTERNAL` 沒放行 challenges.cloudflare.com、主機防火牆、攔截 HTTP 請求的外掛）時，Turnstile 實際上沒有作用：設定頁顯示「目前實際沒有作用」，後台對管理員常駐提醒；設定頁也會顯示最後一次驗證成功的時間。
+- **一個客戶站一個 widget**：在 Cloudflare 為每個站建立自己的 Turnstile widget、設好網域白名單，不要多站共用同一組金鑰。需要額外比對網域時，用 `ys_admin_menu_turnstile_expected_hostnames` filter 回傳網域清單（預設不比對）。
+- **隱私提醒**：啟用後，登入頁與前台使用 `wp_login_form()` 的頁面都會載入 Cloudflare 的腳本（challenges.cloudflare.com）。
+- Secret Key 不會回填、不顯示、不寫進紀錄或匯出檔；**刪除外掛時一律刪除 Secret Key**（不論有沒有勾「刪除外掛時一併清除所有設定」，其他設定照勾選保留或清除）。送往 Cloudflare 的 IP 只用 `REMOTE_ADDR`（反向代理可用 `ys_admin_menu_turnstile_remote_ip` filter 覆寫）。
 - **被鎖在外面時**：在 wp-config.php 加 `define( 'YS_ADMIN_MENU_TURNSTILE_DISABLED', true );`，或執行 `wp option update ys_admin_menu_turnstile_enabled no`。
 
 ## 技術資訊

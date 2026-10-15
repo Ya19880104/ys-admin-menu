@@ -11,16 +11,20 @@
 - **白牌：管理 Admin Bar 選單**：在白牌設定的「Admin Bar」分頁列出工具列的頂層節點（WordPress 標誌、站點名稱、更新、留言、新增項目、搜尋、你好使用者等，以及外掛加的節點），每一項都可以分別勾「後台隱藏」「前台隱藏」。外掛加的節點會在打開設定頁（後台）與管理員瀏覽前台時自動偵測並列出。
 - **白牌：前台 Admin Bar 載入方式**：可選「照 WordPress 預設」「完全不載入」「載入並套用前台隱藏清單」，並可限定只有指定角色在前台看得到工具列。只影響前台，後台的工具列不受影響。
 - **自訂登入頁（wp-login.php）**：採 YS CRM 的深藍品牌版面（左側品牌區、右側登入卡片，窄螢幕改單欄）。可設定標題、副標、標語、品牌名稱、登入頁專用 LOGO、背景圖與頁尾文字（可放「由某公司開發與維護」這類說明），並可切換「返回首頁」連結。忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。總開關 `ys_admin_menu_login_enabled`（預設關）。只改外觀與文字，不改登入流程、不碰帳號密碼的驗證。
-- **Cloudflare Turnstile 登入防護**：在 wp-login.php 的登入（可另外涵蓋註冊、忘記密碼）表單加入 Turnstile 驗證，送出時由伺服器端向 Cloudflare 驗證後才放行。可設定啟用開關、Site Key、Secret Key、套用範圍，以及「連不到 Cloudflare 時」的處理方式（寬鬆＝放行並記錄，預設；嚴格＝擋下）。設定頁有「測試設定」可當場確認金鑰正確。啟用開關與 Site Key、Secret Key 都填好才會生效，少一個就不顯示、也不會擋登入，避免把自己鎖在外面。
+- **Cloudflare Turnstile 登入防護**：在 wp-login.php 的登入（可另外涵蓋註冊、忘記密碼）表單加入 Turnstile 驗證，送出時由伺服器端向 Cloudflare 驗證。Cloudflare 有回應且判定失敗時擋下；連不到 Cloudflare 時依設定處理（寬鬆＝放行並記錄，預設；嚴格＝擋下）。可設定啟用開關、Site Key、Secret Key、套用範圍。設定頁有「測試設定」可當場確認金鑰正確，並顯示最後一次驗證成功的時間。啟用開關與 Site Key、Secret Key 都填好才會生效，少一個就不顯示、也不會擋登入，避免把自己鎖在外面。只涵蓋 wp-login.php 的表單送出，不含 XML-RPC 與前台自訂登入表單。
 
 ### 修正
 - **手機上打開側欄時，選單圖示壓在名稱上**（啟用原生選單樣式、視窗寬 782px 以下）：每個選單項的圖示和名稱疊在一起。WordPress 在視窗 960px 以下會把選單圖示改成絕對定位（給收合的圖示列用），手機的側欄抽屜也沿用這個設定，靠名稱的左內距讓出位置；原生選單樣式的展開版面把名稱的左內距拿掉、改成圖示與名稱並排，圖示卻沒有回到一般排版。現在展開的側欄（含手機抽屜）圖示一律回到一般排版，和名稱之間留固定間距，與桌機一致。側欄收合成圖示列（按「收合選單」或視窗寬 783–960px）以及停用原生選單樣式時不受影響。這個問題從 1.0.0 就存在，與 WordPress 版本無關。
 
 ### 說明
 - 所有新增的開關預設值都讓升級後外觀不變：選單 LOGO 區塊預設關、沒有任何 Admin Bar 節點被隱藏、前台 Admin Bar 照 WordPress 預設、自訂登入頁與 Turnstile 都預設關。
-- 新增 option 前綴一律 `ys_admin_menu_`：白牌 `show_menu_logo`／`menu_logo_text`／`adminbar_hidden`／`adminbar_seen`／`frontend_adminbar`／`frontend_adminbar_roles`；登入頁 `login_enabled`／`login_brand`／`login_title`／`login_subtitle`／`login_tagline`／`login_logo_url`／`login_bg_url`／`login_footer_text`／`login_back_link`；Turnstile `turnstile_enabled`／`turnstile_site_key`／`turnstile_secret_key`／`turnstile_scope`／`turnstile_mode`／`turnstile_log`。解除安裝清除時一併涵蓋這些。
-- Turnstile 的 Secret Key 以密碼欄位輸入，不會回填、不會顯示在設定頁、不會寫進紀錄或匯出檔；留白＝保留已存的值，另有「清除」選項。送往 Cloudflare 的訪客 IP 只採用 `REMOTE_ADDR`，不信任 `X-Forwarded-For` 等標頭（站台在可信任的反向代理後面時，可用 `ys_admin_menu_turnstile_remote_ip` filter 自行提供）。
-- 後端驗證掛在 `authenticate`，優先序早於 WordPress 的帳號密碼檢查；驗證沒過時一定擋下登入，不會因帳號是否存在而給出不同的回應。
+- 新增 option 前綴一律 `ys_admin_menu_`：白牌 `show_menu_logo`／`menu_logo_text`／`adminbar_hidden`／`adminbar_seen`／`frontend_adminbar`／`frontend_adminbar_roles`；登入頁 `login_enabled`／`login_brand`／`login_title`／`login_subtitle`／`login_tagline`／`login_logo_url`／`login_bg_url`／`login_footer_text`／`login_back_link`；Turnstile `turnstile_enabled`／`turnstile_site_key`／`turnstile_secret_key`／`turnstile_scope`／`turnstile_mode`／`turnstile_log`／`turnstile_health`。解除安裝清除時一併涵蓋這些。
+- Turnstile 的 Secret Key 以密碼欄位輸入，不會回填、不會顯示在設定頁、不會寫進紀錄或匯出檔；留白＝保留已存的值，另有「清除」選項。**刪除外掛時一律刪除 Secret Key**（不論有沒有勾「刪除外掛時一併清除所有設定」；其他設定照勾選保留或清除）；重新安裝後要重新填 Secret Key，填好之前 Turnstile 不會生效、也不會擋登入。送往 Cloudflare 的訪客 IP 只採用 `REMOTE_ADDR`，不信任 `X-Forwarded-For` 等標頭（站台在可信任的反向代理後面時，可用 `ys_admin_menu_turnstile_remote_ip` filter 自行提供）。
+- 後端驗證掛在 `authenticate`，優先序早於 WordPress 的帳號密碼檢查。Cloudflare 有回應且判定失敗時擋下（沒完成驗證、token 無效或用過、Secret Key 錯誤，以及重試後仍是 `internal-error`——寬鬆模式也擋）；連不到時依模式處理（寬鬆放行並記錄、嚴格擋下）。擋下時不會因帳號是否存在而給出不同的回應。驗證沒過時，即使其他外掛在驗證過程中自己觸發登入失敗事件、巢狀呼叫 `wp_authenticate()`，或之後由其他驗證外掛回傳使用者，這次登入都不會放行；同一個請求只向 Cloudflare 驗證一次。
+- 只涵蓋 wp-login.php 的表單送出（POST）；XML-RPC、REST API、WooCommerce「我的帳號」等前台自訂登入表單，以及社群登入／SSO 在 wp-login.php 的 GET 回呼，不在範圍內。
+- 站台設定擋住了對 Cloudflare 的連線（`WP_HTTP_BLOCK_EXTERNAL` 沒放行 challenges.cloudflare.com、主機防火牆、攔截 HTTP 請求的外掛）時，Turnstile 實際上沒有作用：設定頁顯示「目前實際沒有作用」，並在後台對管理員常駐提醒。這種情況不重試；暫時斷線（連線失敗、逾時、HTTP 5xx）才重試一次。事件紀錄同一個原因每分鐘最多寫一次。
+- 一個客戶站請用一個 Turnstile widget、在 Cloudflare 設好網域白名單，不要多站共用同一組金鑰。需要額外比對網域時，可用 `ys_admin_menu_turnstile_expected_hostnames` filter 回傳網域清單（預設不比對）。
+- 隱私：啟用 Turnstile 後，登入頁與前台使用 `wp_login_form()` 的頁面都會載入 Cloudflare 的腳本（challenges.cloudflare.com）。
 - 緊急關閉：在 wp-config.php 定義 `YS_ADMIN_MENU_TURNSTILE_DISABLED` 為 true，或把 `ys_admin_menu_turnstile_enabled` 設回 `no`，即可暫停 Turnstile。
 - 「隱藏」是整理介面用的，不是權限：隱藏 Admin Bar 節點只是工具列上看不到，功能本身照常可以用。
 

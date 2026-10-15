@@ -10,21 +10,29 @@
  *
  * 後端：
  *   - 登入：掛 authenticate，priority 5，早於核心 priority 20 的帳密檢查。
- *     驗證沒過時回 WP_Error，並把這一次請求的核心帳密檢查拿掉、最後（PHP_INT_MAX）再強制回同一個錯誤。
+ *     驗證沒過時回 WP_Error，並把這一次請求的核心帳密檢查拿掉、最後（PHP_INT_MAX）再強制回同一個錯誤，
+ *     等整條 authenticate 跑完、真正的 wp_login_failed 才還原（還在鏈中間時，其他外掛自己觸發的
+ *     wp_login_failed 或巢狀 wp_authenticate() 不會讓它提早還原）。
  *     原因：核心 priority 20 的 wp_authenticate_username_password 會忽略前面傳來的 WP_Error，
  *     自己再查一次帳號與密碼，只回 WP_Error 根本擋不住。拿掉之後也不會去算密碼雜湊，
  *     回應內容與時間都不會因為帳號存不存在而不同（不形成帳號列舉的管道）。
  *   - 註冊（registration_errors）、忘記密碼（lostpassword_errors）：驗證沒過時只回本外掛這一個錯誤，
  *     不帶「帳號已存在」「沒有這個帳號」之類的訊息。
- *   - siteverify 一定要跑、結果一定要判：Cloudflare 回 success === true 才算通過。
- *     連不到 Cloudflare（連線失敗、逾時、HTTP 5xx）時依設定：寬鬆（預設）＝放行並記錄；嚴格＝擋下並記錄。
- *     Cloudflare 有回應但判定失敗（token 無效、用過、逾時、Secret 錯）一律擋下，兩種模式都一樣。
+ *   - siteverify 一定要跑、結果一定要判：Cloudflare 回 HTTP 200 且 success === true 才算通過。
+ *     Cloudflare 有回應且判定失敗時擋下（token 無效、用過、逾時、Secret 錯、internal-error 重試後仍失敗），
+ *     兩種模式都一樣。連不到時依模式：寬鬆（預設）＝放行並記錄；嚴格＝擋下並記錄。
+ *     「連不到」再分暫時斷線（連線失敗、逾時、HTTP 5xx，重試一次）與站台設定擋住連線
+ *     （WP_HTTP_BLOCK_EXTERNAL、http_request_not_executed、其他外掛在 pre_http_request 攔下，不重試），
+ *     後者代表 Turnstile 實際上沒有作用，設定頁顯示、後台常駐提醒管理員。
  *   - 格式不對的 token（超過 2048 字元或含控制字元）不送 Cloudflare，直接判失敗：
  *     攻擊者沒辦法用奇怪的 token 讓伺服器端變成「連不到」而被放行。
- *   - 不快取驗證結果：每一次送出都重新呼叫 siteverify（token 一次性，Cloudflare 會擋重放）。
- *   - 只管 wp-login.php（login_init 有跑過的請求）。XML-RPC、REST、WooCommerce 等自己的登入表單不在範圍內。
+ *   - 同一個 PHP 請求只驗一次（結果在這個請求內沿用，不跨請求快取）：每一次送出都重新呼叫 siteverify，
+ *     token 一次性、Cloudflare 會擋重放。
+ *   - 只管 wp-login.php 的 POST 送出（login_init 有跑過的請求）。社群登入／SSO 在 wp-login.php 的 GET 回呼、
+ *     XML-RPC、REST、WooCommerce 等自己的登入表單不在範圍內。
  *   - 訪客 IP 只用 REMOTE_ADDR，不信任 X-Forwarded-For；站台在反向代理後面時可用
  *     ys_admin_menu_turnstile_remote_ip filter 自行提供。
+ *   - 預期網域比對預設關閉；用 ys_admin_menu_turnstile_expected_hostnames filter 回傳網域清單才比對 hostname。
  *
  * Secret Key 不輸出到前端、不寫進記錄、不放進匯出檔。
  * 緊急關閉：wp-config.php 加 define( 'YS_ADMIN_MENU_TURNSTILE_DISABLED', true );
@@ -57,6 +65,12 @@ final class YSTurnstile {
 	/** wp_options key — 最近的事件（連不到 Cloudflare、Secret 錯誤），最多 20 筆，不自動載入。 */
 	public const OPTION_LOG = 'ys_admin_menu_turnstile_log';
 
+	/**
+	 * wp_options key — 驗證健康狀態：最後一次 siteverify 成功的時間、最後一次「站台設定擋住連線」的時間與代碼。
+	 * 後台常駐通知每頁都會讀，所以自動載入。
+	 */
+	public const OPTION_HEALTH = 'ys_admin_menu_turnstile_health';
+
 	public const MODE_LENIENT = 'lenient';
 	public const MODE_STRICT  = 'strict';
 
@@ -85,6 +99,12 @@ final class YSTurnstile {
 	private const TOKEN_MAX      = 2048;
 	private const LOG_MAX        = 20;
 
+	/** 同一個原因的事件，多久內只寫一次紀錄與 error_log（秒）。 */
+	private const LOG_THROTTLE = 60;
+
+	/** 驗證成功時，多久才更新一次「最後成功時間」（秒；避免每次登入都寫資料庫）。 */
+	private const HEALTH_OK_INTERVAL = 300;
+
 	/** 核心 priority 20 的帳密檢查（驗證沒過時這一次請求暫時拿掉）。 */
 	private const CORE_PASSWORD_FILTERS = [ 'wp_authenticate_username_password', 'wp_authenticate_email_password' ];
 
@@ -95,11 +115,22 @@ final class YSTurnstile {
 	private static array $removed_filters = [];
 
 	/**
+	 * @var array<string, bool> 這一次 PHP 請求裡各表單（login／register／lostpassword）的驗證結果。
+	 *
+	 * 只在同一個請求內沿用、不跨請求快取：同一個請求的 token 是固定的，其他外掛巢狀呼叫
+	 * wp_authenticate() 時不會再送一次 siteverify（Cloudflare 會把第二次當成重放而擋下正常使用者），
+	 * 而沒過的結果也會沿用、不會在第二次被「放行」。
+	 */
+	private static array $verdicts = [];
+
+	/**
 	 * 註冊 hook。前台、後台、wp-login.php 都會呼叫；讀設定一律延後到真的用得到的時候。
 	 */
 	public static function register(): void {
 		if ( is_admin() ) {
 			add_action( 'wp_ajax_' . self::AJAX_TEST_ACTION, [ self::class, 'ajax_test' ] );
+			// 站台設定擋住了對 Cloudflare 的連線時（Turnstile 實際上沒有作用），在後台常駐提醒管理員。
+			add_action( 'admin_notices', [ self::class, 'print_config_problem_notice' ] );
 		}
 
 		// wp-login.php：login_init 在 wp_signon 之前，掛在這裡就來得及。其他請求完全不讀 Turnstile 設定。
@@ -201,9 +232,13 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 設定頁顯示用的狀態：是否生效、沒生效的原因。
+	 * 設定頁顯示用的狀態：是否生效、實際上有沒有作用、原因、最後一次驗證成功的時間。
 	 *
-	 * @return array{active:bool,reasons:string[]}
+	 * active    設定上已生效（開關、兩把 Key、套用範圍都有）。
+	 * effective 實際上有作用：active，而且站台設定沒有擋住對 Cloudflare 的連線。
+	 *           連線被擋時，寬鬆模式每次都會「連不到 → 放行」，等於只靠帳號密碼；嚴格模式則所有人都登不進來。
+	 *
+	 * @return array{active:bool,effective:bool,reasons:string[],config_problem:string,last_ok:int}
 	 */
 	public static function status(): array {
 		$reasons = [];
@@ -222,10 +257,127 @@ final class YSTurnstile {
 		if ( self::is_active() && empty( self::get_scope() ) ) {
 			$reasons[] = __( '沒有勾選任何套用範圍，所以哪個表單都不會驗證。', 'ys-admin-menu' );
 		}
+
+		$active  = self::is_active() && ! empty( self::get_scope() );
+		$problem = self::config_problem();
+		if ( $active && '' !== $problem ) {
+			$reasons[] = $problem;
+		}
+
+		$health = self::get_health();
 		return [
-			'active'  => self::is_active() && ! empty( self::get_scope() ),
-			'reasons' => $reasons,
+			'active'         => $active,
+			'effective'      => $active && '' === $problem,
+			'reasons'        => $reasons,
+			'config_problem' => $problem,
+			'last_ok'        => $health['last_ok'],
 		];
+	}
+
+	/**
+	 * 站台設定是不是擋住了對 Cloudflare 的連線（永久性的設定問題，不是暫時斷線）。
+	 *
+	 * 兩種來源：
+	 *   - 現在就看得出來的：WP_HTTP_BLOCK_EXTERNAL 開著、WP_ACCESSIBLE_HOSTS 沒放行 challenges.cloudflare.com。
+	 *   - 驗證時記下來的：被 WordPress 拒絕送出（http_request_not_executed），或被其他外掛在 pre_http_request
+	 *     攔下來回錯誤；而且之後還沒有成功過。
+	 *
+	 * @return string 給管理員看的說明；空字串＝沒有問題。
+	 */
+	public static function config_problem(): string {
+		if ( self::is_blocked_by_wp_config() ) {
+			return __( '目前實際沒有作用：wp-config.php 的 WP_HTTP_BLOCK_EXTERNAL 擋住了對外連線，而 WP_ACCESSIBLE_HOSTS 沒有放行 challenges.cloudflare.com，伺服器無法向 Cloudflare 驗證。', 'ys-admin-menu' );
+		}
+		$health = self::get_health();
+		if ( $health['config_active'] ) {
+			return sprintf(
+				/* translators: %s: error code. */
+				__( '目前實際沒有作用：最近一次驗證時，對 Cloudflare 的連線被站台設定或其他外掛攔下來（%s），伺服器無法向 Cloudflare 驗證。請檢查防火牆、對外連線限制或攔截 HTTP 請求的外掛。', 'ys-admin-menu' ),
+				'' !== $health['config_code'] ? $health['config_code'] : 'blocked'
+			);
+		}
+		return '';
+	}
+
+	/**
+	 * WP_HTTP_BLOCK_EXTERNAL 有沒有擋住 siteverify（WordPress 自己的判斷）。
+	 */
+	private static function is_blocked_by_wp_config(): bool {
+		if ( ! function_exists( '_wp_http_get_object' ) ) {
+			return false;
+		}
+		$http = _wp_http_get_object();
+		return is_object( $http ) && method_exists( $http, 'block_request' ) && (bool) $http->block_request( self::VERIFY_URL );
+	}
+
+	/**
+	 * @return array{last_ok:int,last_config_error:int,config_code:string,config_active:bool}
+	 */
+	private static function get_health(): array {
+		$raw  = get_option( self::OPTION_HEALTH, [] );
+		$raw  = is_array( $raw ) ? $raw : [];
+		$code = isset( $raw['config_code'] ) && is_string( $raw['config_code'] ) && 1 === preg_match( '/^[a-z0-9_\-]{1,60}$/', $raw['config_code'] ) ? $raw['config_code'] : '';
+		return [
+			'last_ok'           => (int) ( $raw['last_ok'] ?? 0 ),
+			'last_config_error' => (int) ( $raw['last_config_error'] ?? 0 ),
+			'config_code'       => $code,
+			// 「站台設定擋住連線」之後還沒有成功過。
+			'config_active'     => ! empty( $raw['config_active'] ),
+		];
+	}
+
+	/**
+	 * 記下驗證成功：清掉「設定擋住」（立刻寫，提醒馬上消失）；否則最多每 5 分鐘更新一次最後成功時間。
+	 */
+	private static function note_success(): void {
+		$health = self::get_health();
+		$now    = time();
+		if ( ! $health['config_active'] && $now - $health['last_ok'] < self::HEALTH_OK_INTERVAL ) {
+			return;
+		}
+		$health['last_ok']       = $now;
+		$health['config_active'] = false;
+		update_option( self::OPTION_HEALTH, $health, true );
+	}
+
+	/**
+	 * 記下「站台設定擋住了連線」（已經記著、而且是一分鐘內記的就不再寫）。
+	 */
+	private static function note_config_error( string $code ): void {
+		$health = self::get_health();
+		$now    = time();
+		if ( $health['config_active'] && $now - $health['last_config_error'] < self::LOG_THROTTLE ) {
+			return;
+		}
+		$health['last_config_error'] = $now;
+		$health['config_code']       = 1 === preg_match( '/^[a-z0-9_\-]{1,60}$/', $code ) ? $code : 'blocked';
+		$health['config_active']     = true;
+		update_option( self::OPTION_HEALTH, $health, true );
+	}
+
+	/**
+	 * admin_notices：Turnstile 已啟用但實際上沒有作用（站台設定擋住了連線）時，常駐提醒管理員。
+	 */
+	public static function print_config_problem_notice(): void {
+		if ( ! current_user_can( 'manage_options' ) || ! self::is_active() || empty( self::get_scope() ) ) {
+			return;
+		}
+		$problem = self::config_problem();
+		if ( '' === $problem ) {
+			return;
+		}
+		$url  = admin_url( 'admin.php?page=ys-admin-menu-whitelabel&tab=turnstile' );
+		$mode = self::MODE_STRICT === self::get_mode()
+			? __( '目前是嚴格模式：所有人（包括管理員）都登不進來。', 'ys-admin-menu' )
+			: __( '目前是寬鬆模式：登入會被放行，只靠帳號密碼保護。', 'ys-admin-menu' );
+		printf(
+			'<div class="notice notice-error"><p><strong>%1$s</strong> %2$s %3$s <a href="%4$s">%5$s</a></p></div>',
+			esc_html__( 'Cloudflare Turnstile：', 'ys-admin-menu' ),
+			esc_html( $problem ),
+			esc_html( $mode ),
+			esc_url( $url ),
+			esc_html__( '前往登入防護設定', 'ys-admin-menu' )
+		);
 	}
 
 	/* ─────────────────────────── 前端 widget ─────────────────────────── */
@@ -320,7 +472,8 @@ final class YSTurnstile {
 			return $user;
 		}
 
-		if ( self::decide( self::verify_request(), 'login' ) ) {
+		// 同一個請求只驗一次：其他外掛巢狀呼叫 wp_authenticate() 時沿用同一個結果。
+		if ( self::request_verdict( 'login' ) ) {
 			return $user;
 		}
 
@@ -330,8 +483,21 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 只管 wp-login.php 真的送出帳號或密碼的請求。
-	 * 打開登入頁（GET）時 wp-login.php 也會用空帳密呼叫 wp_signon()，那種不驗。
+	 * 這一次請求某個表單的驗證結果：第一次才真的向 Cloudflare 驗證，之後沿用（只在同一個請求內）。
+	 */
+	private static function request_verdict( string $context ): bool {
+		if ( ! array_key_exists( $context, self::$verdicts ) ) {
+			self::$verdicts[ $context ] = self::decide( self::verify_request(), $context );
+		}
+		return self::$verdicts[ $context ];
+	}
+
+	/**
+	 * 只管 wp-login.php 真的送出帳號或密碼的請求（POST）。
+	 *
+	 * - 打開登入頁（GET）時 wp-login.php 也會用空帳密呼叫 wp_signon()，那種不驗。
+	 * - 只接受 POST：社群登入／SSO 外掛會在 wp-login.php 的 GET 回呼（例如 ?loginSocial=）裡自己帶帳號登入，
+	 *   那不是登入表單送出，不該被要求 Turnstile。WordPress 的登入表單只從 POST 讀帳密。
 	 *
 	 * @param mixed $username
 	 * @param mixed $password
@@ -341,6 +507,9 @@ final class YSTurnstile {
 		#[\SensitiveParameter]
 		$password
 	): bool {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- 只和固定字串比較
+			return false;
+		}
 		if ( ! did_action( 'login_init' ) ) {
 			return false;
 		}
@@ -378,8 +547,16 @@ final class YSTurnstile {
 
 	/**
 	 * wp_login_failed（authenticate 跑完之後）：把暫時拿掉的核心 filter 放回去。
+	 *
+	 * 還在 authenticate 鏈中間就不還原：其他外掛自己觸發 wp_login_failed、或巢狀呼叫 wp_authenticate()
+	 * （巢狀那次結束時也會觸發 wp_login_failed）時，若在這裡還原，外層鏈接下來的核心 priority 20
+	 * 又會查一次密碼、PHP_INT_MAX 的強制關卡也不見了，不帶 token 加正確密碼就能登入。
+	 * 這時保持原狀，等整條 authenticate 跑完、真正的 wp_login_failed 再還原。
 	 */
 	public static function restore_password_check(): void {
+		if ( doing_filter( 'authenticate' ) ) {
+			return;
+		}
 		remove_action( 'wp_login_failed', [ self::class, 'restore_password_check' ], 0 );
 		remove_filter( 'authenticate', [ self::class, 'enforce_login_failure' ], PHP_INT_MAX );
 		foreach ( self::$removed_filters as $callback ) {
@@ -401,7 +578,7 @@ final class YSTurnstile {
 		if ( ! did_action( 'login_init' ) ) {
 			return $errors;
 		}
-		return self::decide( self::verify_request(), 'register' ) ? $errors : self::failure_error();
+		return self::request_verdict( 'register' ) ? $errors : self::failure_error();
 	}
 
 	/**
@@ -415,7 +592,7 @@ final class YSTurnstile {
 		if ( ! did_action( 'login_init' ) ) {
 			return $errors;
 		}
-		return self::decide( self::verify_request(), 'lostpassword' ) ? $errors : self::failure_error();
+		return self::request_verdict( 'lostpassword' ) ? $errors : self::failure_error();
 	}
 
 	/**
@@ -444,14 +621,19 @@ final class YSTurnstile {
 	 * 向 Cloudflare siteverify 驗證一個 token。
 	 *
 	 * 回傳 status：
-	 *   pass        Cloudflare 回 success === true
-	 *   fail        Cloudflare 有回應但判定失敗、回應格式不對、HTTP 4xx，或 token 格式在本機就不對
-	 *   unreachable 連不到 Cloudflare（連線失敗、逾時、HTTP 5xx）——寬鬆模式放行、嚴格模式擋下
+	 *   pass        Cloudflare 回 HTTP 200 且 success === true（有設定預期網域時，hostname 也要在清單裡）
+	 *   fail        Cloudflare 有回應但判定失敗（含 internal-error 重試後仍失敗）、回應格式不對、HTTP 4xx、
+	 *               hostname 不符，或 token 格式在本機就不對 —— 兩種模式都擋下
+	 *   unreachable 連不到 Cloudflare，kind 再分兩種（都依模式：寬鬆放行並記錄、嚴格擋下）：
+	 *               transient 暫時性：連線失敗、逾時、HTTP 5xx —— 用同一個 idempotency_key 重試一次
+	 *               config    站台設定擋住了連線：WP_HTTP_BLOCK_EXTERNAL 沒放行、http_request_not_executed、
+	 *                         其他外掛在 pre_http_request 攔下並回錯誤 —— 不重試；記下來，設定頁與後台提醒
+	 *                         「目前實際沒有作用」
 	 *
 	 * 空 token 一樣送 Cloudflare：Cloudflare 連得到時會回失敗（擋下）；整個 Cloudflare 停擺、
 	 * 瀏覽器也載不到 widget 時才會走到 unreachable，寬鬆模式才放得進來。
 	 *
-	 * @return array{status:string,codes:string[]}
+	 * @return array{status:string,codes:string[],kind?:string,hostname?:string}
 	 */
 	public static function verify_token( string $token, string $remote_ip = '' ): array {
 		if ( strlen( $token ) > self::TOKEN_MAX || ( '' !== $token && 1 !== preg_match( '/^[\x21-\x7E]+$/', $token ) ) ) {
@@ -469,6 +651,15 @@ final class YSTurnstile {
 			];
 		}
 
+		// WordPress 自己就會拒絕送出（WP_HTTP_BLOCK_EXTERNAL 沒放行 Cloudflare）：設定問題，不用試。
+		if ( self::is_blocked_by_wp_config() ) {
+			return [
+				'status' => 'unreachable',
+				'kind'   => 'config',
+				'codes'  => [ 'wp-http-block-external' ],
+			];
+		}
+
 		$body = [
 			'secret'          => $secret,
 			'response'        => $token,
@@ -481,21 +672,63 @@ final class YSTurnstile {
 
 		$result = [
 			'status' => 'unreachable',
+			'kind'   => 'transient',
 			'codes'  => [],
 		];
 		for ( $attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++ ) {
 			$result = self::call_siteverify( $body );
-			if ( 'unreachable' !== $result['status'] && 'retry' !== $result['status'] ) {
+			// 只有暫時性的斷線與 Cloudflare 的 internal-error 才重試；設定擋住的不重試（重試也一樣）。
+			$retry = 'retry' === $result['status']
+				|| ( 'unreachable' === $result['status'] && 'transient' === ( $result['kind'] ?? '' ) );
+			if ( ! $retry ) {
 				break;
 			}
 		}
 
-		// Cloudflare 回 internal-error、重試後仍一樣：Cloudflare 有回應，算失敗（不是連不到）。
+		// Cloudflare 回 internal-error、重試後仍一樣：Cloudflare 有回應，算失敗（不是連不到），寬鬆模式也擋下。
 		if ( 'retry' === $result['status'] ) {
 			$result['status'] = 'fail';
 		}
 
+		if ( 'pass' === $result['status'] ) {
+			$result = self::check_hostname( $result );
+		}
+
 		return $result;
+	}
+
+	/**
+	 * 預期網域比對（預設不比對）。
+	 *
+	 * 建議的做法是一個客戶站一個 Turnstile widget、在 Cloudflare 設好網域白名單、不要多站共用同一組金鑰，
+	 * 這樣 token 本身就只會在自己的網域產生。需要再加一道檢查時，用這個 filter 回傳網域清單，
+	 * siteverify 回的 hostname 不在清單裡就判失敗。
+	 *
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private static function check_hostname( array $result ): array {
+		/**
+		 * Turnstile 預期的網域（小寫比對）。預設空陣列＝不比對 hostname。
+		 *
+		 * @since 1.4.0
+		 *
+		 * @param string[] $hostnames 例如 [ 'example.com', 'www.example.com' ]。
+		 */
+		$expected = apply_filters( 'ys_admin_menu_turnstile_expected_hostnames', [] );
+		$allowed  = [];
+		foreach ( is_array( $expected ) ? $expected : [] as $host ) {
+			if ( is_string( $host ) && '' !== trim( $host ) ) {
+				$allowed[] = strtolower( trim( $host ) );
+			}
+		}
+		if ( empty( $allowed ) || in_array( (string) ( $result['hostname'] ?? '' ), $allowed, true ) ) {
+			return $result;
+		}
+		return [
+			'status' => 'fail',
+			'codes'  => [ 'hostname-mismatch' ],
+		];
 	}
 
 	/**
@@ -503,6 +736,17 @@ final class YSTurnstile {
 	 * @return array{status:string,codes:string[]}
 	 */
 	private static function call_siteverify( array $body ): array {
+		// 看這次請求有沒有被其他外掛（或站台設定）在 pre_http_request 攔下並回錯誤：
+		// 那是設定問題，不是 Cloudflare 暫時連不到。只觀察、不改變結果。
+		$intercepted = false;
+		$observer    = static function ( $pre, $args = [], $url = '' ) use ( &$intercepted ) {
+			if ( self::VERIFY_URL === $url && $pre instanceof \WP_Error ) {
+				$intercepted = true;
+			}
+			return $pre;
+		};
+		add_filter( 'pre_http_request', $observer, PHP_INT_MAX, 3 );
+
 		$response = wp_remote_post(
 			self::VERIFY_URL,
 			[
@@ -514,9 +758,20 @@ final class YSTurnstile {
 			]
 		);
 
+		remove_filter( 'pre_http_request', $observer, PHP_INT_MAX );
+
 		if ( is_wp_error( $response ) ) {
+			$error_code = (string) $response->get_error_code();
+			if ( $intercepted || 'http_request_not_executed' === $error_code ) {
+				return [
+					'status' => 'unreachable',
+					'kind'   => 'config',
+					'codes'  => [ $intercepted ? 'pre-http-request-blocked' : 'http-request-not-executed' ],
+				];
+			}
 			return [
 				'status' => 'unreachable',
+				'kind'   => 'transient',
 				'codes'  => [ 'connection-failed' ],
 			];
 		}
@@ -525,6 +780,7 @@ final class YSTurnstile {
 		if ( $code >= 500 ) {
 			return [
 				'status' => 'unreachable',
+				'kind'   => 'transient',
 				'codes'  => [ 'http-' . $code ],
 			];
 		}
@@ -541,8 +797,9 @@ final class YSTurnstile {
 		// 只有 HTTP 200 而且 success 是布林 true 才算通過。
 		if ( 200 === $code && true === $data['success'] ) {
 			return [
-				'status' => 'pass',
-				'codes'  => [],
+				'status'   => 'pass',
+				'codes'    => [],
+				'hostname' => isset( $data['hostname'] ) && is_string( $data['hostname'] ) ? strtolower( $data['hostname'] ) : '',
 			];
 		}
 
@@ -581,20 +838,25 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 依驗證結果與模式決定放不放行；連不到 Cloudflare 與 Secret 錯誤會記錄下來。
+	 * 依驗證結果與模式決定放不放行；連不到 Cloudflare、站台設定擋住連線、Secret 錯誤會記錄下來。
 	 *
-	 * @param array{status:string,codes:string[]} $result
+	 * @param array{status:string,codes:string[],kind?:string} $result
 	 */
 	private static function decide( array $result, string $context ): bool {
 		$status = (string) ( $result['status'] ?? 'fail' );
 
 		if ( 'pass' === $status ) {
+			self::note_success();
 			return true;
 		}
 
 		if ( 'unreachable' === $status ) {
-			$allow = self::MODE_STRICT !== self::get_mode();
-			self::log_event( $context, $allow ? 'allowed' : 'blocked', 'unreachable' );
+			$allow  = self::MODE_STRICT !== self::get_mode();
+			$config = 'config' === ( $result['kind'] ?? '' );
+			if ( $config ) {
+				self::note_config_error( (string) ( $result['codes'][0] ?? 'blocked' ) );
+			}
+			self::log_event( $context, $allow ? 'allowed' : 'blocked', $config ? 'config_blocked' : 'unreachable' );
 			return $allow;
 		}
 
@@ -644,8 +906,17 @@ final class YSTurnstile {
 
 	/**
 	 * 記錄一筆事件（只記時間、表單、結果、原因；不記 Secret、token、帳號、IP）。
+	 *
+	 * 同一個原因每分鐘最多寫一次（option 與 error_log 都是）：Cloudflare 連不到時有人狂打登入，
+	 * 不會每一次都寫資料庫與紀錄檔。
 	 */
 	private static function log_event( string $context, string $outcome, string $reason ): void {
+		$throttle_key = 'ys_admin_menu_ts_log_' . $reason;
+		if ( false !== get_transient( $throttle_key ) ) {
+			return;
+		}
+		set_transient( $throttle_key, 1, self::LOG_THROTTLE );
+
 		$log = get_option( self::OPTION_LOG, [] );
 		$log = is_array( $log ) ? $log : [];
 		array_unshift(
@@ -676,7 +947,7 @@ final class YSTurnstile {
 				'time'    => (int) ( $row['time'] ?? 0 ),
 				'context' => in_array( $row['context'] ?? '', array_merge( self::SCOPES, [ 'test' ] ), true ) ? (string) $row['context'] : '',
 				'outcome' => in_array( $row['outcome'] ?? '', [ 'allowed', 'blocked' ], true ) ? (string) $row['outcome'] : '',
-				'reason'  => in_array( $row['reason'] ?? '', [ 'unreachable', 'secret_invalid' ], true ) ? (string) $row['reason'] : '',
+				'reason'  => in_array( $row['reason'] ?? '', [ 'unreachable', 'config_blocked', 'secret_invalid' ], true ) ? (string) $row['reason'] : '',
 			];
 		}
 		return $out;
@@ -695,8 +966,14 @@ final class YSTurnstile {
 		if ( 'pass' === $result['status'] ) {
 			return __( '驗證成功：Site Key、Secret Key 與這個網域都設定正確。', 'ys-admin-menu' );
 		}
+		if ( 'unreachable' === $result['status'] && 'config' === ( $result['kind'] ?? '' ) ) {
+			return __( '對 Cloudflare 的連線被站台設定擋下來了（WP_HTTP_BLOCK_EXTERNAL、主機防火牆，或攔截 HTTP 請求的外掛）。這種情況下 Turnstile 實際上沒有作用：寬鬆模式只靠帳號密碼、嚴格模式所有人都登不進來。請放行 challenges.cloudflare.com。', 'ys-admin-menu' );
+		}
 		if ( 'unreachable' === $result['status'] ) {
 			return __( '伺服器連不到 Cloudflare（siteverify）。寬鬆模式下，這時候登入會被放行並記錄；嚴格模式會擋下。請檢查主機能否連到 challenges.cloudflare.com。', 'ys-admin-menu' );
+		}
+		if ( in_array( 'hostname-mismatch', $codes, true ) ) {
+			return __( '驗證結果的網域不在 ys_admin_menu_turnstile_expected_hostnames 設定的清單裡。', 'ys-admin-menu' );
 		}
 		if ( array_intersect( [ 'missing-input-secret', 'invalid-input-secret' ], $codes ) ) {
 			return __( 'Secret Key 不正確。請到 Cloudflare 後台複製這個 widget 的 Secret Key，重新貼上後儲存。', 'ys-admin-menu' );
@@ -727,6 +1004,13 @@ final class YSTurnstile {
 		$raw    = $_POST['token'] ?? ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- 上面 check_ajax_referer 已驗證
 		$token  = is_string( $raw ) ? trim( wp_unslash( $raw ) ) : '';
 		$result = self::verify_token( $token, self::remote_ip() );
+
+		// 測試成功也算一次「最後成功時間」；被設定擋住也記下來，設定頁與後台提醒就會出現。（不寫事件紀錄。）
+		if ( 'pass' === $result['status'] ) {
+			self::note_success();
+		} elseif ( 'unreachable' === $result['status'] && 'config' === ( $result['kind'] ?? '' ) ) {
+			self::note_config_error( (string) ( $result['codes'][0] ?? 'blocked' ) );
+		}
 
 		$payload = [
 			'status'  => $result['status'],

@@ -17,7 +17,11 @@
 
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
-// 未勾選清除 → 保留所有設定（重新安裝時沿用）。
+// v1.4.0：Cloudflare Turnstile 的 Secret Key 不論有沒有勾「刪除外掛時一併清除所有設定」都刪掉——
+// 金鑰不該留在已移除外掛的資料庫裡。重新安裝後要重新填 Secret Key；在那之前 Turnstile 不會生效（不會擋登入）。
+delete_option( 'ys_admin_menu_turnstile_secret_key' );
+
+// 未勾選清除 → 保留其他所有設定（重新安裝時沿用）。
 if ( 'yes' !== get_option( 'ys_admin_menu_purge_on_uninstall', 'no' ) ) {
 	return;
 }
@@ -56,6 +60,7 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_turnstile_scope',
 	'ys_admin_menu_turnstile_mode',
 	'ys_admin_menu_turnstile_log',
+	'ys_admin_menu_turnstile_health',
 ];
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；
@@ -66,4 +71,9 @@ if ( ! defined( 'YS_ECOMMERCE_VERSION' ) ) {
 
 foreach ( $ys_admin_menu_options as $ys_admin_menu_option ) {
 	delete_option( $ys_admin_menu_option );
+}
+
+// v1.4.0：Turnstile 事件紀錄的節流暫存（一分鐘後本來就會過期）。
+foreach ( [ 'unreachable', 'config_blocked', 'secret_invalid' ] as $ys_admin_menu_reason ) {
+	delete_transient( 'ys_admin_menu_ts_log_' . $ys_admin_menu_reason );
 }
