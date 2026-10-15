@@ -44,7 +44,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - **站台設定擋住了對 Cloudflare 的連線**（`WP_HTTP_BLOCK_EXTERNAL` 沒放行 challenges.cloudflare.com、主機防火牆、攔截 HTTP 請求的外掛）時，Turnstile 實際上沒有作用：設定頁顯示「目前實際沒有作用」，後台對管理員常駐提醒；設定頁也會顯示最後一次驗證成功的時間。
 - **一個客戶站一個 widget**：在 Cloudflare 為每個站建立自己的 Turnstile widget、設好網域白名單，不要多站共用同一組金鑰。需要額外比對網域時，用 `ys_admin_menu_turnstile_expected_hostnames` filter 回傳網域清單（預設不比對）。
 - **隱私提醒**：啟用後，登入頁與前台使用 `wp_login_form()` 的頁面都會載入 Cloudflare 的腳本（challenges.cloudflare.com）。
-- Secret Key 不會回填、不顯示、不寫進紀錄或匯出檔；**刪除外掛時一律刪除 Secret Key**（不論有沒有勾「刪除外掛時一併清除所有設定」，其他設定照勾選保留或清除）。送往 Cloudflare 的 IP 只用 `REMOTE_ADDR`（反向代理可用 `ys_admin_menu_turnstile_remote_ip` filter 覆寫）。
+- Secret Key 不會回填、不顯示、不寫進紀錄或匯出檔；**刪除外掛時一律刪除 Secret Key**（不論有沒有勾「刪除外掛時一併清除所有設定」，多站網路逐站刪除；其他設定照勾選保留或清除）。送往 Cloudflare 的 IP 只用 `REMOTE_ADDR`（反向代理可用 `ys_admin_menu_turnstile_remote_ip` filter 覆寫）。
 - **被鎖在外面時**：在 wp-config.php 加 `define( 'YS_ADMIN_MENU_TURNSTILE_DISABLED', true );`，或執行 `wp option update ys_admin_menu_turnstile_enabled no`。
 
 ## 技術資訊

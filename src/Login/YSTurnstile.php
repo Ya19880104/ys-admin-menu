@@ -26,8 +26,9 @@
  *     後者代表 Turnstile 實際上沒有作用，設定頁顯示、後台常駐提醒管理員。
  *   - 格式不對的 token（超過 2048 字元或含控制字元）不送 Cloudflare，直接判失敗：
  *     攻擊者沒辦法用奇怪的 token 讓伺服器端變成「連不到」而被放行。
- *   - 同一個 PHP 請求只驗一次（結果在這個請求內沿用，不跨請求快取）：每一次送出都重新呼叫 siteverify，
- *     token 一次性、Cloudflare 會擋重放。
+ *   - 同一個 PHP 請求只驗一次、不分表單（結果在這個請求內沿用，不跨請求快取；每個請求開始時清空，
+ *     常駐 worker 也不會沿用前一個請求的結果）：每一次送出都重新呼叫 siteverify，token 一次性、
+ *     Cloudflare 會擋重放。
  *   - 只管 wp-login.php 的 POST 送出（login_init 有跑過的請求）。社群登入／SSO 在 wp-login.php 的 GET 回呼、
  *     XML-RPC、REST、WooCommerce 等自己的登入表單不在範圍內。
  *   - 訪客 IP 只用 REMOTE_ADDR，不信任 X-Forwarded-For；站台在反向代理後面時可用
@@ -115,13 +116,15 @@ final class YSTurnstile {
 	private static array $removed_filters = [];
 
 	/**
-	 * @var array<string, bool> 這一次 PHP 請求裡各表單（login／register／lostpassword）的驗證結果。
+	 * 這一次請求的驗證結果（null＝還沒驗）。每個請求一個，不分表單。
 	 *
 	 * 只在同一個請求內沿用、不跨請求快取：同一個請求的 token 是固定的，其他外掛巢狀呼叫
-	 * wp_authenticate() 時不會再送一次 siteverify（Cloudflare 會把第二次當成重放而擋下正常使用者），
-	 * 而沒過的結果也會沿用、不會在第二次被「放行」。
+	 * wp_authenticate()、或註冊後由外掛自動 wp_signon() 時，不會再送一次 siteverify（Cloudflare 會把
+	 * 第二次當成重放而擋下正常使用者），而沒過的結果也會沿用、不會在第二次被「放行」。
+	 * 每個請求開始時（login_init → boot_login_screen）一律清空：常駐 worker（FrankenPHP worker、
+	 * RoadRunner、Swoole）裡 static 會跨請求保留，不清空的話前一個請求的「通過」會被沿用。
 	 */
-	private static array $verdicts = [];
+	private static ?bool $request_verdict = null;
 
 	/**
 	 * 註冊 hook。前台、後台、wp-login.php 都會呼叫；讀設定一律延後到真的用得到的時候。
@@ -141,9 +144,11 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * wp-login.php 開始時：生效才掛表單 widget 與後端驗證。
+	 * wp-login.php 開始時：先把這個請求的狀態歸零，生效才掛表單 widget 與後端驗證。
 	 */
 	public static function boot_login_screen(): void {
+		self::reset_request_state();
+
 		if ( ! self::is_active() ) {
 			return;
 		}
@@ -167,6 +172,27 @@ final class YSTurnstile {
 		if ( ! empty( $scope ) ) {
 			add_action( 'login_head', [ self::class, 'print_default_login_fit_css' ] );
 		}
+	}
+
+	/**
+	 * 每個請求開始時清空本類別的請求內狀態（login_init 每個請求只觸發一次）。
+	 *
+	 * 一般 PHP 每個請求本來就是新的行程，這裡什麼都不會做；常駐 worker 裡 static 與 hook 會跨請求保留，
+	 * 所以清掉前一個請求的驗證結果與失敗狀態。前一個請求若留下被暫停的核心帳密檢查（例如沒有觸發
+	 * wp_login_failed 就結束），先把它放回去，再清空紀錄。
+	 */
+	private static function reset_request_state(): void {
+		foreach ( self::$removed_filters as $callback ) {
+			if ( false === has_filter( 'authenticate', $callback ) ) {
+				add_filter( 'authenticate', $callback, 20, 3 );
+			}
+		}
+		remove_filter( 'authenticate', [ self::class, 'enforce_login_failure' ], PHP_INT_MAX );
+		remove_action( 'wp_login_failed', [ self::class, 'restore_password_check' ], 0 );
+
+		self::$removed_filters = [];
+		self::$login_failure   = null;
+		self::$request_verdict = null;
 	}
 
 	/* ─────────────────────────── 設定讀取 ─────────────────────────── */
@@ -359,11 +385,16 @@ final class YSTurnstile {
 	 * admin_notices：Turnstile 已啟用但實際上沒有作用（站台設定擋住了連線）時，常駐提醒管理員。
 	 */
 	public static function print_config_problem_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) || ! self::is_active() || empty( self::get_scope() ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		// 先看便宜的：設定常數與（自動載入的）健康狀態。沒有問題就結束，不去讀不自動載入的 Secret，
+		// 每個後台頁不會因此多一次資料庫查詢。
 		$problem = self::config_problem();
 		if ( '' === $problem ) {
+			return;
+		}
+		if ( ! self::is_active() || empty( self::get_scope() ) ) {
 			return;
 		}
 		$url  = admin_url( 'admin.php?page=ys-admin-menu-whitelabel&tab=turnstile' );
@@ -483,13 +514,14 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 這一次請求某個表單的驗證結果：第一次才真的向 Cloudflare 驗證，之後沿用（只在同一個請求內）。
+	 * 這一次請求的驗證結果：第一次（不論哪個表單）才真的向 Cloudflare 驗證，之後同一個請求一律沿用。
+	 * 事件紀錄的「表單」記第一次驗證時的那一個。
 	 */
 	private static function request_verdict( string $context ): bool {
-		if ( ! array_key_exists( $context, self::$verdicts ) ) {
-			self::$verdicts[ $context ] = self::decide( self::verify_request(), $context );
+		if ( null === self::$request_verdict ) {
+			self::$request_verdict = self::decide( self::verify_request(), $context );
 		}
-		return self::$verdicts[ $context ];
+		return self::$request_verdict;
 	}
 
 	/**

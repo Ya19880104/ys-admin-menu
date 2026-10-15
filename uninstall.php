@@ -19,7 +19,16 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 // v1.4.0：Cloudflare Turnstile 的 Secret Key 不論有沒有勾「刪除外掛時一併清除所有設定」都刪掉——
 // 金鑰不該留在已移除外掛的資料庫裡。重新安裝後要重新填 Secret Key；在那之前 Turnstile 不會生效（不會擋登入）。
-delete_option( 'ys_admin_menu_turnstile_secret_key' );
+// 多站網路：每個站都有自己的 option，逐站刪除（其他設定的清除照舊只看主站的勾選）。
+if ( is_multisite() ) {
+	foreach ( get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) as $ys_admin_menu_site_id ) {
+		switch_to_blog( (int) $ys_admin_menu_site_id );
+		delete_option( 'ys_admin_menu_turnstile_secret_key' );
+		restore_current_blog();
+	}
+} else {
+	delete_option( 'ys_admin_menu_turnstile_secret_key' );
+}
 
 // 未勾選清除 → 保留其他所有設定（重新安裝時沿用）。
 if ( 'yes' !== get_option( 'ys_admin_menu_purge_on_uninstall', 'no' ) ) {
