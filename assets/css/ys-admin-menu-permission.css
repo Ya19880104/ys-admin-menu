@@ -1059,3 +1059,29 @@
         margin: 3px 0 3px auto;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * v1.3.2 — 複製／已移到主選單的頂層列（直接在主列表內，可拖拉排序）
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* 已移到主選單的頂層列：淡紫底，與複製列（淡青底）區分 */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-promoted-top-row > td {
+    background: #f6f5ff;
+}
+
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-promoted-top-row .menu-line strong {
+    color: #4338ca;
+}
+
+/* 複製／提升列的「順序」欄：改用拖拉指示（位置以 after 記錄，不靠數字） */
+.ys-ec-permission-admin .ys-ec-order-drag {
+    font-size: 16px;
+    line-height: 1;
+    cursor: grab;
+}
+
+/* 拖曳中的列 */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.sortable-ghost > td {
+    background: #e0e7ff;
+    opacity: 0.6;
+}

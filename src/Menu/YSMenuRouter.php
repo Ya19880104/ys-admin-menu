@@ -240,10 +240,15 @@ class YSMenuRouter {
 		// ─────────────────────────────────────────────
 		// 5. 重新排序頂層 + 注入分隔列
 		//    v1.3.0：還沒排過序的複製項跟著原父選單（with_copy_placeholders）。
+		//    v1.3.2：「全部選單」分頁指定了位置（after＝接在哪個頂層項後面）的複製項與已移到主選單
+		//            的項目不照 order 排，排完再放到指定位置（place_anchored_top_items）。設定裡沒有
+		//            其他頂層列時不照 order 重排（沒用過「主選單（頂層）」分頁的站維持 WordPress 原本順序）。
 		// ─────────────────────────────────────────────
-		if ( ! empty( $wp_native_items ) ) {
-			self::reorder_and_insert_separators( self::with_copy_placeholders( $wp_native_items ) );
+		[ $ordered_items, $anchored_items ] = self::split_anchored_rows( $wp_native_items );
+		if ( self::has_top_level_rows( $ordered_items ) ) {
+			self::reorder_and_insert_separators( self::with_copy_placeholders( $ordered_items, $anchored_items, $ys_cart_items ) );
 		}
+		self::place_anchored_top_items( $anchored_items );
 
 		// ─────────────────────────────────────────────
 		// 6. 重新排序子選單（sub-page）— 依「全部選單（含子選單）」tab
@@ -678,9 +683,11 @@ class YSMenuRouter {
 			$icon         = self::sanitize_menu_icon( (string) ( $own['icon'] ?? '' ) );
 			$title        = (string) ( $row[0] ?? $slug );
 			$id_base      = substr( md5( $parent . '|' . $slug ), 0, 10 );
+			// v1.3.2：改名在插入時就套用（指定了位置的複製項不經過依 order 的重排，那裡才套改名）。
+			$name = isset( $own['title_override'] ) ? trim( wp_strip_all_tags( (string) $own['title_override'] ) ) : '';
 
 			$entry = [
-				$title,
+				'' !== $name ? $name : $title,
 				(string) ( $row[1] ?? 'read' ),
 				$key,
 				(string) ( $row[3] ?? wp_strip_all_tags( $title ) ),
@@ -832,11 +839,37 @@ class YSMenuRouter {
 	 *
 	 * 原父選單也沒排過序時不必處理：兩者都接在已排序項目之後，複製項本來就緊接在父選單後面。
 	 *
-	 * @param array<int, array<string, mixed>> $wp_native_items wp_native.items[]
+	 * v1.3.2：指定了位置（after）的複製項與已移到主選單項目不參與依 order 的排序，這裡同樣先讓它們
+	 * 跟在原父選單之後；之後 place_anchored_top_items 會放到指定位置。指定的錨點對這個帳號不在側欄裡
+	 * 時，就留在原父選單之後。
+	 *
+	 * @param array<int, array<string, mixed>> $wp_native_items 依 order 排的 wp_native.items[]（不含指定位置的列）。
+	 * @param array<int, array<string, mixed>> $anchored        指定了位置的 wp_native.items[] 列。
+	 * @param array<int, array<string, mixed>> $ys_cart_items   ys_cart.items[]（找已移到主選單項目的原父選單）。
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function with_copy_placeholders( array $wp_native_items ): array {
-		if ( empty( self::$copy_entries ) ) {
+	private static function with_copy_placeholders( array $wp_native_items, array $anchored = [], array $ys_cart_items = [] ): array {
+		$parents = []; // 頂層代稱 => 原父選單
+		foreach ( self::$copy_entries as $key => $info ) {
+			$parents[ $key ] = $info['parent'];
+		}
+		if ( ! empty( $anchored ) ) {
+			$anchored_ids = [];
+			foreach ( $anchored as $row ) {
+				$anchored_ids[ wp_specialchars_decode( (string) $row['slug'] ) ] = true;
+			}
+			foreach ( $ys_cart_items as $item ) {
+				if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) || 'sub' !== (string) ( $item['level'] ?? '' ) ) {
+					continue;
+				}
+				$parent = (string) ( $item['parent_slug'] ?? '' );
+				$key    = self::promoted_menu_url( (string) ( $item['slug'] ?? '' ), $parent );
+				if ( isset( $anchored_ids[ wp_specialchars_decode( $key ) ] ) ) {
+					$parents[ $key ] = $parent;
+				}
+			}
+		}
+		if ( empty( $parents ) ) {
 			return $wp_native_items;
 		}
 
@@ -847,17 +880,122 @@ class YSMenuRouter {
 			}
 		}
 
-		foreach ( self::$copy_entries as $key => $info ) {
-			if ( isset( $order_by_slug[ $key ] ) || ! isset( $order_by_slug[ $info['parent'] ] ) ) {
+		foreach ( $parents as $key => $parent ) {
+			if ( isset( $order_by_slug[ $key ] ) || ! isset( $order_by_slug[ $parent ] ) ) {
 				continue;
 			}
 			$wp_native_items[] = [
 				'slug'  => $key,
-				'order' => $order_by_slug[ $info['parent'] ],
+				'order' => $order_by_slug[ $parent ],
 			];
 		}
 
 		return $wp_native_items;
+	}
+
+	/**
+	 * v1.3.2：把 wp_native.items 分成「依 order 排」與「指定了位置（after）」兩組，各自保留原本的先後。
+	 *
+	 * @param array<int, mixed> $items wp_native.items[]
+	 * @return array{0:array<int, mixed>,1:array<int, array<string, mixed>>}
+	 */
+	private static function split_anchored_rows( array $items ): array {
+		$ordered  = [];
+		$anchored = [];
+		foreach ( $items as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] )
+				&& isset( $row['after'] ) && is_string( $row['after'] ) ) {
+				$anchored[] = $row;
+			} else {
+				$ordered[] = $row;
+			}
+		}
+		return [ $ordered, $anchored ];
+	}
+
+	/**
+	 * v1.3.2：清單裡有沒有一般的頂層列（不算分隔列）。只有分隔列或空的時候不做依 order 的重排。
+	 *
+	 * @param array<int, mixed> $items
+	 */
+	private static function has_top_level_rows( array $items ): bool {
+		foreach ( $items as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * v1.3.2：把指定了位置的頂層項放到「緊接在某個頂層項後面」。
+	 *
+	 * after 是頂層項的代稱（$menu[2]；複製項是 ./ 開頭的代稱、已移到主選單的是原生網址），空字串＝最前面。
+	 * 依 WordPress 之後的排序方式（鍵的 strnatcasecmp）給移動的項目一個緊接在錨點後面的鍵
+	 * （「錨點鍵.0001」，同一個錨點的第二個是 .0002）。錨點本身也是指定位置的項目時，等它先放好。
+	 * 錨點這次不在側欄裡（對這個帳號隱藏、沒有權限、已刪除）或互相指定成環時，項目留在原本的位置。
+	 *
+	 * @param array<int, array<string, mixed>> $anchored 指定了位置的 wp_native.items[] 列（依設定順序）。
+	 */
+	private static function place_anchored_top_items( array $anchored ): void {
+		global $menu;
+		if ( empty( $anchored ) || ! is_array( $menu ) ) {
+			return;
+		}
+
+		$key_of = []; // 代稱（還原 &amp;）=> $menu 鍵
+		foreach ( $menu as $k => $m ) {
+			if ( ! is_array( $m ) || ! isset( $m[2] ) || '' === (string) $m[2] ) {
+				continue;
+			}
+			$id = wp_specialchars_decode( (string) $m[2] );
+			if ( ! isset( $key_of[ $id ] ) ) {
+				$key_of[ $id ] = $k;
+			}
+		}
+
+		$pending = []; // 代稱 => [ 錨點, 設定列 ]
+		foreach ( $anchored as $row ) {
+			$id    = wp_specialchars_decode( (string) $row['slug'] );
+			$after = wp_specialchars_decode( (string) $row['after'] );
+			if ( isset( $key_of[ $id ] ) && $after !== $id && ! isset( $pending[ $id ] ) ) {
+				$pending[ $id ] = [ $after, $row ];
+			}
+		}
+
+		$used = []; // 錨點鍵 => 已用到的序號
+		do {
+			$progress = false;
+			foreach ( $pending as $id => $job ) {
+				[ $after, $row ] = $job;
+				if ( '' === $after ) {
+					$base = '-1'; // 排在最前面（WordPress 依鍵排序時排在 0、1、2… 之前）。
+				} elseif ( isset( $key_of[ $after ] ) && ! isset( $pending[ $after ] ) ) {
+					$base = (string) $key_of[ $after ];
+				} else {
+					continue; // 錨點還沒放好，或這個帳號看不到錨點。
+				}
+
+				$n = $used[ $base ] ?? 0;
+				do {
+					++$n;
+					$new_key = $base . '.' . str_pad( (string) $n, 4, '0', STR_PAD_LEFT );
+				} while ( array_key_exists( $new_key, $menu ) );
+				$used[ $base ] = $n;
+
+				$old_key = $key_of[ $id ];
+				$entry   = $menu[ $old_key ];
+				unset( $menu[ $old_key ] );
+				$name = isset( $row['title_override'] ) ? trim( wp_strip_all_tags( (string) $row['title_override'] ) ) : '';
+				if ( '' !== $name ) {
+					$entry[0] = $name;
+				}
+				$menu[ $new_key ] = $entry; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
+				$key_of[ $id ]    = $new_key;
+				unset( $pending[ $id ] );
+				$progress = true;
+			}
+		} while ( $progress && ! empty( $pending ) );
 	}
 
 	/**

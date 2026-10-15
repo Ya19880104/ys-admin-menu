@@ -301,6 +301,7 @@ class YSPermissionController {
 	 *   { "ys_cart":   { "items": [ ... ], "hide_for_user_ids": [5,7] } }
 	 *   { "user_overrides": { ... } }  // future extension
 	 *   { "top_copies": { "items": [ { "slug", "parent_slug" } ], "rendered": [ ... ] } }  // v1.3.0
+	 *   { "top_rows":   { "items": [ { "slug":"./…"|promoted_url, "after", "title_override", "icon", "roles", "hide", "self_only_uid" } ], "rendered": [ ... ] } }  // v1.3.2
 	 *
 	 * 採 partial-merge：每次只覆寫提交的 tab，其他 slice 不動。
 	 */
@@ -361,6 +362,19 @@ class YSPermissionController {
 			if ( ! empty( $existing['wp_native']['items'] ) ) {
 				$existing['wp_native']['items'] = self::drop_removed_copy_rows( (array) $existing['wp_native']['items'], $stored, $merged );
 			}
+		}
+
+		// v1.3.2：「全部選單（含子選單）」分頁把複製列、已移到主選單的列當頂層列直接拖拉與改設定，
+		// 用 top_rows 把它們的位置與設定寫回 wp_native.items，不動真正的頂層列。
+		if ( isset( $payload['top_rows'] ) && is_array( $payload['top_rows'] )
+			&& isset( $payload['top_rows']['items'] ) && is_array( $payload['top_rows']['items'] ) ) {
+			$slice                          = $payload['top_rows'];
+			$rendered                       = is_array( $slice['rendered'] ?? null ) ? $slice['rendered'] : [];
+			$existing['wp_native']['items'] = self::merge_top_rows(
+				(array) ( $existing['wp_native']['items'] ?? [] ),
+				self::sanitize_native_items( $slice['items'] ),
+				$rendered
+			);
 		}
 
 		// user_overrides slice
@@ -879,7 +893,71 @@ class YSPermissionController {
 				$item['icon'] = $icon;
 			}
 
+			// v1.3.2：複製／已移到主選單的項目可以用「接在哪個頂層項後面」決定位置（after＝頂層代稱，
+			// 空字串＝排在最前面）。只有送了 after 的列才存，real top 列的形狀不變。
+			if ( isset( $row['after'] ) && is_string( $row['after'] ) ) {
+				$item['after'] = sanitize_text_field( $row['after'] );
+			}
+
 			$out[] = $item;
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.3.2：合併「複製／已移到主選單」頂層列的設定（top_rows）進 wp_native.items，不動真正的頂層列。
+	 *
+	 * 「全部選單（含子選單）」分頁把複製列、已移到主選單的列當成主列表裡的頂層列直接拖拉、改設定，
+	 * 存檔時用這個管道把它們的位置（after）、顯示名稱、圖示、角色、隱藏、僅限本人寫回 wp_native.items
+	 * 的對應列（複製項是 ./ 代稱、已移到主選單的是原生網址代稱）；真正的頂層列（有 order 的那些）原樣保留。
+	 *
+	 * 只動「這次頁面上列出的」代稱（rendered）：頁面上列出、但這次沒送回的＝使用者移除的，從 wp_native
+	 * 移掉它的設定列；沒列出的（別的帳號看不到的複製項等）原樣保留。
+	 *
+	 * @param array<int, mixed>                $native_items wp_native.items[]
+	 * @param array<int, array<string,mixed>>  $submitted    這次送回的頂層列設定（已 sanitize_native_items）。
+	 * @param array<int, string>               $rendered     頁面載入時列出的代稱。
+	 * @return array<int, mixed>
+	 */
+	private static function merge_top_rows( array $native_items, array $submitted, array $rendered ): array {
+		$submitted_by_slug = [];
+		foreach ( $submitted as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
+				$submitted_by_slug[ (string) $row['slug'] ] = $row;
+			}
+		}
+
+		$rendered_set = [];
+		foreach ( $rendered as $slug ) {
+			if ( is_string( $slug ) && '' !== $slug ) {
+				$rendered_set[ sanitize_text_field( $slug ) ] = true;
+			}
+		}
+
+		$out  = [];
+		$seen = [];
+		// 先走既有列：複製／已移到主選單的列若這次有送回就用新值；頁面上列出卻沒送回＝移除。其餘原樣保留。
+		foreach ( $native_items as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) ) {
+				$out[] = $row;
+				continue;
+			}
+			$slug = (string) $row['slug'];
+			if ( isset( $submitted_by_slug[ $slug ] ) ) {
+				$out[]          = $submitted_by_slug[ $slug ];
+				$seen[ $slug ]  = true;
+				continue;
+			}
+			if ( isset( $rendered_set[ $slug ] ) ) {
+				continue; // 頁面列出、這次沒送回 → 使用者移除。
+			}
+			$out[] = $row; // 沒列出的原樣保留。
+		}
+		// 新增的（第一次複製／移到主選單的列）。
+		foreach ( $submitted as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) && empty( $seen[ (string) $row['slug'] ] ) ) {
+				$out[] = $row;
+			}
 		}
 		return $out;
 	}
