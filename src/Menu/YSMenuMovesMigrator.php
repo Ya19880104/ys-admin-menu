@@ -45,8 +45,8 @@ final class YSMenuMovesMigrator {
 	public const REGISTRY_CLASS = 'YangSheep\\Ecommerce\\Admin\\YSAdminNavigationRegistry';
 
 	/**
-	 * 遷移標記：{ version, sha256, rules, applied: [ 'since:slug', … ] }。值很小，autoload yes（每個後台頁面都要讀，
-	 * 放在 autoload 裡就不用另外查一次資料庫）。
+	 * 遷移標記：{ version, sha256, rules, applied: [ 'since:slug', … ], notice: bool }。值很小，autoload yes（每個後台頁面都要讀，
+	 * 放在 autoload 裡就不用另外查一次資料庫）。notice＝有還沒關掉的後台提醒（有才去讀遷移紀錄）。
 	 */
 	public const MARKER_OPTION = 'ys_admin_menu_moves_applied';
 
@@ -88,7 +88,7 @@ final class YSMenuMovesMigrator {
 
 	public static function register(): void {
 		add_action( 'admin_menu', [ self::class, 'maybe_migrate' ], 9000 );
-		add_action( 'admin_notices', [ self::class, 'render_notice' ] );
+		add_action( 'admin_notices', [ self::class, 'maybe_render_notice' ] );
 		add_action( 'admin_post_' . self::DISMISS_ACTION, [ self::class, 'handle_dismiss' ] );
 	}
 
@@ -244,8 +244,8 @@ final class YSMenuMovesMigrator {
 				}
 			}
 
-			self::save_marker( $core, $marker, $plan );
-			self::save_log( $core, $plan );
+			$pending = self::save_log( $core, $plan );
+			self::save_marker( $core, $marker, $plan, $pending );
 			return $plan['changed'] ? 'migrated' : 'marker';
 		} finally {
 			self::release_lock();
@@ -279,8 +279,9 @@ final class YSMenuMovesMigrator {
 	 * @param array<string,mixed> $core
 	 * @param array<string,mixed> $marker
 	 * @param array<string,mixed> $plan
+	 * @param bool                $notice 遷移紀錄裡有還沒關掉的提醒（save_log() 的結果）。
 	 */
-	private static function save_marker( array $core, array $marker, array $plan ): void {
+	private static function save_marker( array $core, array $marker, array $plan, bool $notice ): void {
 		update_option(
 			self::MARKER_OPTION,
 			[
@@ -288,9 +289,48 @@ final class YSMenuMovesMigrator {
 				'sha256'  => $core['hash'],
 				'rules'   => self::RULES_VERSION,
 				'applied' => array_values( array_unique( array_merge( $marker['applied'], $plan['applied'] ) ) ),
+				'notice'  => $notice,
 			],
 			true
 		);
+	}
+
+	/**
+	 * 遷移標記上的 notice（有還沒關掉的後台提醒）。遷移以外的地方（關掉提醒、啟用時加提醒、提醒其實沒內容）用：
+	 * 比對原值再寫，遷移（拿著鎖）剛好同時寫標記時不會被這裡蓋掉，對不到就先放著，下次顯示提醒時再對齊。
+	 * 還沒有標記（還沒遷移過）又要提醒時，建一個只有 notice 的標記（版本空白＝還沒遷移；遷移時整個寫過）；用「沒有才新增」，
+	 * 同時有遷移剛寫好標記也不會蓋掉。
+	 */
+	private static function set_notice_flag( bool $on ): void {
+		global $wpdb;
+		$raw = self::db_get( self::MARKER_OPTION );
+		if ( null === $raw ) {
+			if ( $on ) {
+				self::db_insert_ignore( self::MARKER_OPTION, (string) maybe_serialize( [ 'notice' => true ] ), 'yes' );
+			}
+			return;
+		}
+		$marker = maybe_unserialize( $raw );
+		$marker = is_array( $marker ) ? $marker : [];
+		if ( ! empty( $marker['notice'] ) === $on ) {
+			return;
+		}
+		$marker['notice'] = $on;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND BINARY option_value = %s", maybe_serialize( $marker ), self::MARKER_OPTION, $raw ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 比對舊值再寫，不蓋掉同時進行的遷移。
+		self::refresh_option_cache();
+	}
+
+	/**
+	 * 這個請求載入的自動載入 option 裡，遷移標記有沒有 notice（不另外查資料庫：沒有標記的站不在 alloptions 裡，直接是 false）。
+	 */
+	private static function notice_flag(): bool {
+		$all = wp_load_alloptions();
+		$raw = $all[ self::MARKER_OPTION ] ?? null;
+		if ( null === $raw ) {
+			return false;
+		}
+		$marker = maybe_unserialize( $raw );
+		return is_array( $marker ) && ! empty( $marker['notice'] );
 	}
 
 	/**
@@ -307,10 +347,10 @@ final class YSMenuMovesMigrator {
 			wp_cache_delete( 'alloptions', 'options' );
 		}
 		$raw = get_option( self::MARKER_OPTION, null );
-		if ( ! is_array( $raw ) ) {
-			return '';
+		$m   = self::read_marker( $raw );
+		if ( ! is_array( $raw ) || '' === $m['version'] ) {
+			return ''; // 還沒遷移過（只有 notice 的標記也算）
 		}
-		$m = self::read_marker( $raw );
 		return hash( 'sha256', implode( "\n", [ $m['version'], $m['sha256'], $m['rules'], implode( ',', $m['applied'] ) ] ) );
 	}
 
@@ -319,8 +359,9 @@ final class YSMenuMovesMigrator {
 	 *
 	 * @param array<string,mixed> $core
 	 * @param array<string,mixed> $plan
+	 * @return bool 存完之後有沒有還沒關掉的提醒（寫進遷移標記的 notice）。
 	 */
-	private static function save_log( array $core, array $plan ): void {
+	private static function save_log( array $core, array $plan ): bool {
 		$log     = self::read_log( self::db_value( self::LOG_OPTION ) );
 		$entries = $plan['log'];
 		foreach ( $core['invalid'] as $bad ) {
@@ -338,20 +379,36 @@ final class YSMenuMovesMigrator {
 			'entries' => array_slice( $entries, 0, self::MAX_ENTRIES ),
 		];
 
-		$notice = self::merge_notice( $log['notice'], $plan['notice'] );
-		$fresh  = $notice !== $log['notice'];
-		$notice = self::with_titles( $notice );
+		$notice    = self::merge_notice( $log['notice'], $plan['notice'] );
+		$fresh     = $notice !== $log['notice'];
+		$notice    = self::with_titles( $notice );
+		$dismissed = $fresh ? false : $log['dismissed'];
 
 		update_option(
 			self::LOG_OPTION,
 			[
 				'runs'      => array_slice( $runs, -self::MAX_RUNS ),
 				'notice'    => $notice,
-				'dismissed' => $fresh ? false : $log['dismissed'],
+				'dismissed' => $dismissed,
 				'events'    => $log['events'],
 			],
 			false
 		);
+		return ! $dismissed && self::notice_has_content( $notice );
+	}
+
+	/**
+	 * 提醒裡有沒有要給管理員看的內容（WP-CLI 的 status 也用）。
+	 *
+	 * @param array<string,mixed> $notice
+	 */
+	public static function notice_has_content( array $notice ): bool {
+		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors', 'v2_rules', 'core_backup' ] as $k ) {
+			if ( ! empty( $notice[ $k ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -367,19 +424,21 @@ final class YSMenuMovesMigrator {
 		$log      = self::read_log( self::db_value( self::LOG_OPTION ) );
 		$events   = $log['events'];
 		$events[] = [ 'at' => time(), 'type' => $type ] + $data;
-		$notice   = self::merge_notice( $log['notice'], $notice );
-		$fresh    = $notice !== $log['notice'];
+		$notice    = self::merge_notice( $log['notice'], $notice );
+		$fresh     = $notice !== $log['notice'];
+		$dismissed = $fresh ? false : $log['dismissed'];
 
 		update_option(
 			self::LOG_OPTION,
 			[
 				'runs'      => $log['runs'],
 				'notice'    => $notice,
-				'dismissed' => $fresh ? false : $log['dismissed'],
+				'dismissed' => $dismissed,
 				'events'    => array_slice( $events, -self::MAX_RUNS ),
 			],
 			false
 		);
+		self::set_notice_flag( ! $dismissed && self::notice_has_content( $notice ) );
 	}
 
 	/**
@@ -600,11 +659,14 @@ final class YSMenuMovesMigrator {
 		return null === $raw ? null : maybe_unserialize( $raw );
 	}
 
-	private static function db_insert_ignore( string $name, string $value ): bool {
+	private static function db_insert_ignore( string $name, string $value, string $autoload = 'no' ): bool {
 		global $wpdb;
-		$result = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 原子的「沒有才新增」。
+		$result = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)", $name, $value, $autoload ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 原子的「沒有才新增」。
 		wp_cache_delete( $name, 'options' );
 		wp_cache_delete( 'notoptions', 'options' );
+		if ( 'yes' === $autoload ) {
+			wp_cache_delete( 'alloptions', 'options' );
+		}
 		return is_numeric( $result ) && (int) $result > 0;
 	}
 
@@ -1875,13 +1937,29 @@ final class YSMenuMovesMigrator {
 	// 後台提醒（只給 manage_options、可以關掉）
 	// ─────────────────────────────────────────────
 
-	public static function render_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+	/**
+	 * admin_notices：遷移標記上有 notice 才讀遷移紀錄、畫提醒（標記是自動載入的，沒有標記的站每個後台頁都不多查資料庫）。
+	 * 提醒其實沒有內容可畫（已經關掉、列的帳號都刪了）時，把標記上的 notice 拿掉，之後的頁面就不再讀紀錄。
+	 */
+	public static function maybe_render_notice(): void {
+		if ( ! current_user_can( 'manage_options' ) || ! self::notice_flag() ) {
 			return;
+		}
+		if ( ! self::render_notice() ) {
+			self::set_notice_flag( false );
+		}
+	}
+
+	/**
+	 * @return bool 有沒有畫出提醒。
+	 */
+	public static function render_notice(): bool {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return false;
 		}
 		$log = self::read_log( get_option( self::LOG_OPTION, null ) );
 		if ( $log['dismissed'] ) {
-			return;
+			return false;
 		}
 		$n        = $log['notice'];
 		$titles   = $n['titles'];
@@ -1953,7 +2031,7 @@ final class YSMenuMovesMigrator {
 		}
 
 		if ( empty( $lines ) ) {
-			return;
+			return false;
 		}
 
 		$settings = admin_url( 'admin.php?page=' . \YangSheep\AdminMenu\Admin\YSMenuPage::SLUG_PERMISSIONS . '&tab=ys_cart' );
@@ -1967,6 +2045,7 @@ final class YSMenuMovesMigrator {
 		echo '<p><a class="button button-primary" href="' . esc_url( $settings ) . '">' . esc_html__( '前往選單與權限', 'ys-admin-menu' ) . '</a> ';
 		echo '<a class="button" href="' . esc_url( $dismiss ) . '">' . esc_html__( '我知道了', 'ys-admin-menu' ) . '</a></p>';
 		echo '</div>';
+		return true;
 	}
 
 	public static function handle_dismiss(): void {
@@ -1980,6 +2059,7 @@ final class YSMenuMovesMigrator {
 			$raw['dismissed'] = true;
 			update_option( self::LOG_OPTION, $raw, false );
 		}
+		self::set_notice_flag( false );
 
 		$back = wp_get_referer();
 		wp_safe_redirect( $back ? $back : admin_url() );

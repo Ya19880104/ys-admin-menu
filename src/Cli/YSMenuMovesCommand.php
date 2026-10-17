@@ -85,7 +85,7 @@ final class YSMenuMovesCommand {
 		];
 		$rows[] = [
 			'項目' => '後台提醒',
-			'值'   => $log['dismissed'] ? '已關閉' : ( self::notice_has_content( $log['notice'] ) ? '顯示中' : '沒有內容' ),
+			'值'   => $log['dismissed'] ? '已關閉' : ( YSMenuMovesMigrator::notice_has_content( $log['notice'] ) ? '顯示中' : '沒有內容' ),
 		];
 
 		\WP_CLI\Utils\format_items( 'table', $rows, [ '項目', '值' ] );
@@ -201,18 +201,6 @@ final class YSMenuMovesCommand {
 		global $wpdb;
 		$like = $wpdb->esc_like( YSMenuMovesMigrator::BACKUP_PREFIX ) . '%';
 		return array_map( 'strval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name", $like ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 只讀列出備份。
-	}
-
-	/**
-	 * @param array<string,mixed> $notice
-	 */
-	private static function notice_has_content( array $notice ): bool {
-		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors', 'v2_rules', 'core_backup' ] as $k ) {
-			if ( ! empty( $notice[ $k ] ) ) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**

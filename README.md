@@ -67,7 +67,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - `ys_admin_menu_config` — 選單與權限設定（JSON）。子選單複製到主選單存在 `top_copies.items[]`（每筆只記來源 `slug`、`parent_slug`）；複製項在主選單的排序、名稱、圖示（`icon`）等存在 `wp_native.items[]`，`slug` 是 `./` 開頭的選單代稱（例：`./options-writing.php`）
   - `ys_admin_menu_theme_config` — 原生選單樣式設定
   - `ys_admin_menu_logo_url` / `ys_admin_menu_footer_text` — 白牌
-  - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、本外掛的規則版本、已套用的 `since:slug`；自動載入）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖，值是拿到鎖的請求自己的 token）、`ys_admin_menu_config_pre_moves_<版本>`（遷移前備份）、`ys_admin_menu_core_copy_pre_activation`（啟用時改用 YS CART 搬家前備份之前，另存的 YS CART 那份原字串），後四種不自動載入
+  - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、本外掛的規則版本、已套用的 `since:slug`、有沒有還沒關掉的提醒；自動載入。後台提醒只在它記著有提醒時才去讀遷移紀錄，沒有 YS CART V3 的站沒有這個標記，後台頁不會多查資料庫）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖，值是拿到鎖的請求自己的 token）、`ys_admin_menu_config_pre_moves_<版本>`（遷移前備份）、`ys_admin_menu_core_copy_pre_activation`（啟用時改用 YS CART 搬家前備份之前，另存的 YS CART 那份原字串），後四種不自動載入
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options` + `wp_rest` nonce + body size cap）
 - **自動更新**：透過內嵌的 YS Plugin Hub Client。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
 - **防自我鎖死**：super admin（單站 administrator）不受隱藏、角色限制與使用者覆寫影響，避免把自己鎖在後台外。例外是「僅限本人」：綁定後連其他管理員也看不到該選單
