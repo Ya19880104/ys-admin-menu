@@ -75,6 +75,13 @@ final class YSMenuMovesCommand {
 				? '沒有紀錄'
 				: sprintf( '%s UTC，版本 %s，%s，新套用 %d 筆', gmdate( 'Y-m-d H:i:s', (int) ( $last['at'] ?? 0 ) ), (string) ( $last['version'] ?? '' ), ! empty( $last['changed'] ) ? '改了設定' : '設定不用改', count( (array) ( $last['applied'] ?? [] ) ) ),
 		];
+		$event  = empty( $log['events'] ) ? null : $log['events'][ count( $log['events'] ) - 1 ];
+		$rows[] = [
+			'項目' => '啟用時的處理',
+			'值'   => null === $event
+				? '沒有紀錄'
+				: sprintf( '%s UTC，%s', gmdate( 'Y-m-d H:i:s', (int) ( $event['at'] ?? 0 ) ), self::label( (string) ( $event['type'] ?? '' ) ) ),
+		];
 		$rows[] = [
 			'項目' => '後台提醒',
 			'值'   => $log['dismissed'] ? '已關閉' : ( self::notice_has_content( $log['notice'] ) ? '顯示中' : '沒有內容' ),
@@ -199,7 +206,7 @@ final class YSMenuMovesCommand {
 	 * @param array<string,mixed> $notice
 	 */
 	private static function notice_has_content( array $notice ): bool {
-		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors' ] as $k ) {
+		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors', 'v2_rules' ] as $k ) {
 			if ( ! empty( $notice[ $k ] ) ) {
 				return true;
 			}
@@ -250,6 +257,8 @@ final class YSMenuMovesCommand {
 			'hide_sub_row'       => '拆掉的頂層原本隱藏，子選單也隱藏',
 			'top_rules_row'      => '拆掉的頂層只在主選單分頁存過規則，補一列帶這些規則的子選單列',
 			'mirror_failed'      => 'Core 那份鏡像沒寫成（指紋沒更新）',
+			'core_backup'        => 'YS CART 已經自己搬過一次：改用它的搬家前備份，由本外掛重搬',
+			'core_copy_v2'       => '沿用 YS CART 那份設定，裡面有本外掛看不懂的 v2 規則（已提醒）',
 			'rules_row'          => '新增只帶規則的列',
 			'convert'            => '頂層改成子選單',
 			'merge_self'         => '併入同 slug 的子選單列',

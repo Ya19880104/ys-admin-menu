@@ -348,6 +348,34 @@ final class YSMenuMovesMigrator {
 				'runs'      => array_slice( $runs, -self::MAX_RUNS ),
 				'notice'    => $notice,
 				'dismissed' => $fresh ? false : $log['dismissed'],
+				'events'    => $log['events'],
+			],
+			false
+		);
+	}
+
+	/**
+	 * 啟用本外掛時（YSMenuConfigBridge::synchronize( true )）做了什麼，記進遷移紀錄的 events（最近幾筆）：
+	 *   - core_backup：YS CART V3 已經自己搬過一次選單設定，改用它的搬家前備份交給本外掛遷移（option 名稱、是否就是上次鏡像）。
+	 *   - core_copy_v2：照 1.4.0 沿用 YS CART 那份，裡面有本外掛看不懂的 v2 規則（列出選單，另外放進後台提醒）。
+	 *
+	 * @param array<string,mixed> $data
+	 * @param array<int,string>   $v2_slugs 要列進後台提醒的選單。
+	 */
+	public static function record_activation( string $type, array $data, array $v2_slugs = [] ): void {
+		$log      = self::read_log( self::db_value( self::LOG_OPTION ) );
+		$events   = $log['events'];
+		$events[] = [ 'at' => time(), 'type' => $type ] + $data;
+		$notice   = self::merge_notice( $log['notice'], [ 'v2_rules' => $v2_slugs ] );
+		$fresh    = $notice !== $log['notice'];
+
+		update_option(
+			self::LOG_OPTION,
+			[
+				'runs'      => $log['runs'],
+				'notice'    => $notice,
+				'dismissed' => $fresh ? false : $log['dismissed'],
+				'events'    => array_slice( $events, -self::MAX_RUNS ),
 			],
 			false
 		);
@@ -355,7 +383,7 @@ final class YSMenuMovesMigrator {
 
 	/**
 	 * @param mixed $raw
-	 * @return array{runs:array<int,array<string,mixed>>,notice:array<string,mixed>,dismissed:bool}
+	 * @return array{runs:array<int,array<string,mixed>>,notice:array<string,mixed>,dismissed:bool,events:array<int,array<string,mixed>>}
 	 */
 	public static function read_log( $raw ): array {
 		$raw = is_array( $raw ) ? $raw : [];
@@ -363,6 +391,7 @@ final class YSMenuMovesMigrator {
 			'runs'      => array_values( array_filter( (array) ( $raw['runs'] ?? [] ), 'is_array' ) ),
 			'notice'    => self::merge_notice( self::empty_notice(), is_array( $raw['notice'] ?? null ) ? $raw['notice'] : [] ),
 			'dismissed' => ! empty( $raw['dismissed'] ),
+			'events'    => array_values( array_filter( (array) ( $raw['events'] ?? [] ), 'is_array' ) ),
 		];
 	}
 
@@ -381,6 +410,7 @@ final class YSMenuMovesMigrator {
 			'group_titles'  => [],
 			'unknown'       => [],
 			'anchors'       => [],
+			'v2_rules'      => [],
 			'titles'        => [],
 		];
 	}
@@ -395,7 +425,7 @@ final class YSMenuMovesMigrator {
 	private static function merge_notice( array $a, array $b ): array {
 		$out = self::empty_notice();
 
-		foreach ( [ 'moved', 'conflicts' ] as $k ) {
+		foreach ( [ 'moved', 'conflicts', 'v2_rules' ] as $k ) {
 			$list = array_merge( (array) ( $a[ $k ] ?? [] ), (array) ( $b[ $k ] ?? [] ) );
 			$out[ $k ] = array_values( array_unique( array_filter( $list, static fn( $v ) => is_string( $v ) && '' !== $v ) ) );
 		}
@@ -439,7 +469,7 @@ final class YSMenuMovesMigrator {
 	 * @return array<string,mixed>
 	 */
 	private static function with_titles( array $notice ): array {
-		$pages = array_merge( $notice['moved'], $notice['conflicts'] );
+		$pages = array_merge( $notice['moved'], $notice['conflicts'], $notice['v2_rules'] );
 		$tops  = [];
 		foreach ( [ 'parent_hidden', 'bound', 'gated', 'unknown', 'anchors' ] as $k ) {
 			foreach ( $notice[ $k ] as $item ) {
@@ -1905,6 +1935,9 @@ final class YSMenuMovesMigrator {
 		}
 		if ( ! empty( $n['unknown'] ) ) {
 			$lines[] = sprintf( '新版 YS CART 有 %d 項選單調整，這個版本的 YS 選單管理還看不懂，已經先略過，請更新 YS 選單管理。', count( $n['unknown'] ) );
+		}
+		if ( ! empty( $n['v2_rules'] ) ) {
+			$lines[] = sprintf( '啟用本外掛時沿用了 YS CART 那份選單設定，其中這些選單用了 YS CART V3 的新可見規則（全部隱藏、隱藏指定角色、僅限操作本人），本外掛看不懂這種規則，現在只照原本的隱藏、角色與「僅限本人」判斷，請到「選單與權限」確認誰看得到：%s。', implode( $sep, array_map( $name, $n['v2_rules'] ) ) );
 		}
 
 		if ( empty( $lines ) ) {
