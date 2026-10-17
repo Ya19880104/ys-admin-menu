@@ -680,6 +680,10 @@ final class YSMenuMovesMigrator {
 
 			$slug             = $move['slug'];
 			$to               = $move['to'];
+			if ( isset( $gates[ $slug ] ) ) {
+				// 同一頁這一輪又搬一次：閘門看最後的上層（from 保留第一次的舊上層）。
+				$gates[ $slug ]['to'] = $to;
+			}
 			$first            = ! isset( $handled[ $slug ] );
 			$handled[ $slug ] = true;
 			$old              = ! empty( $old_layout[ $key ] );
