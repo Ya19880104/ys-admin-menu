@@ -1893,7 +1893,7 @@ final class YSMenuMovesMigrator {
 		if ( ! empty( $n['moved'] ) ) {
 			$lines[] = sprintf( '這些選單換到新的位置，原本的順序、名稱與顯示設定已經跟著搬過去：%s。', implode( $sep, array_map( $name, $n['moved'] ) ) );
 			if ( $n['rules'] ) {
-				$lines[] = '原本因為看不到上層選單而看不到這些頁面的角色或帳號，搬到新位置後照樣看不到。';
+				$lines[] = '原本因為看不到上層選單而看不到這些頁面的角色或帳號，搬到新位置後照樣看不到，直接開網址或從頁面裡的連結也會被擋。';
 			}
 		}
 		foreach ( $n['group_titles'] as $g ) {
@@ -1919,7 +1919,7 @@ final class YSMenuMovesMigrator {
 			$lines[] = sprintf( '這些帳號有自訂可見的選單，請到「使用者覆寫」照新的分組重新勾選：%s。', implode( $sep, $people ) );
 		}
 		if ( ! empty( $n['conflicts'] ) ) {
-			$lines[] = sprintf( '這些頁面設了「僅限本人」，但和原本的上層選單綁的不是同一個帳號，已經先改成隱藏，請到「全部選單」確認誰該看得到：%s。', implode( $sep, array_map( $name, $n['conflicts'] ) ) );
+			$lines[] = sprintf( '這些頁面設了「僅限本人」，但和原本的上層選單綁的不是同一個帳號，已經先改成隱藏：%s。現在除了綁定的管理員帳號，沒有任何帳號（包括其他管理員）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, array_map( $name, $n['conflicts'] ) ) );
 		}
 		$who = static function ( array $entries ) use ( $name ): array {
 			return array_map(
@@ -1935,7 +1935,7 @@ final class YSMenuMovesMigrator {
 			$lines[] = sprintf( '這些頁面沿用了原本上層選單的「僅限本人」，現在只有括號裡的帳號看得到：%s。', implode( $sep, $who( $n['bound'] ) ) );
 		}
 		if ( ! empty( $n['gated'] ) ) {
-			$lines[] = sprintf( '這些頁面綁定的帳號原本看不到它們，搬家後已經先改成隱藏，請到「全部選單」確認誰該看得到：%s。', implode( $sep, $who( $n['gated'] ) ) );
+			$lines[] = sprintf( '這些頁面綁定的帳號原本看不到它們，搬家後已經先改成隱藏：%s。現在沒有任何帳號（包括管理員）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, $who( $n['gated'] ) ) );
 		}
 		if ( ! empty( $n['anchors'] ) ) {
 			$lines[] = sprintf( '這些放在主選單的項目原本接在拆掉的選單群組後面，找不到新的位置，請到「全部選單」重新拖拉：%s。', implode( $sep, array_map( static fn( $a ) => $top_name( (string) ( $a['slug'] ?? '' ) ), $n['anchors'] ) ) );
