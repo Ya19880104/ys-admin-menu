@@ -1444,13 +1444,17 @@ class YSPermissionAdmin {
 	 *   - YSPermissionController::get_all_admin_menu_items()（WP 原生 + 第三方 top-level）
 	 *   - YSPermissionController::get_all_ys_cart_endpoints()（YS CART top + sub）
 	 *
+	 * v1.5.0：YS CART V3 上跟著它指向的頁面判斷的導覽列（YSMenuRouter::nav_target()，例如「顧客」底下的「會員生日」）不列：
+	 * 可見清單比對的是那一頁，勾這一列沒有作用（要讓人看到就勾那一頁）。
+	 *
 	 * @return array<string, string> slug => title
 	 */
 	private static function collect_all_known_slugs(): array {
 		$out = [];
 		foreach ( YSPermissionController::get_all_ys_cart_endpoints() as $item ) {
-			$slug = (string) ( $item['slug'] ?? '' );
-			if ( '' !== $slug && ! isset( $out[ $slug ] ) ) {
+			$slug   = (string) ( $item['slug'] ?? '' );
+			$parent = 'sub' === ( $item['level'] ?? 'top' ) ? (string) ( $item['parent_slug'] ?? '' ) : null;
+			if ( '' !== $slug && ! isset( $out[ $slug ] ) && YSMenuRouter::nav_target( $slug, $parent ) === $slug ) {
 				$prefix       = ( ( $item['level'] ?? 'top' ) === 'sub' ) ? '↳ ' : '';
 				$out[ $slug ] = $prefix . (string) ( $item['title'] ?? $slug );
 			}

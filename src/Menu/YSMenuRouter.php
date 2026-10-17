@@ -73,6 +73,9 @@ class YSMenuRouter {
 	/** v1.3.0：本次請求改標在複製項上的選單代稱（只有原位置看不到時才有值）。 */
 	private static string $current_copy_key = '';
 
+	/** v1.5.0：站上有沒有 YS CART 的選單搬家清單（V3）。null＝還沒查；apply_config()、guard_hidden_pages() 開始時重查。 */
+	private static ?bool $moves_site = null;
+
 	/**
 	 * v1.3.0：過濾前的頂層選單（複製項沿用原父選單圖示與位置、設定頁顯示原位置用）：
 	 * 選單代稱 => [ $menu 鍵, 圖示, 名稱 ]。
@@ -162,7 +165,8 @@ class YSMenuRouter {
 	public static function apply_config(): void {
 		global $menu;
 
-		$config = self::get_config();
+		self::$moves_site = null;
+		$config           = self::get_config();
 		if ( empty( $config ) ) {
 			return;
 		}
@@ -1321,8 +1325,8 @@ class YSMenuRouter {
 			if ( false !== strpos( $classes, 'wp-menu-separator' ) ) {
 				continue;
 			}
-			// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）用它指向的頁面比對白名單。
-			if ( ! isset( $visible[ self::access_target_slug( $slug ) ] ) ) {
+			// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）在 V3 上用它指向的頁面比對白名單（nav_target()）。
+			if ( ! isset( $visible[ self::nav_target( $slug ) ] ) ) {
 				unset( $menu[ $position ] );
 			}
 		}
@@ -1340,7 +1344,7 @@ class YSMenuRouter {
 	/**
 	 * Canonical permission decision for native WP menu, YS shell, and direct URLs.
 	 */
-	public static function current_user_can_access_admin_slug( string $slug, ?int $user_id = null ): bool {
+	public static function current_user_can_access_admin_slug( string $slug, ?int $user_id = null, ?string $parent = null ): bool {
 		$slug = self::normalize_admin_slug( $slug );
 		if ( '' === $slug ) {
 			return true;
@@ -1351,18 +1355,19 @@ class YSMenuRouter {
 			return true;
 		}
 
-		return self::access_decision( $slug, self::get_config(), $user_id );
+		return self::access_decision( $slug, self::get_config(), $user_id, $parent );
 	}
 
 	/**
 	 * current_user_can_access_admin_slug() 的判斷本體。v1.5.0 抽出來，讓選單搬家遷移能拿「某一份設定」來判斷；規則不變。
 	 *
-	 * @param string              $slug 已正規化、不是空字串。
+	 * @param string              $slug   已正規化、不是空字串。
 	 * @param array<string,mixed> $config
+	 * @param string|null         $parent 側欄上這一列的上層（子選單才有；nav_target() 用）。
 	 */
-	private static function access_decision( string $slug, array $config, int $user_id ): bool {
+	private static function access_decision( string $slug, array $config, int $user_id, ?string $parent = null ): bool {
 		// v1.5.0：指向 YS CART 某一頁的導覽列（例如 V3 的「會員生日」）：導覽列自己與它指向的頁面兩邊都要過。
-		$target = self::access_target_slug( $slug );
+		$target = self::nav_target( $slug, $parent );
 		if ( $target !== $slug ) {
 			return self::passes_slug( $slug, $config, $user_id, false ) && self::passes_slug( $target, $config, $user_id, true );
 		}
@@ -1418,7 +1423,8 @@ class YSMenuRouter {
 	 *
 	 * 只處理 admin.php?page=<YS CART 頁面>&… 這一種寫法（頁面 slug 是 ys-cart、ys-cart-*、ys-ec-*，與 YS CART 核心的
 	 * access_decision_slug() 相同）。這種子選單不是獨立的頁面，只是那一頁的入口（例如 V3「顧客」底下的「會員生日」＝
-	 * admin.php?page=ys-ec-settings&tab=birthday），所以側欄過濾、白名單比對都要看那一頁。其他網址型 slug 原樣回傳。
+	 * admin.php?page=ys-ec-settings&tab=birthday）。其他網址型 slug 原樣回傳。這裡只看寫法；側欄與存取判斷什麼時候真的換成
+	 * 那一頁，由 nav_target() 決定。
 	 */
 	public static function access_target_slug( string $slug ): string {
 		$decoded = wp_specialchars_decode( trim( $slug ) );
@@ -1430,6 +1436,35 @@ class YSMenuRouter {
 			return $page;
 		}
 		return $slug;
+	}
+
+	/**
+	 * v1.5.0：側欄上這一列要照哪一頁判斷（存取、白名單、「僅限本人」）。
+	 *   - 站上沒有 YS CART 的選單搬家清單（2.69 等舊版：YSMenuMovesMigrator::detect() 是 null）：一律看它自己，跟 1.4.0 一樣。
+	 *   - 有（V3）：導覽列（access_target_slug() 認得的寫法）不在它指向的那一頁底下時，換成那一頁，例如「顧客」底下的
+	 *     「會員生日」；就在那一頁底下的（「商店設定」底下的分頁連結）照 1.4.0 看它自己。頂層沒有上層，照樣換。
+	 *
+	 * @param string|null $parent 子選單的上層；null＝頂層，或不知道在哪裡（例如直接問 current_user_can_access_admin_slug()）。
+	 */
+	public static function nav_target( string $slug, ?string $parent = null ): string {
+		$target = self::access_target_slug( $slug );
+		if ( $target === $slug || ! self::moves_site() ) {
+			return $slug;
+		}
+		if ( null !== $parent && self::normalize_admin_slug( $parent ) === $target ) {
+			return $slug;
+		}
+		return $target;
+	}
+
+	/**
+	 * v1.5.0：站上有沒有 YS CART 的選單搬家清單（同一個請求只查一次）。
+	 */
+	private static function moves_site(): bool {
+		if ( null === self::$moves_site ) {
+			self::$moves_site = class_exists( YSMenuMovesMigrator::class ) && null !== YSMenuMovesMigrator::detect();
+		}
+		return self::$moves_site;
 	}
 
 	/**
@@ -1478,7 +1513,7 @@ class YSMenuRouter {
 			return true;
 		}
 
-		foreach ( array_unique( [ $slug, self::access_target_slug( $slug ) ] ) as $s ) {
+		foreach ( array_unique( [ $slug, self::nav_target( $slug ) ] ) as $s ) {
 			$bound = self::sidebar_self_only_uid( $s, $config );
 			if ( $bound > 0 && $bound !== $user_id ) {
 				return false;
@@ -1505,7 +1540,7 @@ class YSMenuRouter {
 				return false;
 			}
 			$visible = self::resolve_visible_slugs_for_user( $config, $user_id );
-			if ( ! empty( $visible ) && ! in_array( self::access_target_slug( $slug ), $visible, true ) ) {
+			if ( ! empty( $visible ) && ! in_array( self::nav_target( $slug ), $visible, true ) ) {
 				return false;
 			}
 		}
@@ -1798,7 +1833,7 @@ class YSMenuRouter {
 						continue;
 					}
 					$slug = isset( $sub[2] ) ? (string) $sub[2] : '';
-					if ( '' !== $slug && ! self::current_user_can_access_admin_slug( $slug ) ) {
+					if ( '' !== $slug && ! self::current_user_can_access_admin_slug( $slug, null, (string) $parent ) ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}
@@ -1854,12 +1889,12 @@ class YSMenuRouter {
 			return;
 		}
 
-		// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）也看它指向的那一頁有沒有綁定別人。
-		$bound_elsewhere = static function ( string $slug ) use ( $map, $current_user_id ): bool {
+		// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）在 V3 上也看它指向的那一頁有沒有綁定別人（nav_target()）。
+		$bound_elsewhere = static function ( string $slug, ?string $parent = null ) use ( $map, $current_user_id ): bool {
 			if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
 				return true;
 			}
-			$target = self::access_target_slug( $slug );
+			$target = self::nav_target( $slug, $parent );
 			return $target !== $slug && isset( $map[ $target ] ) && $map[ $target ] !== $current_user_id;
 		};
 
@@ -1884,7 +1919,7 @@ class YSMenuRouter {
 						continue;
 					}
 					$slug = self::normalize_admin_slug( (string) ( $sub[2] ?? '' ) );
-					if ( $bound_elsewhere( $slug ) ) {
+					if ( $bound_elsewhere( $slug, (string) $parent ) ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}
@@ -2048,7 +2083,8 @@ class YSMenuRouter {
 			return;
 		}
 
-		$page = self::current_admin_request_slug();
+		self::$moves_site = null;
+		$page             = self::current_admin_request_slug();
 		if ( ! self::page_access_decision( $page, self::get_config(), get_current_user_id(), current_user_can( 'manage_network' ) || is_super_admin() ) ) {
 			self::deny_access( $page );
 		}
@@ -2188,13 +2224,15 @@ class YSMenuRouter {
 
 			// 有子選單時，WordPress 的頂層連結指向第一個子項。
 			$target = $slug;
+			$parent = null;
 			if ( ! empty( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
 				$first = reset( $submenu[ $slug ] );
 				if ( is_array( $first ) && ! empty( $first[2] ) ) {
 					$target = (string) $first[2];
+					$parent = $slug;
 				}
 			}
-			if ( ! self::current_user_can_access_admin_slug( $target ) ) {
+			if ( ! self::current_user_can_access_admin_slug( $target, null, $parent ) ) {
 				continue;
 			}
 
