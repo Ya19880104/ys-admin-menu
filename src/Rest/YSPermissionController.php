@@ -1010,7 +1010,7 @@ class YSPermissionController {
 				? wp_strip_all_tags( (string) $row['title_override'] )
 				: '';
 
-			$out[] = [
+			$item = [
 				'slug'        => $slug,
 				'order'       => $order,
 				'roles'       => $roles,
@@ -1022,6 +1022,12 @@ class YSPermissionController {
 				'promote_to_top' => ( 'sub' === $level ) && ! empty( $row['promote_to_top'] ),
 				'title_override' => '' !== $title_override ? $title_override : null,
 			];
+			// v1.5.0：沒有順序值的列（選單搬家時只帶規則或照預設順序的列）維持沒有順序值，匯入後才不會變成 0 排到最前面。
+			// 設定頁存檔每一列都會帶順序值，不受影響。
+			if ( ! isset( $row['order'] ) ) {
+				unset( $item['order'] );
+			}
+			$out[] = $item;
 		}
 		return $out;
 	}

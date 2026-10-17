@@ -1150,7 +1150,11 @@ class YSMenuRouter {
 			if ( '' === $slug || '' === $parent ) {
 				continue;
 			}
-			$order_map[ $parent ][ $slug ] = (int) ( $item['order'] ?? 0 );
+			// v1.5.0：沒有順序值的列（例如選單搬家時只帶隱藏規則的列）不參與排序，照目前的順序排在已排序的後面。
+			if ( ! isset( $item['order'] ) ) {
+				continue;
+			}
+			$order_map[ $parent ][ $slug ] = (int) $item['order'];
 		}
 
 		if ( empty( $order_map ) ) {
@@ -1317,7 +1321,8 @@ class YSMenuRouter {
 			if ( false !== strpos( $classes, 'wp-menu-separator' ) ) {
 				continue;
 			}
-			if ( ! isset( $visible[ $slug ] ) ) {
+			// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）用它指向的頁面比對白名單。
+			if ( ! isset( $visible[ self::access_target_slug( $slug ) ] ) ) {
 				unset( $menu[ $position ] );
 			}
 		}
@@ -1347,6 +1352,12 @@ class YSMenuRouter {
 		}
 
 		$config = self::get_config();
+
+		// v1.5.0：指向 YS CART 某一頁的導覽列（例如 V3 的「會員生日」）：導覽列自己與它指向的頁面兩邊都要過。
+		$target = self::access_target_slug( $slug );
+		if ( $target !== $slug ) {
+			return self::passes_slug( $slug, $config, $user_id, false ) && self::passes_slug( $target, $config, $user_id, true );
+		}
 
 		// 「僅限本人」優先於 super-admin bypass：選單若綁定特定帳號，只有該帳號可見
 		// （其他帳號含其他 super-admin 一律擋）；綁定者自己永遠可見＝不會鎖死自己。
@@ -1394,7 +1405,56 @@ class YSMenuRouter {
 		return isset( $slugs[ $slug ] );
 	}
 
+	/**
+	 * v1.5.0：「導覽列」對應到它指向的頁面。
+	 *
+	 * 只處理 admin.php?page=<YS CART 頁面>&… 這一種寫法（頁面 slug 是 ys-cart、ys-cart-*、ys-ec-*，與 YS CART 核心的
+	 * access_decision_slug() 相同）。這種子選單不是獨立的頁面，只是那一頁的入口（例如 V3「顧客」底下的「會員生日」＝
+	 * admin.php?page=ys-ec-settings&tab=birthday），所以側欄過濾、白名單比對都要看那一頁。其他網址型 slug 原樣回傳。
+	 */
+	public static function access_target_slug( string $slug ): string {
+		$decoded = wp_specialchars_decode( trim( $slug ) );
+		if ( ! preg_match( '/^admin\.php\?page=([^&#=]+)&./', $decoded, $m ) ) {
+			return $slug;
+		}
+		$page = self::normalize_admin_slug( $m[1] );
+		if ( 'ys-cart' === $page || str_starts_with( $page, 'ys-cart-' ) || str_starts_with( $page, 'ys-ec-' ) ) {
+			return $page;
+		}
+		return $slug;
+	}
+
+	/**
+	 * v1.5.0：導覽列與它指向的頁面各自判斷（current_user_can_access_admin_slug 的同一套規則）。
+	 * 隱藏、角色、僅限本人兩邊各看各的、任一邊拒絕就拒絕；白名單與「僅允許存取受保護的管理選單」只看指向的頁面
+	 * （白名單只會列真正的頁面）。
+	 */
+	private static function passes_slug( string $slug, array $config, int $user_id, bool $with_overrides ): bool {
+		$self_only_uid = self::self_only_uid_for_slug( $slug, $config );
+		if ( $self_only_uid > 0 ) {
+			return $self_only_uid === $user_id;
+		}
+		if ( is_super_admin( $user_id ) || user_can( $user_id, 'manage_network' ) ) {
+			return true;
+		}
+		if ( empty( $config ) ) {
+			return true;
+		}
+		$user       = get_userdata( $user_id );
+		$user_roles = $user ? array_map( 'sanitize_key', (array) $user->roles ) : [];
+
+		return ( ! $with_overrides || self::passes_user_overrides( $slug, $config, $user_id ) )
+			&& self::passes_item_rules( $slug, $config, $user_roles );
+	}
+
 	private static function user_can_access_admin_slug( string $slug, array $config, int $user_id, array $user_roles ): bool {
+		return self::passes_user_overrides( $slug, $config, $user_id ) && self::passes_item_rules( $slug, $config, $user_roles );
+	}
+
+	/**
+	 * 個別使用者的限制：舊版 hide_for_user_ids、「僅允許存取受保護的管理選單」、白名單（新舊兩種存法）。
+	 */
+	private static function passes_user_overrides( string $slug, array $config, int $user_id ): bool {
 		$legacy_ys_cart_only_ids = array_map( 'absint', (array) ( $config['ys_cart']['hide_for_user_ids'] ?? [] ) );
 		if ( in_array( $user_id, $legacy_ys_cart_only_ids, true ) && ! self::is_ys_cart_admin_slug( $slug ) ) {
 			return false;
@@ -1426,6 +1486,15 @@ class YSMenuRouter {
 			}
 		}
 
+		return true;
+	}
+
+	/**
+	 * 設定列的規則：任一列（兩個分頁）slug 相同、勾了隱藏或限制角色而不符合，就擋。
+	 *
+	 * @param array<int, string> $user_roles
+	 */
+	private static function passes_item_rules( string $slug, array $config, array $user_roles ): bool {
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
 			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
 				if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
@@ -1604,13 +1673,22 @@ class YSMenuRouter {
 			return;
 		}
 
+		// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）也看它指向的那一頁有沒有綁定別人。
+		$bound_elsewhere = static function ( string $slug ) use ( $map, $current_user_id ): bool {
+			if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
+				return true;
+			}
+			$target = self::access_target_slug( $slug );
+			return $target !== $slug && isset( $map[ $target ] ) && $map[ $target ] !== $current_user_id;
+		};
+
 		if ( is_array( $menu ) ) {
 			foreach ( $menu as $position => $menu_item ) {
 				if ( ! is_array( $menu_item ) ) {
 					continue;
 				}
 				$slug = self::normalize_admin_slug( (string) ( $menu_item[2] ?? '' ) );
-				if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
+				if ( $bound_elsewhere( $slug ) ) {
 					unset( $menu[ $position ] );
 				}
 			}
@@ -1625,7 +1703,7 @@ class YSMenuRouter {
 						continue;
 					}
 					$slug = self::normalize_admin_slug( (string) ( $sub[2] ?? '' ) );
-					if ( isset( $map[ $slug ] ) && $map[ $slug ] !== $current_user_id ) {
+					if ( $bound_elsewhere( $slug ) ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}

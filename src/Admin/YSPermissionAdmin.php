@@ -477,7 +477,10 @@ class YSPermissionAdmin {
 		}
 
 		// 1) 骨架：真實頂層＋父選單預設頁＋真實子頁＋分隔列，依 order 排序（略過已移到主選單的子頁）。
+		//    v1.5.0：還沒有順序值的子頁（新出現的子選單、選單搬家時照預設順序或只帶規則的列）不照列舉序號排，
+		//    排回它的上層選單那一組（place_unordered_subs）。
 		$skeleton = [];
+		$deferred = [];
 		$idx      = 0;
 		foreach ( $items as $item ) {
 			++$idx;
@@ -490,13 +493,18 @@ class YSPermissionAdmin {
 				&& (string) ( $promoted_subs[ $slug ]['parent_slug'] ?? '' ) === (string) ( $item['parent_slug'] ?? '' ) ) {
 				continue;
 			}
-			$saved      = $saved_by_slug[ $slug ] ?? [];
-			$skeleton[] = [
+			$saved = $saved_by_slug[ $slug ] ?? [];
+			$entry = [
 				'kind'  => 'item',
 				'order' => isset( $saved['order'] ) ? (int) $saved['order'] : ( $idx * 10 ),
 				'item'  => $item,
 				'saved' => $saved,
 			];
+			if ( $is_sub && ! isset( $saved['order'] ) ) {
+				$deferred[] = $entry;
+				continue;
+			}
+			$skeleton[] = $entry;
 		}
 		foreach ( $saved_separators as $sep ) {
 			$skeleton[] = [
@@ -511,6 +519,9 @@ class YSPermissionAdmin {
 				return $a['order'] <=> $b['order'];
 			}
 		);
+		if ( ! empty( $deferred ) ) {
+			$skeleton = self::place_unordered_subs( $skeleton, $deferred );
+		}
 
 		// 2) 展開成 token 串：每個真實頂層後面接它的「父選單預設頁」。擁有者 owner 用來稍後插入複製／提升列。
 		$tokens = [];
@@ -629,6 +640,73 @@ class YSPermissionAdmin {
 					self::render_item_row( 'ys_cart', $token['entry']['item'], $token['entry']['saved'], (int) $token['entry']['order'], [], [] );
 			}
 		}
+	}
+
+	/**
+	 * v1.5.0：還沒有順序值的子選單排回它的上層選單那一組（接在那一組最後一列之後，依列舉順序＝側欄目前的順序）。
+	 *
+	 * 「全部選單」分頁的順序是整份清單共用的一串數字。沒有順序值的子選單以前用列舉序號×10，上層那一組前後
+	 * 都存過順序時，就可能排進別組中間（例如選單搬家後，新上層底下照預設順序的子選單）。這裡給它們前後兩列之間
+	 * 的數字，存檔後位置不會跑掉：原本的列舉序號×10 夾得進去就用它（從沒排過序的站，畫面與數字都跟以前一樣），
+	 * 夾不進去就用前一列＋1；連這樣都不行時，整份清單依畫面順序改成 10、20、30…（相對順序不變，按「儲存設定」才寫入）。
+	 *
+	 * @param array<int, array<string, mixed>> $skeleton 已依 order 排好的列。
+	 * @param array<int, array<string, mixed>> $deferred 還沒有順序值的子選單列（依列舉順序）。
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function place_unordered_subs( array $skeleton, array $deferred ): array {
+		$out = array_values( $skeleton );
+		foreach ( $deferred as $entry ) {
+			$parent = (string) ( $entry['item']['parent_slug'] ?? '' );
+			$at     = null;
+			foreach ( $out as $i => $e ) {
+				if ( 'item' !== $e['kind'] ) {
+					continue;
+				}
+				$it     = $e['item'];
+				$is_sub = 'sub' === (string) ( $it['level'] ?? 'top' );
+				if ( ( ! $is_sub && (string) ( $it['slug'] ?? '' ) === $parent )
+					|| ( $is_sub && (string) ( $it['parent_slug'] ?? '' ) === $parent ) ) {
+					$at = $i;
+				}
+			}
+			$entry['inserted'] = true;
+			if ( null === $at ) {
+				$out[] = $entry;
+			} else {
+				array_splice( $out, $at + 1, 0, [ $entry ] );
+			}
+		}
+
+		$count = count( $out );
+		for ( $i = 0; $i < $count; $i++ ) {
+			if ( empty( $out[ $i ]['inserted'] ) ) {
+				continue;
+			}
+			$prev = $i > 0 ? (int) $out[ $i - 1 ]['order'] : null;
+			$next = null;
+			for ( $j = $i + 1; $j < $count; $j++ ) {
+				if ( empty( $out[ $j ]['inserted'] ) ) {
+					$next = (int) $out[ $j ]['order'];
+					break;
+				}
+			}
+			$fits = static function ( int $v ) use ( $prev, $next ): bool {
+				return $v >= 0 && ( null === $prev || $v > $prev ) && ( null === $next || $v < $next );
+			};
+			if ( $fits( (int) $out[ $i ]['order'] ) ) {
+				continue;
+			}
+			if ( null !== $prev && $fits( $prev + 1 ) ) {
+				$out[ $i ]['order'] = $prev + 1;
+				continue;
+			}
+			foreach ( $out as $k => $e ) {
+				$out[ $k ]['order'] = ( $k + 1 ) * 10;
+			}
+			break;
+		}
+		return $out;
 	}
 
 	/**
