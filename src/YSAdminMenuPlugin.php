@@ -8,7 +8,7 @@
  *   3. REST 路由 YSRouteRegistrar（ys-admin-menu/v1）
  *   4. 後台設定頁 YSMenuPage（頂層選單 + 子頁）+ 白牌 admin-post handler
  *   5. v1.4.0 自訂登入頁 YSLoginPage、Cloudflare Turnstile 登入防護 YSTurnstile（wp-login.php）
- *   6. v1.5.0 YS CART 選單搬家配套 YSMenuMovesMigrator（admin_menu@9000）
+ *   6. v1.5.0 YS CART 選單搬家配套 YSMenuMovesMigrator（admin_menu@9000）＋ WP-CLI `wp ys-admin-menu moves`
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -20,6 +20,7 @@ use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
 use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
+use YangSheep\AdminMenu\Cli\YSMenuMovesCommand;
 use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 use YangSheep\AdminMenu\Rest\YSRouteRegistrar;
 use YangSheep\AdminMenu\Admin\YSMenuPage;
@@ -60,6 +61,9 @@ final class YSAdminMenuPlugin {
 		YSMenuRouter::register();
 		// v1.5.0：YS CART V3 重新分組選單時，把已存的設定搬到新的上層選單（admin_menu 9000，比路由引擎早）。
 		YSMenuMovesMigrator::register();
+		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::add_command( 'ys-admin-menu moves', YSMenuMovesCommand::class );
+		}
 		// 輸出側欄前的最後整理：拿掉已提升子選單在原父層的那一列、沒有內容的分組標籤。
 		add_filter( 'parent_file', [ YSMenuRouter::class, 'prepare_menu_for_render' ], 9 );
 		add_action( 'admin_footer', [ YSMenuRouter::class, 'print_section_label_fix' ], 5 );
