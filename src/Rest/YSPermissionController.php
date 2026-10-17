@@ -30,6 +30,7 @@ namespace YangSheep\AdminMenu\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
+use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
 
 class YSPermissionController {
@@ -311,6 +312,20 @@ class YSPermissionController {
 			return new \WP_REST_Response(
 				[ 'success' => false, 'error' => 'invalid_payload' ],
 				400
+			);
+		}
+
+		// v1.5.0：頁面帶著開頁當下的選單搬家標記（隱藏欄位）。跟目前的標記不同＝這一頁是在 YS CART 選單搬家遷移之前
+		// 打開的，照舊分組畫的表格存回去會把搬好的設定寫回舊分組，所以不存，請管理員重新整理。沒有 Core moves 的站兩邊都是空字串。
+		$token = isset( $payload['moves_token'] ) && is_string( $payload['moves_token'] ) ? $payload['moves_token'] : '';
+		if ( ! hash_equals( YSMenuMovesMigrator::page_token( true ), $token ) ) {
+			return new \WP_REST_Response(
+				[
+					'success' => false,
+					'code'    => 'ys_admin_menu_stale_page',
+					'error'   => '選單設定剛配合新版 YS CART 調整過，請重新整理這一頁再儲存。',
+				],
+				409
 			);
 		}
 

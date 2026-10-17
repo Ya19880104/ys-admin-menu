@@ -84,6 +84,7 @@
 namespace YangSheep\AdminMenu\Admin;
 
 use YangSheep\AdminMenu\Rest\YSPermissionController;
+use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
 
 defined( 'ABSPATH' ) || exit;
@@ -139,6 +140,9 @@ class YSPermissionAdmin {
 		// 不套 .ysca-page-root、用 WP-native .wrap + <h1>。
 		echo '<div class="wrap">';
 		echo YSMenuPage::pagehead_html( 'menu-alt3', '選單與權限', '拖拉排序、角色可見、僅限本人、隱藏與個別使用者覆寫，全面掌控 wp-admin 選單。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
+		// v1.5.0：開頁當下的 YS CART 選單搬家標記。每次儲存都一起送回；這一頁若是在遷移之前打開的，存檔會被拒絕，
+		// 不會把搬好的設定寫回舊分組。
+		echo '<input type="hidden" id="ys-admin-menu-moves-token" value="' . esc_attr( YSMenuMovesMigrator::page_token() ) . '">';
 
 		if ( 'user_overrides' === $tab ) {
 			self::render_user_overrides();

@@ -1144,6 +1144,9 @@
     // 共用：POST /menu-config + 狀態提示
     // ═════════════════════════════════════════════
     function postMenuConfig( payload ) {
+        // v1.5.0：帶回開頁當下的選單搬家標記（隱藏欄位）；遷移之前打開的頁面，伺服器會拒絕並請你重新整理。
+        var movesToken = document.getElementById( 'ys-admin-menu-moves-token' );
+        payload.moves_token = movesToken ? movesToken.value : '';
         return fetch( cfg.restUrl + '/menu-config', {
             method:      'POST',
             credentials: 'same-origin',
