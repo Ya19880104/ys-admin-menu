@@ -17,7 +17,8 @@
  *   - 1.4.0 的「僅限本人」會讓綁定的人略過那一頁的角色與白名單。所以搬家後誰綁著這一頁，就檢查他原本
  *     （舊分組）在側欄、直接開網址看不看得到：原本看不到、搬家後卻看得到的，再加隱藏（super admin 不受隱藏
  *     影響，照 1.4.0）。
- *   - 被拆掉的頂層：原本的隱藏要在子選單也生效（apply_hide_flags() 的頂層隱藏只對 $menu）。
+ *   - 被拆掉的頂層：原本的隱藏要在子選單也生效（apply_hide_flags() 的頂層隱藏只對 $menu）。「全部選單」分頁沒有
+ *     它的任何列、只在主選單分頁存過規則（隱藏、角色、僅限本人）時，補一列帶這一頁自己規則的子選單列。
  *   - 指定接在被拆掉頂層後面的複製／移到主選單項目，改接在舊側欄裡它前面的頂層。
  * 使用者覆寫的白名單只看 slug，不改，只在後台提醒管理員。
  *
@@ -666,17 +667,44 @@ final class YSMenuMovesMigrator {
 					if ( null !== $r['group_title'] ) {
 						$notice['group_titles'][] = [ 'slug' => $slug, 'title' => $r['group_title'] ];
 					}
-				}
-				// 這一頁原本設了隱藏（例如只在主選單分頁存過、勾了隱藏）：apply_hide_flags() 的頂層隱藏只對 $menu，
-				// 變成子選單之後要有一列子選單列帶著隱藏才對得到。
-				if ( self::effective_rules( $snapshot, $slug )['hide'] && self::ensure_hidden_sub( $items, $slug, $to, $gone ) ) {
-					$notice['moved'][] = $slug;
-					$notice['rules']   = true;
-					$log[]             = [ 'type' => 'hide_sub_row', 'slug' => $slug, 'to' => $to ];
+					// 這一頁原本設了隱藏（例如只在主選單分頁勾了隱藏）：apply_hide_flags() 的頂層隱藏只對 $menu，
+					// 變成子選單之後要有一列子選單列帶著隱藏才對得到。
+					if ( self::effective_rules( $snapshot, $slug )['hide'] && self::ensure_hidden_sub( $items, $slug, $to, $gone ) ) {
+						$notice['rules'] = true;
+						$log[]           = [ 'type' => 'hide_sub_row', 'slug' => $slug, 'to' => $to ];
+					}
+				} elseif ( $old && $first && ! self::slug_has_rows( $items, [], $slug, $gone ) ) {
+					// 「全部選單」分頁沒有這一頁的任何列、只在主選單分頁存過舊頂層列：那一列的規則（隱藏、角色、僅限本人）照 slug
+					// 仍然有效，但隱藏只拿掉頂層，那一列也不在新分組的列表裡。補一列子選單列，帶這一頁自己的規則（不是舊上層的），
+					// 不寫順序；主選單分頁那一列照舊保留。綁定取側欄實際生效的那一個（後面的列蓋掉前面）；綁了不同帳號就再加隱藏
+					// （跟頂層列併成子選單列時一樣）。
+					$own = self::effective_rules( $snapshot, $slug );
+					if ( self::rules_restrict( $own ) ) {
+						$split   = count( $own['uids'] ) > 1;
+						[ $row ] = self::apply_merged(
+							self::rules_only_row( $slug, $to, false ),
+							[
+								'hide'     => $own['hide'] || $split || ( is_array( $own['roles'] ) && [] === $own['roles'] ),
+								'roles'    => $own['roles'],
+								'inherit'  => $own['last'],
+								'conflict' => $split,
+							]
+						);
+						$items[]           = $row;
+						$notice['moved'][] = $slug;
+						$notice['rules']   = true;
+						$log[]             = [ 'type' => 'top_rules_row', 'slug' => $slug, 'to' => $to ];
+						if ( $split ) {
+							$notice['conflicts'][] = $slug;
+						}
+					}
 				}
 				$anchor_tops[ $slug ] = true;
-				$gates[ $slug ]       = [ 'from' => '', 'to' => $to, 'sub' => false ];
 				$in_old               = $r['touched'] || $old; // 這個站在這筆搬家上確實是舊分組
+				if ( $in_old ) {
+					// 新分組下存的設定（YS CART 已經是 V3 時存的）側欄本來就是新分組，搬家不改變誰看得到，不用檢查。
+					$gates[ $slug ] = [ 'from' => '', 'to' => $to, 'sub' => false ];
+				}
 				if ( $in_old && self::newly_restricted( $n_rules, self::no_rules() ) ) {
 					$notice['parent_hidden'][] = [ 'slug' => $slug, 'to' => $to ];
 				}

@@ -248,6 +248,7 @@ final class YSMenuMovesCommand {
 			'bind'               => '帶入舊上層的僅限本人',
 			'gate'               => '綁定的帳號原本看不到，改成隱藏',
 			'hide_sub_row'       => '拆掉的頂層原本隱藏，子選單也隱藏',
+			'top_rules_row'      => '拆掉的頂層只在主選單分頁存過規則，補一列帶這些規則的子選單列',
 			'mirror_failed'      => 'Core 那份鏡像沒寫成（指紋沒更新）',
 			'rules_row'          => '新增只帶規則的列',
 			'convert'            => '頂層改成子選單',
