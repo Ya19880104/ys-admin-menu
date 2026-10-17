@@ -1086,12 +1086,12 @@ final class YSMenuMovesMigrator {
 			if ( is_array( $list ) && in_array( $slug, $list, true ) ) {
 				$also = [ $g['from'] ];
 			}
-			$before = ( YSMenuRouter::sidebar_allows( $g['from'], true, $snapshot, $uid, $also ) && YSMenuRouter::sidebar_allows( $slug, false, $snapshot, $uid ) )
+			$before = ( YSMenuRouter::sidebar_allows( $g['from'], true, $snapshot, $uid, $also ) && YSMenuRouter::sidebar_allows( $slug, false, $snapshot, $uid, [], $g['from'] ) )
 				|| YSMenuRouter::copy_allows( $slug, $g['from'], $snapshot, $uid );
 		} else {
 			$before = YSMenuRouter::sidebar_allows( $slug, true, $snapshot, $uid ) || YSMenuRouter::copy_allows( $slug, $slug, $snapshot, $uid );
 		}
-		$after = ( YSMenuRouter::sidebar_allows( $g['to'], true, $planned, $uid ) && YSMenuRouter::sidebar_allows( $slug, false, $planned, $uid ) )
+		$after = ( YSMenuRouter::sidebar_allows( $g['to'], true, $planned, $uid ) && YSMenuRouter::sidebar_allows( $slug, false, $planned, $uid, [], $g['to'] ) )
 			|| YSMenuRouter::copy_allows( $slug, $g['to'], $planned, $uid );
 		if ( $after && ! $before ) {
 			return $uid;

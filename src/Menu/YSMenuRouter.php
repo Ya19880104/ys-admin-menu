@@ -1506,14 +1506,16 @@ class YSMenuRouter {
 	 *
 	 * @param array<string,mixed> $config
 	 * @param array<int,string>   $also_listed 比對白名單時當作也有勾的 slug（判斷「白名單變多」這個事先宣告的例外用）。
+	 * @param string|null         $parent      子選單在側欄上的上層（導覽列照 nav_target() 判斷，跟側欄一樣）；頂層不用給。
 	 */
-	public static function sidebar_allows( string $slug, bool $top, array $config, int $user_id, array $also_listed = [] ): bool {
+	public static function sidebar_allows( string $slug, bool $top, array $config, int $user_id, array $also_listed = [], ?string $parent = null ): bool {
 		$slug = self::normalize_admin_slug( $slug );
 		if ( '' === $slug || $user_id <= 0 ) {
 			return true;
 		}
+		$under = $top ? null : $parent;
 
-		foreach ( array_unique( [ $slug, self::nav_target( $slug ) ] ) as $s ) {
+		foreach ( array_unique( [ $slug, self::nav_target( $slug, $under ) ] ) as $s ) {
 			$bound = self::sidebar_self_only_uid( $s, $config );
 			if ( $bound > 0 && $bound !== $user_id ) {
 				return false;
@@ -1557,7 +1559,7 @@ class YSMenuRouter {
 			}
 		}
 
-		return self::access_decision( $slug, $config, $user_id );
+		return self::access_decision( $slug, $config, $user_id, $under );
 	}
 
 	/**
@@ -1575,7 +1577,7 @@ class YSMenuRouter {
 				break;
 			}
 		}
-		if ( ! $found || ! self::sidebar_allows( $slug, false, $config, $user_id ) ) {
+		if ( ! $found || ! self::sidebar_allows( $slug, false, $config, $user_id, [], $parent ) ) {
 			return false;
 		}
 
