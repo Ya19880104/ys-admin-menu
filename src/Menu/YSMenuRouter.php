@@ -1351,8 +1351,16 @@ class YSMenuRouter {
 			return true;
 		}
 
-		$config = self::get_config();
+		return self::access_decision( $slug, self::get_config(), $user_id );
+	}
 
+	/**
+	 * current_user_can_access_admin_slug() 的判斷本體。v1.5.0 抽出來，讓選單搬家遷移能拿「某一份設定」來判斷；規則不變。
+	 *
+	 * @param string              $slug 已正規化、不是空字串。
+	 * @param array<string,mixed> $config
+	 */
+	private static function access_decision( string $slug, array $config, int $user_id ): bool {
 		// v1.5.0：指向 YS CART 某一頁的導覽列（例如 V3 的「會員生日」）：導覽列自己與它指向的頁面兩邊都要過。
 		$target = self::access_target_slug( $slug );
 		if ( $target !== $slug ) {
@@ -1425,14 +1433,19 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v1.5.0：導覽列與它指向的頁面各自判斷（current_user_can_access_admin_slug 的同一套規則）。
-	 * 隱藏、角色、僅限本人兩邊各看各的、任一邊拒絕就拒絕；白名單與「僅允許存取受保護的管理選單」只看指向的頁面
-	 * （白名單只會列真正的頁面）。
+	 * v1.5.0：導覽列與它指向的頁面各自判斷，任一邊拒絕就拒絕。
+	 *   - 導覽列自己：current_user_can_access_admin_slug 的同一套規則（綁給自己就放行，跟 1.4.0 一樣）。
+	 *   - 指向的頁面：「僅限本人」是純限制——綁給別人就拒絕，綁給自己也照樣看那一頁的隱藏、角色與白名單；不然被綁的人
+	 *     會在導覽列上繞過那一頁的隱藏與白名單。super admin 照 1.4.0 不受隱藏、角色、白名單限制。
+	 *   - 白名單與「僅允許存取受保護的管理選單」只看指向的頁面（白名單只會列真正的頁面）。
 	 */
-	private static function passes_slug( string $slug, array $config, int $user_id, bool $with_overrides ): bool {
+	private static function passes_slug( string $slug, array $config, int $user_id, bool $is_target ): bool {
 		$self_only_uid = self::self_only_uid_for_slug( $slug, $config );
-		if ( $self_only_uid > 0 ) {
-			return $self_only_uid === $user_id;
+		if ( $self_only_uid > 0 && $self_only_uid !== $user_id ) {
+			return false;
+		}
+		if ( $self_only_uid > 0 && ! $is_target ) {
+			return true;
 		}
 		if ( is_super_admin( $user_id ) || user_can( $user_id, 'manage_network' ) ) {
 			return true;
@@ -1443,8 +1456,176 @@ class YSMenuRouter {
 		$user       = get_userdata( $user_id );
 		$user_roles = $user ? array_map( 'sanitize_key', (array) $user->roles ) : [];
 
-		return ( ! $with_overrides || self::passes_user_overrides( $slug, $config, $user_id ) )
+		return ( ! $is_target || self::passes_user_overrides( $slug, $config, $user_id ) )
 			&& self::passes_item_rules( $slug, $config, $user_roles );
+	}
+
+	/**
+	 * v1.5.0（選單搬家遷移用）：照 $config，某個帳號在側欄看不看得到某個頂層選單或子選單。只看本外掛的規則，
+	 * 跟 apply_config() 對這一列做的事相同：
+	 *   - 頂層：主選單分頁同 slug 最後一列的角色（filter_menu_by_roles）、白名單（apply_user_override_whitelist）、
+	 *     頂層的隱藏（apply_hide_flags）。
+	 *   - 子選單：子選單的隱藏（apply_hide_flags）。
+	 *   - 兩者：存取判斷（filter_menus_by_current_access）、「僅限本人」（apply_self_only_filter，同一個 slug 後面的列蓋掉前面）。
+	 *   - super admin 只看「僅限本人」。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<int,string>   $also_listed 比對白名單時當作也有勾的 slug（判斷「白名單變多」這個事先宣告的例外用）。
+	 */
+	public static function sidebar_allows( string $slug, bool $top, array $config, int $user_id, array $also_listed = [] ): bool {
+		$slug = self::normalize_admin_slug( $slug );
+		if ( '' === $slug || $user_id <= 0 ) {
+			return true;
+		}
+
+		foreach ( array_unique( [ $slug, self::access_target_slug( $slug ) ] ) as $s ) {
+			$bound = self::sidebar_self_only_uid( $s, $config );
+			if ( $bound > 0 && $bound !== $user_id ) {
+				return false;
+			}
+		}
+		if ( is_super_admin( $user_id ) ) {
+			return true;
+		}
+		if ( ! empty( $also_listed ) ) {
+			$config = self::with_listed_slugs( $config, $user_id, $also_listed );
+		}
+
+		$user       = get_userdata( $user_id );
+		$user_roles = $user ? array_map( 'sanitize_key', (array) $user->roles ) : [];
+
+		if ( $top ) {
+			$allowed = [];
+			foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $item ) {
+				if ( is_array( $item ) && empty( $item['separator'] ) && (string) ( $item['slug'] ?? '' ) === $slug ) {
+					$allowed = array_map( 'sanitize_key', (array) ( $item['roles'] ?? [] ) );
+				}
+			}
+			if ( ! empty( $allowed ) && empty( array_intersect( $user_roles, $allowed ) ) ) {
+				return false;
+			}
+			$visible = self::resolve_visible_slugs_for_user( $config, $user_id );
+			if ( ! empty( $visible ) && ! in_array( self::access_target_slug( $slug ), $visible, true ) ) {
+				return false;
+			}
+		}
+
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
+				if ( ! is_array( $item ) || empty( $item['hide'] ) || (string) ( $item['slug'] ?? '' ) !== $slug ) {
+					continue;
+				}
+				$sub_row = 'sub' === (string) ( $item['level'] ?? 'top' );
+				if ( $top ? ! $sub_row : $sub_row ) {
+					return false;
+				}
+			}
+		}
+
+		return self::access_decision( $slug, $config, $user_id );
+	}
+
+	/**
+	 * v1.5.0（選單搬家遷移用）：照 $config，某個帳號在側欄看不看得到「複製到主選單」的這一項（insert_top_level_copies()
+	 * 的同一套判斷）：設定裡有這個複製項、原子選單過完子選單的過濾還在，複製項自己的僅限本人、隱藏、角色也過得了。
+	 * 原父選單本身看不看得到（頂層的白名單、角色、隱藏）不影響複製項。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	public static function copy_allows( string $slug, string $parent, array $config, int $user_id ): bool {
+		$found = false;
+		foreach ( (array) ( $config['top_copies']['items'] ?? [] ) as $copy ) {
+			if ( is_array( $copy ) && (string) ( $copy['slug'] ?? '' ) === $slug && (string) ( $copy['parent_slug'] ?? '' ) === $parent ) {
+				$found = true;
+				break;
+			}
+		}
+		if ( ! $found || ! self::sidebar_allows( $slug, false, $config, $user_id ) ) {
+			return false;
+		}
+
+		$key = self::copy_menu_key( $slug, $parent );
+		$own = [];
+		foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) && (string) $row['slug'] === $key ) {
+				$own = $row;
+			}
+		}
+		$own_uid = (int) ( $own['self_only_uid'] ?? 0 );
+		if ( $own_uid > 0 && $own_uid !== $user_id ) {
+			return false;
+		}
+		if ( is_super_admin( $user_id ) ) {
+			return true;
+		}
+		if ( ! empty( $own['hide'] ) ) {
+			return false;
+		}
+		$allowed = array_values( array_filter( array_map( 'sanitize_key', (array) ( $own['roles'] ?? [] ) ) ) );
+		if ( empty( $allowed ) ) {
+			return true;
+		}
+		$user = get_userdata( $user_id );
+		return ! empty( array_intersect( $user ? array_map( 'sanitize_key', (array) $user->roles ) : [], $allowed ) );
+	}
+
+	/**
+	 * v1.5.0（選單搬家遷移用）：照 $config，某個帳號直接開這一頁的網址會不會被本外掛擋下（guard_hidden_pages() 的同一套判斷）。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	public static function url_allows( string $page, array $config, int $user_id ): bool {
+		return self::page_access_decision( self::normalize_admin_slug( $page ), $config, $user_id, is_super_admin( $user_id ) || user_can( $user_id, 'manage_network' ) );
+	}
+
+	/**
+	 * v1.5.0（選單搬家遷移用）：這個帳號的白名單（側欄用的那一份：新格式優先、沒有才看舊格式；沒有白名單回 null）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<int,string>|null
+	 */
+	public static function visible_slugs_for_user( array $config, int $user_id ): ?array {
+		return self::resolve_visible_slugs_for_user( $config, $user_id );
+	}
+
+	/**
+	 * 側欄「僅限本人」實際生效的帳號：apply_self_only_filter() 的對照表，同一個 slug 後面的列蓋掉前面（0＝沒綁）。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function sidebar_self_only_uid( string $slug, array $config ): int {
+		$uid = 0;
+		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
+			foreach ( (array) ( $config[ $section ]['items'] ?? [] ) as $item ) {
+				if ( ! is_array( $item ) || empty( $item['slug'] ) || (int) ( $item['self_only_uid'] ?? 0 ) <= 0 ) {
+					continue;
+				}
+				if ( self::normalize_admin_slug( (string) $item['slug'] ) === $slug ) {
+					$uid = (int) $item['self_only_uid'];
+				}
+			}
+		}
+		return $uid;
+	}
+
+	/**
+	 * 把幾個 slug 加進某個帳號已有的白名單（新舊兩種存法都加；沒有白名單的帳號不動）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<int,string>   $slugs
+	 * @return array<string,mixed>
+	 */
+	private static function with_listed_slugs( array $config, int $user_id, array $slugs ): array {
+		foreach ( (array) ( $config['user_overrides']['items'] ?? [] ) as $i => $uo ) {
+			if ( is_array( $uo ) && (int) ( $uo['user_id'] ?? 0 ) === $user_id && ! empty( $uo['visible_slugs'] ) ) {
+				$config['user_overrides']['items'][ $i ]['visible_slugs'] = array_merge( (array) $uo['visible_slugs'], $slugs );
+			}
+		}
+		$key = (string) $user_id;
+		if ( ! empty( $config['wp_native']['user_overrides'][ $key ]['visible_slugs'] ) ) {
+			$config['wp_native']['user_overrides'][ $key ]['visible_slugs'] = array_merge( (array) $config['wp_native']['user_overrides'][ $key ]['visible_slugs'], $slugs );
+		}
+		return $config;
 	}
 
 	private static function user_can_access_admin_slug( string $slug, array $config, int $user_id, array $user_roles ): bool {
@@ -1867,65 +2048,61 @@ class YSMenuRouter {
 			return;
 		}
 
-		// 「僅限本人」優先於 super-admin bypass：非綁定帳號（含其他 super-admin）直接擋直接訪問
-		$self_page = self::current_admin_request_slug();
-		if ( '' !== $self_page ) {
-			$self_uid = self::self_only_uid_for_slug( $self_page, self::get_config() );
-			if ( $self_uid > 0 && $self_uid !== get_current_user_id() ) {
-				self::deny_access( $self_page );
-			}
-		}
-
-		// super-admin bypass
-		if ( current_user_can( 'manage_network' ) || is_super_admin() ) {
-			return;
-		}
-
 		$page = self::current_admin_request_slug();
-		if ( '' === $page ) {
-			// 沒有 ?page= 參數（在 wp-admin/index.php 等）— 不需檢查
-			return;
-		}
-
-		$config  = self::get_config();
-		$user_id = get_current_user_id();
-		if ( $user_id <= 0 ) {
-			return;
-		}
-		if ( ! self::current_user_can_access_admin_slug( $page, $user_id ) ) {
+		if ( ! self::page_access_decision( $page, self::get_config(), get_current_user_id(), current_user_can( 'manage_network' ) || is_super_admin() ) ) {
 			self::deny_access( $page );
 		}
+	}
 
-		// ─── Layer 1+2：user_overrides.items[] 該使用者規則 ───
-		$uo_items = (array) ( $config['user_overrides']['items'] ?? [] );
-		foreach ( $uo_items as $uo ) {
-			if ( ! is_array( $uo ) ) {
+	/**
+	 * guard_hidden_pages() 的判斷本體（v1.5.0 抽出來，讓選單搬家遷移能拿「某一份設定」來判斷；順序與規則不變）：
+	 *   1. 「僅限本人」優先於 super-admin bypass：非綁定帳號（含其他 super-admin）直接擋。
+	 *   2. super-admin bypass。
+	 *   3. 存取判斷（current_user_can_access_admin_slug 的規則）。
+	 *   4. Layer 1+2：user_overrides.items[] 該使用者的白名單（visible_slugs）。
+	 *   5. Layer 3：wp_native + ys_cart items[].hide=true 全域生效。
+	 *
+	 * @param string              $page 目前請求的頁面（current_admin_request_slug() 的結果）。
+	 * @param array<string,mixed> $config
+	 */
+	private static function page_access_decision( string $page, array $config, int $user_id, bool $is_super ): bool {
+		if ( '' === $page ) {
+			return true;
+		}
+
+		$self_uid = self::self_only_uid_for_slug( $page, $config );
+		if ( $self_uid > 0 && $self_uid !== $user_id ) {
+			return false;
+		}
+
+		if ( $is_super || $user_id <= 0 ) {
+			return true;
+		}
+
+		$slug = self::normalize_admin_slug( $page );
+		if ( '' !== $slug && ! self::access_decision( $slug, $config, $user_id ) ) {
+			return false;
+		}
+
+		foreach ( (array) ( $config['user_overrides']['items'] ?? [] ) as $uo ) {
+			if ( ! is_array( $uo ) || (int) ( $uo['user_id'] ?? 0 ) !== $user_id ) {
 				continue;
 			}
-			if ( (int) ( $uo['user_id'] ?? 0 ) !== $user_id ) {
-				continue;
-			}
-
-			// Layer 1：hide_ys_cart=true → 擋所有 ys- 開頭 slug
-			// Layer 2：visible_slugs 白名單模式
 			$visible = self::normalize_slug_list_for_match( (array) ( $uo['visible_slugs'] ?? [] ) );
 			if ( ! empty( $visible ) && ! self::whitelist_contains( $visible, $page ) ) {
-				self::deny_access( $page );
+				return false;
 			}
 		}
 
-		// ─── Layer 3：wp_native + ys_cart items[].hide=true 全域生效 ───
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
-			$items = (array) ( $config[ $tab ]['items'] ?? [] );
-			foreach ( $items as $item ) {
-				if ( ! is_array( $item ) || empty( $item['hide'] ) ) {
-					continue;
-				}
-				if ( ( $item['slug'] ?? '' ) === $page ) {
-					self::deny_access( $page );
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
+				if ( is_array( $item ) && ! empty( $item['hide'] ) && ( $item['slug'] ?? '' ) === $page ) {
+					return false;
 				}
 			}
 		}
+
+		return true;
 	}
 
 	/**
