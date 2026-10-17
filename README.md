@@ -36,6 +36,14 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - **登入頁**：啟用自訂登入頁，設定標題、副標、標語、品牌名稱、LOGO、背景圖、頁尾文字與「返回首頁」連結。
   - **登入防護**：啟用 Cloudflare Turnstile，填入 Site Key 與 Secret Key，選擇套用範圍與「連不到 Cloudflare 時」的處理方式，並可當場「測試設定」。
 
+### 配合 YS CART V3 的選單分組（v1.5.0 起）
+
+- YS CART V3 把幾個選單換到新的分組（會員等級、購物金設定／總覽／規則搬到「顧客」，購物金活動搬到「優惠促銷」，運輸標籤搬到「訂單」），並拆掉「購物金」頂層。升級後第一次打開後台，本外掛會把這幾個選單已存的順序、自訂名稱、移到主選單、複製到主選單搬到新位置，原本跟著上層選單一起隱藏的頁面照樣隱藏（只加不減）。搬家的對照由 YS CART 提供（`YSAdminNavigationRegistry::moves()`），本外掛只讀不改 YS CART 的資料。
+- 搬完後台會提醒一次（只給管理員，可關掉），列出要你確認的帳號與頁面。使用者覆寫的可見清單不會自動改。
+- 遷移前的設定備份在 `ys_admin_menu_config_pre_moves_<版本>`。沒有自動還原；要還原時把備份的值寫回 `ys_admin_menu_config`。
+- WP-CLI（只讀）：`wp ys-admin-menu moves status` 看遷移狀態、`wp ys-admin-menu moves dry-run` 預覽會改哪些設定列。
+- 搭配舊版 YS CART 或沒有 YS CART 時不會做任何事。
+
 ### 登入防護（Cloudflare Turnstile）
 
 - 啟用開關、Site Key、Secret Key 都填好才會生效；少一個就不顯示、也不擋登入。
@@ -54,6 +62,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - `ys_admin_menu_config` — 選單與權限設定（JSON）。子選單複製到主選單存在 `top_copies.items[]`（每筆只記來源 `slug`、`parent_slug`）；複製項在主選單的排序、名稱、圖示（`icon`）等存在 `wp_native.items[]`，`slug` 是 `./` 開頭的選單代稱（例：`./options-writing.php`）
   - `ys_admin_menu_theme_config` — 原生選單樣式設定
   - `ys_admin_menu_logo_url` / `ys_admin_menu_footer_text` — 白牌
+  - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、已套用的 `since:slug`）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖）、`ys_admin_menu_config_pre_moves_<版本>`（遷移前備份），都不自動載入
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options` + `wp_rest` nonce + body size cap）
 - **自動更新**：透過內嵌的 YS Plugin Hub Client。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
 - **防自我鎖死**：super admin（單站 administrator）不受隱藏、角色限制與使用者覆寫影響，避免把自己鎖在後台外。例外是「僅限本人」：綁定後連其他管理員也看不到該選單
