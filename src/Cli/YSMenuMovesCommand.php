@@ -53,7 +53,7 @@ final class YSMenuMovesCommand {
 			'項目' => '遷移標記',
 			'值'   => '' === $marker['version']
 				? '沒有（還沒遷移過）'
-				: sprintf( '%s，sha256 %s，已套用 %d 筆', $marker['version'], $marker['sha256'], count( $marker['applied'] ) ),
+				: sprintf( '%s，sha256 %s，規則版本 %s，已套用 %d 筆', $marker['version'], $marker['sha256'], '' === $marker['rules'] ? '（無）' : $marker['rules'], count( $marker['applied'] ) ),
 		];
 		$rows[] = [
 			'項目' => '和目前的對照相同',
@@ -61,7 +61,7 @@ final class YSMenuMovesCommand {
 		];
 		$rows[] = [
 			'項目' => '鎖',
-			'值'   => null === $lock ? '沒有' : '有（' . gmdate( 'Y-m-d H:i:s', (int) $lock ) . ' UTC 取得）',
+			'值'   => null === $lock ? '沒有' : '有（' . gmdate( 'Y-m-d H:i:s', YSMenuMovesMigrator::lock_time( (string) $lock ) ) . ' UTC 取得）',
 		];
 		$backups = self::backup_names();
 		$rows[]  = [
@@ -199,7 +199,7 @@ final class YSMenuMovesCommand {
 	 * @param array<string,mixed> $notice
 	 */
 	private static function notice_has_content( array $notice ): bool {
-		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'group_titles', 'unknown', 'anchors' ] as $k ) {
+		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors' ] as $k ) {
 			if ( ! empty( $notice[ $k ] ) ) {
 				return true;
 			}
@@ -245,6 +245,10 @@ final class YSMenuMovesCommand {
 			'merge'              => '併入新上層已有的列',
 			'rules'              => '帶上舊上層的規則',
 			'self_only_conflict' => '僅限本人綁不同帳號，改成隱藏',
+			'bind'               => '帶入舊上層的僅限本人',
+			'gate'               => '綁定的帳號原本看不到，改成隱藏',
+			'hide_sub_row'       => '拆掉的頂層原本隱藏，子選單也隱藏',
+			'mirror_failed'      => 'Core 那份鏡像沒寫成（指紋沒更新）',
 			'rules_row'          => '新增只帶規則的列',
 			'convert'            => '頂層改成子選單',
 			'merge_self'         => '併入同 slug 的子選單列',

@@ -12,16 +12,22 @@
  *   - 複製到主選單：top_copies.items[] 的 parent_slug（複製項代稱有變才換 wp_native 的鍵）。
  *   - 被拆掉的頂層：頂層那一列改成新上層底下的子選單列，併入同 slug 的子選單列（名稱只取子選單列的）。
  *   - 上層選單隱藏的連帶效果：原本上層被隱藏，底下的子選單在側欄就看不到；搬到新上層後，把子選單
- *     「且」舊上層的規則寫到子選單的每一列（hide 取或、角色取交集、交集是空的改成隱藏、僅限本人綁不同人
- *     保留子選單原本的綁定再加隱藏）。
+ *     「且」舊上層的規則寫到子選單的每一列（hide 取或、角色取交集、交集是空的改成隱藏；僅限本人：子選單
+ *     自己沒有綁定才帶入上層側欄實際生效的那一個，子選單自己有綁定就不動，綁的不是同一個人再加隱藏）。
+ *   - 1.4.0 的「僅限本人」會讓綁定的人略過那一頁的角色與白名單。所以搬家後誰綁著這一頁，就檢查他原本
+ *     （舊分組）在側欄、直接開網址看不看得到：原本看不到、搬家後卻看得到的，再加隱藏（super admin 不受隱藏
+ *     影響，照 1.4.0）。
+ *   - 被拆掉的頂層：原本的隱藏要在子選單也生效（apply_hide_flags() 的頂層隱藏只對 $menu）。
  *   - 指定接在被拆掉頂層後面的複製／移到主選單項目，改接在舊側欄裡它前面的頂層。
  * 使用者覆寫的白名單只看 slug，不改，只在後台提醒管理員。
  *
  * 觸發：admin_menu 優先序 9000（本外掛 9999 套用設定之前），任何後台頁面請求都會檢查——這是資料遷移，
  * 跟目前是誰登入無關。admin-ajax.php、admin-post.php 不會觸發 admin_menu，等第一個完整的後台頁面請求。
- * 標記（版本＋moves 內容的 sha256＋已套用的鍵 since:slug）相同就整批跳過；不同時照清單順序逐列處理，
- * 已套用的鍵跳過。寫入時搶鎖、寫入前比對舊值，寫入前把整份舊設定備份一次（不覆蓋），寫入一律透過
- * YSMenuConfigBridge::save_authoritative()（Core 那份鏡像與指紋一起更新）。
+ * 標記（Core 對照的版本＋moves 內容的 sha256＋本外掛的規則版本＋已套用的鍵 since:slug）相同就整批跳過；
+ * 不同時照清單順序逐列處理，已套用的鍵跳過。寫入時搶鎖（每個請求自己的 token，只放自己的鎖），寫入前把
+ * 整份舊設定備份一次（不覆蓋），主設定用「比對舊值再寫入」的一條 UPDATE 寫（YSMenuConfigBridge::
+ * save_authoritative_if_unchanged()，寫完讀回確認，再補 Core 那份鏡像與指紋）；沒寫成就不寫標記與紀錄，
+ * 交給下一個請求重跑。
  * 沒有 moves() 的舊版 YS CART：什麼都不做、不寫入。
  *
  * @package YangSheep\AdminMenu\Menu
@@ -37,13 +43,22 @@ final class YSMenuMovesMigrator {
 	/** YS CART 提供搬家對照的類別。 */
 	public const REGISTRY_CLASS = 'YangSheep\\Ecommerce\\Admin\\YSAdminNavigationRegistry';
 
-	/** 遷移標記：{ version, sha256, applied: [ 'since:slug', … ] }（autoload no）。 */
+	/**
+	 * 遷移標記：{ version, sha256, rules, applied: [ 'since:slug', … ] }。值很小，autoload yes（每個後台頁面都要讀，
+	 * 放在 autoload 裡就不用另外查一次資料庫）。
+	 */
 	public const MARKER_OPTION = 'ys_admin_menu_moves_applied';
+
+	/**
+	 * 本外掛遷移規則的版本，跟 Core 的對照分開記。之後的版本看得懂新的 kind、或修了規則時往上加：Core 對照沒變也會
+	 * 重跑一次（已套用的鍵照樣跳過，沒套用的補上）。
+	 */
+	public const RULES_VERSION = '1';
 
 	/** 遷移紀錄與後台提醒（autoload no）。 */
 	public const LOG_OPTION = 'ys_admin_menu_moves_log';
 
-	/** 遷移鎖（值＝取得鎖的時間）。 */
+	/** 遷移鎖（值＝「取得的時間:亂數」，每個請求自己的 token）。 */
 	public const LOCK_OPTION = 'ys_admin_menu_moves_lock';
 
 	/** 遷移前備份：ys_admin_menu_config_pre_moves_<MOVES_VERSION>，只寫一次、不覆蓋。 */
@@ -63,6 +78,9 @@ final class YSMenuMovesMigrator {
 	private const MAX_ENTRIES = 300;
 
 	private static bool $running = false;
+
+	/** 這個請求拿到的鎖（自己的 token；沒拿到是空字串）。 */
+	private static string $lock_token = '';
 
 	/** plan() 裡標記「這一列要拿掉」（不用 null，以免誤刪設定裡原本的值）。 */
 	private static ?object $gone = null;
@@ -181,8 +199,8 @@ final class YSMenuMovesMigrator {
 	 * 跑一次遷移。
 	 *
 	 * 回傳：no_core（舊版 YS CART／沒有搬家）、current（標記相同，零寫入）、locked（別的請求正在遷移）、
-	 * conflict（寫入前設定被改過，這一輪放棄，交給下一個請求）、marker（設定不用改，只寫標記與紀錄）、
-	 * migrated（已寫入設定）。
+	 * conflict（讀到設定之後、寫入之前設定被改過，這一輪放棄，交給下一個請求）、failed（資料庫寫入失敗或讀回不符，
+	 * 不寫標記與紀錄，交給下一個請求重試）、marker（設定不用改，只寫標記與紀錄）、migrated（已寫入設定）。
 	 */
 	public static function migrate(): string {
 		$core = self::detect();
@@ -213,13 +231,16 @@ final class YSMenuMovesMigrator {
 			if ( $plan['changed'] && null !== $raw ) {
 				self::write_backup_once( $core['version'], $raw );
 
-				// 寫入前比對舊值：被改過（例如剛好有人按了儲存）就放棄這一輪，交給下一個請求重跑。
-				if ( self::db_get( YSMenuRouter::OPTION_KEY ) !== $raw ) {
-					self::refresh_option_cache();
-					return 'conflict';
-				}
+				// 比對舊值與寫入是同一條 UPDATE：讀到設定之後有人剛好按了儲存，就對不到（conflict），交給下一個請求重跑；
+				// 資料庫寫入失敗或讀回不符（failed）也一樣。這兩種都不寫標記與紀錄。
+				$saved = YSMenuConfigBridge::save_authoritative_if_unchanged( $plan['config'], $raw );
 				self::refresh_option_cache();
-				YSMenuConfigBridge::save_authoritative( $plan['config'] );
+				if ( 'saved' !== $saved['result'] ) {
+					return $saved['result'];
+				}
+				if ( ! $saved['mirror'] ) {
+					$plan['log'][] = [ 'type' => 'mirror_failed' ];
+				}
 			}
 
 			self::save_marker( $core, $marker, $plan );
@@ -231,22 +252,24 @@ final class YSMenuMovesMigrator {
 	}
 
 	/**
-	 * @param array{version:string,sha256:string,applied:array<int,string>} $marker
-	 * @param array<string,mixed>                                           $core
+	 * @param array{version:string,sha256:string,rules:string,applied:array<int,string>} $marker
+	 * @param array<string,mixed>                                                        $core
 	 */
 	public static function marker_is_current( array $marker, array $core ): bool {
-		return '' !== $marker['version'] && $marker['version'] === $core['version'] && $marker['sha256'] === $core['hash'];
+		return '' !== $marker['version'] && $marker['version'] === $core['version'] && $marker['sha256'] === $core['hash']
+			&& self::RULES_VERSION === $marker['rules'];
 	}
 
 	/**
 	 * @param mixed $raw
-	 * @return array{version:string,sha256:string,applied:array<int,string>}
+	 * @return array{version:string,sha256:string,rules:string,applied:array<int,string>}
 	 */
 	public static function read_marker( $raw ): array {
 		$raw = is_array( $raw ) ? $raw : [];
 		return [
 			'version' => is_scalar( $raw['version'] ?? null ) ? (string) $raw['version'] : '',
 			'sha256'  => is_scalar( $raw['sha256'] ?? null ) ? (string) $raw['sha256'] : '',
+			'rules'   => is_scalar( $raw['rules'] ?? null ) ? (string) $raw['rules'] : '',
 			'applied' => array_values( array_filter( (array) ( $raw['applied'] ?? [] ), 'is_string' ) ),
 		];
 	}
@@ -262,10 +285,32 @@ final class YSMenuMovesMigrator {
 			[
 				'version' => $core['version'],
 				'sha256'  => $core['hash'],
+				'rules'   => self::RULES_VERSION,
 				'applied' => array_values( array_unique( array_merge( $marker['applied'], $plan['applied'] ) ) ),
 			],
-			false
+			true
 		);
+	}
+
+	/**
+	 * 「選單與權限」設定頁開頁當下的遷移標記（頁面上的隱藏欄位，存檔時一起送回）。存檔時跟目前的標記比，不同就是這一頁
+	 * 在遷移之前打開的：照舊分組畫的表格存回去，會把搬好的設定寫回舊分組，所以不存。沒有標記（沒有 Core moves 的站）
+	 * 回空字串，兩邊都是空字串就照常存。
+	 *
+	 * @param bool $fresh true＝先清掉這個請求的 option 快取再讀（存檔時比對用：這個請求開始之後才完成的遷移也看得到）。
+	 */
+	public static function page_token( bool $fresh = false ): string {
+		if ( $fresh ) {
+			wp_cache_delete( self::MARKER_OPTION, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+		}
+		$raw = get_option( self::MARKER_OPTION, null );
+		if ( ! is_array( $raw ) ) {
+			return '';
+		}
+		$m = self::read_marker( $raw );
+		return hash( 'sha256', implode( "\n", [ $m['version'], $m['sha256'], $m['rules'], implode( ',', $m['applied'] ) ] ) );
 	}
 
 	/**
@@ -330,6 +375,8 @@ final class YSMenuMovesMigrator {
 			'whitelist'     => [],
 			'parent_hidden' => [],
 			'conflicts'     => [],
+			'bound'         => [],
+			'gated'         => [],
 			'group_titles'  => [],
 			'unknown'       => [],
 			'anchors'       => [],
@@ -359,7 +406,7 @@ final class YSMenuMovesMigrator {
 
 		$out['rules'] = ! empty( $a['rules'] ) || ! empty( $b['rules'] );
 
-		foreach ( [ 'parent_hidden', 'group_titles', 'unknown', 'anchors' ] as $k ) {
+		foreach ( [ 'parent_hidden', 'bound', 'gated', 'group_titles', 'unknown', 'anchors' ] as $k ) {
 			$seen = [];
 			foreach ( array_merge( (array) ( $a[ $k ] ?? [] ), (array) ( $b[ $k ] ?? [] ) ) as $item ) {
 				if ( ! is_array( $item ) ) {
@@ -393,7 +440,7 @@ final class YSMenuMovesMigrator {
 	private static function with_titles( array $notice ): array {
 		$pages = array_merge( $notice['moved'], $notice['conflicts'] );
 		$tops  = [];
-		foreach ( [ 'parent_hidden', 'unknown', 'anchors' ] as $k ) {
+		foreach ( [ 'parent_hidden', 'bound', 'gated', 'unknown', 'anchors' ] as $k ) {
 			foreach ( $notice[ $k ] as $item ) {
 				if ( isset( $item['slug'] ) && is_string( $item['slug'] ) ) {
 					$pages[] = $item['slug'];
@@ -434,23 +481,60 @@ final class YSMenuMovesMigrator {
 	/**
 	 * 搶鎖。add_option() 遇到同名資料列會改成更新（ON DUPLICATE KEY UPDATE），兩個請求同時搶會都「成功」，
 	 * 所以和 WordPress 核心的 WP_Upgrader::create_lock() 一樣用 INSERT IGNORE；超過逾時的舊鎖以比對舊值接手。
+	 * 鎖的值是這個請求自己的 token（取得的時間:亂數），釋放時只刪自己的值。
 	 */
 	private static function acquire_lock(): bool {
-		$now = time();
-		if ( self::db_insert_ignore( self::LOCK_OPTION, (string) $now ) ) {
+		global $wpdb;
+		$now   = time();
+		$token = $now . ':' . self::random_hex();
+		if ( self::db_insert_ignore( self::LOCK_OPTION, $token ) ) {
+			self::$lock_token = $token;
 			return true;
 		}
 		$held = self::db_get( self::LOCK_OPTION );
-		if ( null === $held || (int) $held > $now - self::LOCK_TIMEOUT ) {
+		if ( null === $held || self::lock_time( $held ) > $now - self::LOCK_TIMEOUT ) {
 			return false;
 		}
-		global $wpdb;
-		$result = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) $now, self::LOCK_OPTION, $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 比對舊值接手逾時的鎖。
-		return is_numeric( $result ) && 1 === (int) $result;
+		$result = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND BINARY option_value = %s", $token, self::LOCK_OPTION, $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 比對舊值接手逾時的鎖。
+		self::forget_lock_cache();
+		if ( is_numeric( $result ) && 1 === (int) $result ) {
+			self::$lock_token = $token;
+			return true;
+		}
+		return false;
 	}
 
+	/**
+	 * 只刪自己寫進去的鎖：這個請求卡太久、鎖已經被別的請求接手時，不能刪掉對方的鎖。
+	 */
 	private static function release_lock(): void {
-		delete_option( self::LOCK_OPTION );
+		if ( '' === self::$lock_token ) {
+			return;
+		}
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND BINARY option_value = %s", self::LOCK_OPTION, self::$lock_token ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 只刪自己的 token。
+		self::$lock_token = '';
+		self::forget_lock_cache();
+	}
+
+	/**
+	 * 鎖的值裡的取得時間（只存時間的舊值也讀得懂）。
+	 */
+	public static function lock_time( string $value ): int {
+		return (int) explode( ':', $value, 2 )[0];
+	}
+
+	private static function random_hex(): string {
+		try {
+			return bin2hex( random_bytes( 16 ) );
+		} catch ( \Throwable $e ) {
+			return md5( uniqid( (string) wp_rand(), true ) );
+		}
+	}
+
+	private static function forget_lock_cache(): void {
+		wp_cache_delete( self::LOCK_OPTION, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	/**
@@ -502,7 +586,7 @@ final class YSMenuMovesMigrator {
 	}
 
 	// ─────────────────────────────────────────────
-	// 遷移計畫（純函式：只看設定與搬家對照，不讀寫資料庫）
+	// 遷移計畫（不寫資料庫：只看設定與搬家對照；判斷綁定的帳號原本看不看得到時會讀帳號的角色）
 	// ─────────────────────────────────────────────
 
 	/**
@@ -526,7 +610,7 @@ final class YSMenuMovesMigrator {
 		$orig   = [ $items, $native, $copies ];
 
 		$applied_set = array_fill_keys( $applied, true );
-		$old_layout  = self::old_layout_batches( $snapshot, $moves, $applied_set );
+		$old_layout  = self::old_layout_keys( $snapshot, $moves, $applied_set );
 
 		$removed = []; // 被拆掉的頂層 slug（含之前套用過的）
 		foreach ( $moves as $m ) {
@@ -543,6 +627,8 @@ final class YSMenuMovesMigrator {
 		$renames      = []; // 舊代稱 => 新代稱（wp_native 的複製項／移到主選單列）
 		$anchor_tops  = []; // 這一輪拆掉的頂層（after 錨點要改）
 		$copies_moved = false;
+		$inherited    = []; // slug => 從舊上層帶入的「僅限本人」帳號
+		$gates        = []; // slug => 搬家資訊；最後檢查「綁著這一頁的人原本看不看得到」
 
 		foreach ( $moves as $seq => $move ) {
 			$kind = $move['kind'];
@@ -558,12 +644,12 @@ final class YSMenuMovesMigrator {
 			$applied_set[ $key ] = true;
 			$new_keys[]          = $key;
 
-			$slug  = $move['slug'];
-			$to    = $move['to'];
-			$first = ! isset( $handled[ $slug ] );
+			$slug             = $move['slug'];
+			$to               = $move['to'];
+			$first            = ! isset( $handled[ $slug ] );
 			$handled[ $slug ] = true;
-			$old   = ! empty( $old_layout[ $move['since'] ] );
-			$n_rules = self::effective_rules( $snapshot, $to );
+			$old              = ! empty( $old_layout[ $key ] );
+			$n_rules          = self::effective_rules( $snapshot, $to );
 
 			if ( 'top_to_sub' === $kind ) {
 				$from = $slug; // 「父選單預設頁」的複製項（slug＝上層自己）跟著搬。
@@ -581,8 +667,16 @@ final class YSMenuMovesMigrator {
 						$notice['group_titles'][] = [ 'slug' => $slug, 'title' => $r['group_title'] ];
 					}
 				}
+				// 這一頁原本設了隱藏（例如只在主選單分頁存過、勾了隱藏）：apply_hide_flags() 的頂層隱藏只對 $menu，
+				// 變成子選單之後要有一列子選單列帶著隱藏才對得到。
+				if ( self::effective_rules( $snapshot, $slug )['hide'] && self::ensure_hidden_sub( $items, $slug, $to, $gone ) ) {
+					$notice['moved'][] = $slug;
+					$notice['rules']   = true;
+					$log[]             = [ 'type' => 'hide_sub_row', 'slug' => $slug, 'to' => $to ];
+				}
 				$anchor_tops[ $slug ] = true;
-				$in_old = $r['touched'] || $old; // 這個站在這筆搬家上確實是舊分組
+				$gates[ $slug ]       = [ 'from' => '', 'to' => $to, 'sub' => false ];
+				$in_old               = $r['touched'] || $old; // 這個站在這筆搬家上確實是舊分組
 				if ( $in_old && self::newly_restricted( $n_rules, self::no_rules() ) ) {
 					$notice['parent_hidden'][] = [ 'slug' => $slug, 'to' => $to ];
 				}
@@ -590,6 +684,9 @@ final class YSMenuMovesMigrator {
 				$from      = $move['from'];
 				$p_rules   = self::effective_rules( $snapshot, $from );
 				$from_rows = self::find_rows( $items, $slug, $from );
+				// 搬之前新上層底下就有的同一頁的列（例如搭配 1.4.0 時在新選單存過一次）。在搬這一筆的列之前先找好：
+				// 這一筆搬過去的列不算進來（同一頁兩列各自原樣搬過去，不互相合併）。
+				$pre_to = self::find_rows( $items, $slug, $to );
 
 				if ( ! empty( $from_rows ) ) {
 					// 有舊位置的列（直接證據）：換上層、重給順序，名稱、升頂層等其他欄位原樣帶過去。
@@ -609,12 +706,12 @@ final class YSMenuMovesMigrator {
 							}
 						}
 
-						$to_rows = self::find_rows( $items, $slug, $to );
-						if ( ! empty( $to_rows ) ) {
-							// 新上層底下已經有同一頁的列（例如搭配 1.4.0 時在新選單存過一次）：併成一列。
-							$items[ $to_rows[0] ] = self::merge_rows( $items[ $to_rows[0] ], $row );
-							$items[ $i ]          = $gone;
-							$log[]                = [ 'type' => 'merge', 'slug' => $slug, 'to' => $to ];
+						if ( ! empty( $pre_to ) ) {
+							// 併進新上層那一列（名稱、順序以它為準）。這一輪才搬過來的列不互相合併：同一頁兩列各自的綁定原樣保留。
+							$t           = $pre_to[0];
+							$items[ $t ] = self::merge_rows( $items[ $t ], $row, $i < $t );
+							$items[ $i ] = $gone;
+							$log[]       = [ 'type' => 'merge', 'slug' => $slug, 'to' => $to ];
 						} else {
 							$items[ $i ] = $row;
 							if ( empty( $row['promote_to_top'] ) ) {
@@ -626,7 +723,8 @@ final class YSMenuMovesMigrator {
 
 					// 升頂層的項目原本就不在上層底下顯示，沒有「跟著上層一起隱藏」的效果，不必合併規則。
 					if ( $first && ! $promoted ) {
-						$merged = self::combine_rules( self::effective_rules( $snapshot, $slug ), $p_rules );
+						$s_rules                     = self::effective_rules( $snapshot, $slug );
+						$merged                      = self::combine_rules( $s_rules, $p_rules );
 						[ $items, $native, $fields ] = self::write_rules_to_slug( $items, $native, $slug, $merged, $gone );
 						if ( ! empty( $fields ) ) {
 							$notice['rules'] = true;
@@ -634,32 +732,27 @@ final class YSMenuMovesMigrator {
 						}
 						if ( $merged['conflict'] ) {
 							$notice['conflicts'][] = $slug;
-							$log[]                 = [ 'type' => 'self_only_conflict', 'slug' => $slug, 'own_uid' => self::effective_rules( $snapshot, $slug )['uid'], 'parent_uid' => $p_rules['uid'] ];
+							$log[]                 = [ 'type' => 'self_only_conflict', 'slug' => $slug, 'own_uids' => $s_rules['uids'], 'parent_uid' => $p_rules['last'] ];
 						}
+						if ( $merged['inherit'] > 0 ) {
+							$inherited[ $slug ] = $merged['inherit'];
+							$log[]              = [ 'type' => 'bind', 'slug' => $slug, 'from' => $from, 'user_id' => $merged['inherit'] ];
+						}
+						$gates[ $slug ] = [ 'from' => $from, 'to' => $to, 'sub' => true ];
 					}
 				} elseif ( $old && $first && self::rules_restrict( $p_rules ) && ! self::slug_has_rows( $items, $native, $slug, $gone ) ) {
-					// 子選單沒有任何已存的列，舊上層有規則，而且這一批是舊分組時存下的：新增一列只帶規則、不寫順序。
-					$merged = self::combine_rules( self::no_rules(), $p_rules );
-					[ $row ] = self::apply_merged(
-						[
-							'slug'           => $slug,
-							'roles'          => [],
-							'level'          => 'sub',
-							'parent_slug'    => $to,
-							'hide'           => false,
-							'self_only_uid'  => 0,
-							'promote_to_top' => false,
-							'title_override' => null,
-						],
-						$merged
-					);
+					// 子選單沒有任何已存的列，舊上層有規則，而且這一筆是舊分組時存下的：新增一列只帶規則、不寫順序。
+					$merged  = self::combine_rules( self::no_rules(), $p_rules );
+					[ $row ] = self::apply_merged( self::rules_only_row( $slug, $to, false ), $merged );
 					$items[]           = $row;
 					$notice['moved'][] = $slug;
 					$notice['rules']   = true;
 					$log[]             = [ 'type' => 'rules_row', 'slug' => $slug, 'from' => $from, 'to' => $to ];
-					if ( $merged['conflict'] ) {
-						$notice['conflicts'][] = $slug;
+					if ( $merged['inherit'] > 0 ) {
+						$inherited[ $slug ] = $merged['inherit'];
+						$log[]              = [ 'type' => 'bind', 'slug' => $slug, 'from' => $from, 'user_id' => $merged['inherit'] ];
 					}
+					$gates[ $slug ] = [ 'from' => $from, 'to' => $to, 'sub' => true ];
 				}
 
 				$in_old = ! empty( $from_rows ) || $old;
@@ -725,24 +818,43 @@ final class YSMenuMovesMigrator {
 		$items = self::place_orders( $items, $placement, $gone, $log );
 		$items = array_values( array_filter( $items, static fn( $row ) => $row !== $gone ) );
 
-		$new = $config;
-		if ( $items !== $orig[0] ) {
-			$new['ys_cart']['items'] = $items;
+		// 「僅限本人」會讓綁定的人略過那一頁的角色與白名單：搬家後綁著這一頁的人，原本（舊分組）看不到、搬家後卻看得到
+		// （側欄或直接開網址）的，再加隱藏。其他人本來就被「僅限本人」擋著，super admin 不受隱藏影響，所以沒有人會少看到。
+		$gated = [];
+		if ( ! empty( $gates ) ) {
+			$planned = self::with_sections( $config, $items, $native, $copies, $orig );
+			foreach ( $gates as $slug => $g ) {
+				$slug = (string) $slug;
+				$uid  = self::binding_needs_hide( $snapshot, $planned, $slug, $g );
+				if ( $uid > 0 ) {
+					$items   = self::hide_rows_of( $items, $slug, $g['to'] );
+					$gated[] = [ 'slug' => $slug, 'user_id' => $uid ];
+					$log[]   = [ 'type' => 'gate', 'slug' => $slug, 'user_id' => $uid ];
+				}
+			}
 		}
-		if ( $native !== $orig[1] ) {
-			$new['wp_native']['items'] = $native;
-		}
-		if ( $copies !== $orig[2] ) {
-			$new['top_copies']['items'] = $copies;
-		}
+
+		$new     = self::with_sections( $config, $items, $native, $copies, $orig );
 		$changed = $new !== $config;
 
 		foreach ( [ 'moved', 'conflicts' ] as $k ) {
 			$notice[ $k ] = array_values( array_unique( $notice[ $k ] ) );
 		}
+		$gated_slugs = array_column( $gated, 'slug' );
+		foreach ( $inherited as $slug => $uid ) {
+			if ( ! in_array( (string) $slug, $gated_slugs, true ) ) {
+				$notice['bound'][] = [ 'slug' => (string) $slug, 'user_id' => (int) $uid ];
+			}
+		}
+		$notice['gated'] = $gated;
+		if ( ! empty( $gated ) ) {
+			$notice['rules'] = true;
+		}
 		if ( ! $changed ) {
 			$notice['moved'] = [];
 			$notice['rules'] = false;
+			$notice['bound'] = [];
+			$notice['gated'] = [];
 		}
 
 		return [
@@ -756,16 +868,17 @@ final class YSMenuMovesMigrator {
 	}
 
 	/**
-	 * 每一批（同一個 since）是不是在舊分組時存下的設定：這一批還沒套用過，而且這一批的 slug 沒有任何一列
-	 * 已經掛在它的 to 底下（在新選單用「全部選單」分頁存過一次，這幾頁就會各有一列掛在新上層）。
+	 * 每一筆還沒套用的搬家（逐鍵判斷）是不是在舊分組時存下的設定：同一個 since 裡還沒套用的那幾筆，沒有任何一列已經
+	 * 掛在它的 to 底下（在新選單用「全部選單」分頁存過一次，這幾頁就會各有一列掛在新上層）。已套用過的鍵不算進來
+	 * （那是本外掛搬過去的，不是新分組的證據），所以附加外掛之後才沿用同一個 since 加的列也判斷得出來。
 	 * ys_cart 一列都沒有、判斷不出來時當成舊分組（結果只會更嚴，提醒會列出來）。
 	 *
 	 * @param array<string,mixed>             $snapshot
 	 * @param array<int,array<string,string>> $moves
 	 * @param array<string,bool>              $applied_set
-	 * @return array<string,bool>
+	 * @return array<string,bool> 鍵（since:slug）=> 是不是舊分組
 	 */
-	private static function old_layout_batches( array $snapshot, array $moves, array $applied_set ): array {
+	private static function old_layout_keys( array $snapshot, array $moves, array $applied_set ): array {
 		$items   = self::list_section( $snapshot, 'ys_cart' );
 		$no_rows = true;
 		foreach ( $items as $row ) {
@@ -777,21 +890,13 @@ final class YSMenuMovesMigrator {
 
 		$batches = [];
 		foreach ( $moves as $m ) {
-			if ( in_array( $m['kind'], self::KINDS, true ) ) {
+			if ( in_array( $m['kind'], self::KINDS, true ) && ! isset( $applied_set[ self::move_key( $m ) ] ) ) {
 				$batches[ $m['since'] ][] = $m;
 			}
 		}
 
 		$out = [];
-		foreach ( $batches as $since => $list ) {
-			$since = (string) $since;
-			$done  = false;
-			foreach ( array_keys( $applied_set ) as $k ) {
-				if ( 0 === strpos( (string) $k, $since . ':' ) ) {
-					$done = true;
-					break;
-				}
-			}
+		foreach ( $batches as $list ) {
 			$under = false;
 			foreach ( $list as $m ) {
 				if ( ! empty( self::find_rows( $items, $m['slug'], $m['to'] ) ) ) {
@@ -799,9 +904,142 @@ final class YSMenuMovesMigrator {
 					break;
 				}
 			}
-			$out[ $since ] = ! $done && ( $no_rows || ! $under );
+			foreach ( $list as $m ) {
+				$out[ self::move_key( $m ) ] = $no_rows || ! $under;
+			}
 		}
 		return $out;
+	}
+
+	/**
+	 * 三個分頁換成工作副本（沒變的分頁原樣保留，不新增空的段落）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<int,mixed>    $items
+	 * @param array<int,mixed>    $native
+	 * @param array<int,mixed>    $copies
+	 * @param array<int,mixed>    $orig
+	 * @return array<string,mixed>
+	 */
+	private static function with_sections( array $config, array $items, array $native, array $copies, array $orig ): array {
+		if ( $items !== $orig[0] ) {
+			$config['ys_cart']['items'] = $items;
+		}
+		if ( $native !== $orig[1] ) {
+			$config['wp_native']['items'] = $native;
+		}
+		if ( $copies !== $orig[2] ) {
+			$config['top_copies']['items'] = $copies;
+		}
+		return $config;
+	}
+
+	/**
+	 * 搬家後綁著這一頁的人（存取判斷看的第一列綁定）原本看不看得到它。原本看不到、搬家後卻看得到（側欄或直接開網址）
+	 * 就回那個帳號（要加隱藏），否則回 0。
+	 *   - 原本（舊分組，快照）：舊上層在側欄看得到、這一頁在它底下也看得到；被拆掉的頂層是這一頁當頂層看得到。白名單
+	 *     「變多」是規格事先宣告的例外：白名單裡明確勾了這一頁，就當舊上層也有勾。
+	 *   - 搬家後：新上層看得到、這一頁在它底下也看得到。
+	 *   - 兩邊都算「複製到主選單」的那一項：只要原子選單過得了子選單的過濾就會出現，跟上層看不看得到無關。
+	 *   - super admin 不受隱藏影響，不用判斷。
+	 *
+	 * @param array<string,mixed>                   $snapshot
+	 * @param array<string,mixed>                   $planned
+	 * @param array{from:string,to:string,sub:bool} $g
+	 */
+	private static function binding_needs_hide( array $snapshot, array $planned, string $slug, array $g ): int {
+		$uid = self::effective_rules( $planned, $slug )['first'];
+		if ( $uid <= 0 || is_super_admin( $uid ) ) {
+			return 0;
+		}
+
+		if ( $g['sub'] ) {
+			$also = [];
+			$list = YSMenuRouter::visible_slugs_for_user( $snapshot, $uid );
+			if ( is_array( $list ) && in_array( $slug, $list, true ) ) {
+				$also = [ $g['from'] ];
+			}
+			$before = ( YSMenuRouter::sidebar_allows( $g['from'], true, $snapshot, $uid, $also ) && YSMenuRouter::sidebar_allows( $slug, false, $snapshot, $uid ) )
+				|| YSMenuRouter::copy_allows( $slug, $g['from'], $snapshot, $uid );
+		} else {
+			$before = YSMenuRouter::sidebar_allows( $slug, true, $snapshot, $uid ) || YSMenuRouter::copy_allows( $slug, $slug, $snapshot, $uid );
+		}
+		$after = ( YSMenuRouter::sidebar_allows( $g['to'], true, $planned, $uid ) && YSMenuRouter::sidebar_allows( $slug, false, $planned, $uid ) )
+			|| YSMenuRouter::copy_allows( $slug, $g['to'], $planned, $uid );
+		if ( $after && ! $before ) {
+			return $uid;
+		}
+
+		return YSMenuRouter::url_allows( $slug, $planned, $uid ) && ! YSMenuRouter::url_allows( $slug, $snapshot, $uid ) ? $uid : 0;
+	}
+
+	/**
+	 * 這一頁的每一列「全部選單」列都加隱藏；沒有子選單列就補一列只帶隱藏的（apply_hide_flags() 要靠子選單列才藏得掉子選單）。
+	 *
+	 * @param array<int,mixed> $items
+	 * @return array<int,mixed>
+	 */
+	private static function hide_rows_of( array $items, string $slug, string $to ): array {
+		$sub = false;
+		foreach ( $items as $i => $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || (string) ( $row['slug'] ?? '' ) !== $slug ) {
+				continue;
+			}
+			$items[ $i ]['hide'] = true;
+			if ( 'sub' === (string) ( $row['level'] ?? 'top' ) ) {
+				$sub = true;
+			}
+		}
+		if ( ! $sub ) {
+			$items[] = self::rules_only_row( $slug, $to, true );
+		}
+		return $items;
+	}
+
+	/**
+	 * 被拆掉的頂層原本有隱藏：確定有一列「全部選單」子選單列帶著隱藏，沒有就給現有的子選單列加上，連一列都沒有就補一列
+	 * 只帶隱藏的（掛在新上層、不寫順序）。有改才回 true。
+	 *
+	 * @param array<int,mixed> $items 直接修改。
+	 */
+	private static function ensure_hidden_sub( array &$items, string $slug, string $to, object $gone ): bool {
+		$subs = [];
+		foreach ( $items as $i => $row ) {
+			if ( $row === $gone || ! is_array( $row ) || ! empty( $row['separator'] ) || (string) ( $row['slug'] ?? '' ) !== $slug
+				|| 'sub' !== (string) ( $row['level'] ?? 'top' ) ) {
+				continue;
+			}
+			if ( ! empty( $row['hide'] ) ) {
+				return false;
+			}
+			$subs[] = $i;
+		}
+		if ( empty( $subs ) ) {
+			$items[] = self::rules_only_row( $slug, $to, true );
+			return true;
+		}
+		foreach ( $subs as $i ) {
+			$items[ $i ]['hide'] = true;
+		}
+		return true;
+	}
+
+	/**
+	 * 只帶規則的子選單列（沒有順序值、名稱照預設）。
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function rules_only_row( string $slug, string $to, bool $hide ): array {
+		return [
+			'slug'           => $slug,
+			'roles'          => [],
+			'level'          => 'sub',
+			'parent_slug'    => $to,
+			'hide'           => $hide,
+			'self_only_uid'  => 0,
+			'promote_to_top' => false,
+			'title_override' => null,
+		];
 	}
 
 	/**
@@ -846,23 +1084,25 @@ final class YSMenuMovesMigrator {
 	}
 
 	/**
-	 * @return array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool}
+	 * @return array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>}
 	 */
 	private static function no_rules(): array {
-		return [ 'hide' => false, 'roles' => null, 'uid' => 0, 'uid_conflict' => false ];
+		return [ 'hide' => false, 'roles' => null, 'first' => 0, 'last' => 0, 'uids' => [] ];
 	}
 
 	/**
 	 * 某個 slug 的有效規則：兩個分頁、各層級裡 slug 相同的列合起來（1.4.0 判斷看不看得到就是這樣看的）。
-	 * 任一列 hide＝hide；每一列非空的 roles 都要滿足＝取交集（[] 表示交集是空的）；僅限本人取綁定的帳號，
-	 * 綁了不同帳號記成 uid_conflict。
+	 *   - hide：任一列 hide。
+	 *   - roles：每一列非空的 roles 都要滿足＝取交集（[] 表示交集是空的；null 表示沒有限制）。
+	 *   - 僅限本人：1.4.0 兩個地方看的不一樣——存取判斷與直接開網址（self_only_uid_for_slug）只看第一列（first，
+	 *     0＝第一列沒綁＝沒綁）；側欄（apply_self_only_filter）是後面的列蓋掉前面（last）。uids＝所有綁定的帳號。
 	 *
 	 * @param array<string,mixed> $config
-	 * @return array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool}
+	 * @return array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>}
 	 */
 	private static function effective_rules( array $config, string $slug ): array {
 		$rules = self::no_rules();
-		$uids  = [];
+		$seen  = false;
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
 			foreach ( self::list_section( $config, $tab ) as $row ) {
 				if ( ! is_array( $row ) || ! empty( $row['separator'] ) || (string) ( $row['slug'] ?? '' ) !== $slug ) {
@@ -875,33 +1115,39 @@ final class YSMenuMovesMigrator {
 				if ( ! empty( $list ) ) {
 					$rules['roles'] = null === $rules['roles'] ? $list : array_values( array_intersect( $rules['roles'], $list ) );
 				}
-				$u = (int) ( $row['self_only_uid'] ?? 0 );
+				$u = max( 0, (int) ( $row['self_only_uid'] ?? 0 ) );
+				if ( ! $seen ) {
+					$rules['first'] = $u;
+					$seen           = true;
+				}
 				if ( $u > 0 ) {
-					if ( 0 === $rules['uid'] ) {
-						$rules['uid'] = $u; // 第一個綁定的帳號（與 YSMenuRouter::self_only_uid_for_slug 一樣看前面的列）
-					}
-					$uids[ $u ] = true;
+					$rules['last']       = $u;
+					$rules['uids'][ $u ] = $u;
 				}
 			}
 		}
-		$rules['uid_conflict'] = count( $uids ) > 1;
+		$rules['uids'] = array_values( $rules['uids'] );
 		return $rules;
 	}
 
 	/**
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool} $rules
+	 * @param array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>} $rules
 	 */
 	private static function rules_restrict( array $rules ): bool {
-		return $rules['hide'] || null !== $rules['roles'] || $rules['uid'] > 0;
+		return $rules['hide'] || null !== $rules['roles'] || $rules['last'] > 0;
 	}
 
 	/**
-	 * 子選單 S「且」舊上層 P：hide 取或；roles 兩邊都有取交集、一邊空用另一邊、交集是空的改成 hide；
-	 * 僅限本人 S 沒有就帶入 P 的、兩邊相同不變、綁不同帳號保留 S 原本的綁定再加 hide（記成衝突）。
+	 * 子選單 S「且」舊上層 P。
+	 *   - hide：取或。
+	 *   - roles：兩邊都有取交集、一邊空用另一邊；交集是空的改成 hide（1.4.0 的空陣列＝所有人都看得到，不能這樣存）。
+	 *   - 僅限本人：P 的綁定看側欄實際生效的那一個（後面的列蓋掉前面）。S 自己一列都沒綁 → 帶入 P 的（inherit，寫到
+	 *     S 的每一列）；S 自己有綁 → S 的各列原樣不動（1.4.0 只看第一列，統一寫到每一列會讓沒生效的綁定生效），
+	 *     跟 P 綁的不是同一個帳號就是衝突，加 hide。
 	 *
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool} $s
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool} $p
-	 * @return array{hide:bool,roles:?array<int,string>,uid:int,conflict:bool}
+	 * @param array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>} $s
+	 * @param array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>} $p
+	 * @return array{hide:bool,roles:?array<int,string>,inherit:int,conflict:bool}
 	 */
 	private static function combine_rules( array $s, array $p ): array {
 		$hide = $s['hide'] || $p['hide'];
@@ -914,31 +1160,29 @@ final class YSMenuMovesMigrator {
 			$roles = array_values( array_intersect( $s['roles'], $p['roles'] ) );
 		}
 		if ( is_array( $roles ) && [] === $roles ) {
-			$hide = true; // 空陣列在 1.4.0＝所有人都看得到，不能這樣存。
-		}
-
-		$conflict = false;
-		$uid      = $s['uid'];
-		if ( 0 === $s['uid'] ) {
-			$uid = $p['uid'];
-		} elseif ( $p['uid'] > 0 && $p['uid'] !== $s['uid'] ) {
-			$conflict = true;
-		}
-		if ( $s['uid_conflict'] || ( $p['uid_conflict'] && $p['uid'] > 0 ) ) {
-			$conflict = true;
-		}
-		if ( $conflict ) {
 			$hide = true;
 		}
 
-		return [ 'hide' => $hide, 'roles' => $roles, 'uid' => $uid, 'conflict' => $conflict ];
+		$inherit  = 0;
+		$conflict = false;
+		if ( $p['last'] > 0 ) {
+			if ( empty( $s['uids'] ) ) {
+				$inherit = $p['last'];
+			} elseif ( [ $p['last'] ] !== $s['uids'] ) {
+				$conflict = true;
+				$hide     = true;
+			}
+		}
+
+		return [ 'hide' => $hide, 'roles' => $roles, 'inherit' => $inherit, 'conflict' => $conflict ];
 	}
 
 	/**
 	 * 把合併後的規則寫進一列。交集是空的（改成 hide）時，roles 保留這一列原本的值，管理員在設定頁看得出原本怎麼設。
+	 * 「僅限本人」只在從舊上層帶入時才寫。
 	 *
-	 * @param array<string,mixed>                                           $row
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,conflict:bool} $merged
+	 * @param array<string,mixed>                                               $row
+	 * @param array{hide:bool,roles:?array<int,string>,inherit:int,conflict:bool} $merged
 	 * @return array{0:array<string,mixed>,1:array<int,string>}
 	 */
 	private static function apply_merged( array $row, array $merged ): array {
@@ -958,8 +1202,8 @@ final class YSMenuMovesMigrator {
 				$fields[]     = 'roles';
 			}
 		}
-		if ( $merged['uid'] > 0 && (int) ( $row['self_only_uid'] ?? 0 ) !== $merged['uid'] ) {
-			$row['self_only_uid'] = $merged['uid'];
+		if ( $merged['inherit'] > 0 && (int) ( $row['self_only_uid'] ?? 0 ) !== $merged['inherit'] ) {
+			$row['self_only_uid'] = $merged['inherit'];
 			$fields[]             = 'self_only_uid';
 		}
 		return [ $row, $fields ];
@@ -967,11 +1211,11 @@ final class YSMenuMovesMigrator {
 
 	/**
 	 * 合併後的規則寫到 S 的每一列（wp_native、ys_cart 都寫）：1.4.0 的 self_only_uid_for_slug() 只看第一列，
-	 * 只寫其中一列可能沒有效果。
+	 * 只寫其中一列可能沒有效果。從舊上層帶入的「僅限本人」也寫到每一列；S 自己原本的綁定不動。
 	 *
-	 * @param array<int,mixed>                                                $items
-	 * @param array<int,mixed>                                                $native
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,conflict:bool} $merged
+	 * @param array<int,mixed>                                                    $items
+	 * @param array<int,mixed>                                                    $native
+	 * @param array{hide:bool,roles:?array<int,string>,inherit:int,conflict:bool} $merged
 	 * @return array{0:array<int,mixed>,1:array<int,mixed>,2:array<int,string>}
 	 */
 	private static function write_rules_to_slug( array $items, array $native, string $slug, array $merged, object $gone ): array {
@@ -1005,8 +1249,8 @@ final class YSMenuMovesMigrator {
 	/**
 	 * 新上層比舊上層多藏了某些角色（只是告知：那些角色在側欄會看不到搬家子項）。舊上層本來就藏起來的不算。
 	 *
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool} $n
-	 * @param array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool} $f
+	 * @param array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>} $n
+	 * @param array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>} $f
 	 */
 	private static function newly_restricted( array $n, array $f ): bool {
 		if ( $f['hide'] || ( is_array( $f['roles'] ) && [] === $f['roles'] ) ) {
@@ -1018,18 +1262,20 @@ final class YSMenuMovesMigrator {
 		if ( null !== $n['roles'] && ( null === $f['roles'] || [] !== array_diff( $f['roles'], $n['roles'] ) ) ) {
 			return true;
 		}
-		return $n['uid'] > 0 && $n['uid'] !== $f['uid'];
+		return $n['last'] > 0 && $n['last'] !== $f['last'];
 	}
 
 	/**
-	 * 同一頁的兩列併成一列：$base 的名稱、順序與其他欄位優先（沒有名稱才用 $other 的），升頂層取或，
-	 * 規則從嚴（之後還會把合併後的規則寫到這一頁的每一列）。
+	 * 同一頁的兩列併成一列：$base 的名稱、順序與其他欄位優先（沒有名稱才用 $other 的），升頂層取或，規則從嚴
+	 * （之後還會把合併後的規則寫到這一頁的每一列）。「僅限本人」取兩列照原本順序裡後面那個有綁的（側欄實際生效的），
+	 * 兩列綁不同帳號就加 hide。
 	 *
 	 * @param array<string,mixed> $base
 	 * @param array<string,mixed> $other
+	 * @param bool                $other_first $other 在清單裡排在 $base 前面。
 	 * @return array<string,mixed>
 	 */
-	private static function merge_rows( array $base, array $other ): array {
+	private static function merge_rows( array $base, array $other, bool $other_first ): array {
 		$row = $base;
 		if ( ! self::has_title( $row ) && self::has_title( $other ) ) {
 			$row['title_override'] = $other['title_override'];
@@ -1037,16 +1283,20 @@ final class YSMenuMovesMigrator {
 		if ( ! empty( $other['promote_to_top'] ) ) {
 			$row['promote_to_top'] = true;
 		}
-		[ $row ] = self::apply_merged(
-			$row,
-			self::combine_rules( self::rules_of_rows( [ $base ] ), self::rules_of_rows( [ $other ] ) )
-		);
+		$rules = self::rules_of_rows( $other_first ? [ $other, $base ] : [ $base, $other ] );
+		if ( $rules['hide'] || count( $rules['uids'] ) > 1 || ( is_array( $rules['roles'] ) && [] === $rules['roles'] ) ) {
+			$row['hide'] = true;
+		}
+		if ( is_array( $rules['roles'] ) && [] !== $rules['roles'] ) {
+			$row['roles'] = $rules['roles'];
+		}
+		$row['self_only_uid'] = $rules['last'];
 		return $row;
 	}
 
 	/**
 	 * @param array<int,array<string,mixed>> $rows
-	 * @return array{hide:bool,roles:?array<int,string>,uid:int,uid_conflict:bool}
+	 * @return array{hide:bool,roles:?array<int,string>,first:int,last:int,uids:array<int,int>}
 	 */
 	private static function rules_of_rows( array $rows ): array {
 		return self::effective_rules( [ 'ys_cart' => [ 'items' => array_map( static fn( $r ) => [ 'slug' => '_' ] + $r, $rows ) ] ], '_' );
@@ -1111,15 +1361,16 @@ final class YSMenuMovesMigrator {
 		sort( $all );
 		$rows = array_map( static fn( $i ) => $items[ $i ], $all );
 
-		// 規則：這一頁所有同 slug 的列合起來（頂層列「且」子選單列）；綁了不同帳號＝衝突，保留前面那一列的綁定再加 hide。
-		$rules  = self::rules_of_rows( $rows );
-		$merged = [
-			'hide'     => $rules['hide'] || $rules['uid_conflict'] || ( is_array( $rules['roles'] ) && [] === $rules['roles'] ),
+		// 規則：這一頁這幾列合起來（頂層列「且」子選單列）。「僅限本人」取側欄實際生效的那一個（後面的列蓋掉前面）；
+		// 綁了不同帳號＝衝突，再加 hide。
+		$rules           = self::rules_of_rows( $rows );
+		$out['conflict'] = count( $rules['uids'] ) > 1;
+		$merged          = [
+			'hide'     => $rules['hide'] || $out['conflict'] || ( is_array( $rules['roles'] ) && [] === $rules['roles'] ),
 			'roles'    => $rules['roles'],
-			'uid'      => $rules['uid'],
-			'conflict' => $rules['uid_conflict'],
+			'inherit'  => 0,
+			'conflict' => $out['conflict'],
 		];
-		$out['conflict'] = $rules['uid_conflict'];
 
 		$base = ! empty( $exist ) ? $exist[0] : $tops[0];
 		$row  = $items[ $base ];
@@ -1133,7 +1384,8 @@ final class YSMenuMovesMigrator {
 			}
 		}
 		$row['promote_to_top'] = $promote;
-		[ $row ] = self::apply_merged( $row, $merged );
+		[ $row ]               = self::apply_merged( $row, $merged );
+		$row['self_only_uid']  = $rules['last'];
 
 		$prev_order = null;
 		foreach ( array_merge( $tops, $selfs ) as $i ) {
@@ -1576,7 +1828,7 @@ final class YSMenuMovesMigrator {
 		if ( ! empty( $n['moved'] ) ) {
 			$lines[] = sprintf( '這些選單換到新的位置，原本的順序、名稱與顯示設定已經跟著搬過去：%s。', implode( $sep, array_map( $name, $n['moved'] ) ) );
 			if ( $n['rules'] ) {
-				$lines[] = '原本跟著上層選單一起隱藏的頁面，搬到新位置後照樣隱藏。';
+				$lines[] = '原本因為看不到上層選單而看不到這些頁面的角色或帳號，搬到新位置後照樣看不到。';
 			}
 		}
 		foreach ( $n['group_titles'] as $g ) {
@@ -1587,7 +1839,7 @@ final class YSMenuMovesMigrator {
 				static fn( $p ) => sprintf( '%s（在「%s」底下）', $name( (string) ( $p['slug'] ?? '' ) ), $top_name( (string) ( $p['to'] ?? '' ) ) ),
 				$n['parent_hidden']
 			);
-			$lines[] = sprintf( '這些頁面的新位置對部分角色是隱藏的，那些角色在側欄會看不到它們：%s。', implode( $sep, $pairs ) );
+			$lines[] = sprintf( '這些頁面的新位置有部分角色看不到，那些角色在側欄也看不到這些頁面：%s。', implode( $sep, $pairs ) );
 		}
 
 		$people = [];
@@ -1603,6 +1855,22 @@ final class YSMenuMovesMigrator {
 		}
 		if ( ! empty( $n['conflicts'] ) ) {
 			$lines[] = sprintf( '這些頁面設了「僅限本人」，但和原本的上層選單綁的不是同一個帳號，已經先改成隱藏，請到「全部選單」確認誰該看得到：%s。', implode( $sep, array_map( $name, $n['conflicts'] ) ) );
+		}
+		$who = static function ( array $entries ) use ( $name ): array {
+			return array_map(
+				static function ( $e ) use ( $name ): string {
+					$user = get_userdata( (int) ( $e['user_id'] ?? 0 ) );
+					$acct = $user ? ( '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login ) : '帳號 #' . (int) ( $e['user_id'] ?? 0 );
+					return sprintf( '%s（%s）', $name( (string) ( $e['slug'] ?? '' ) ), $acct );
+				},
+				$entries
+			);
+		};
+		if ( ! empty( $n['bound'] ) ) {
+			$lines[] = sprintf( '這些頁面沿用了原本上層選單的「僅限本人」，現在只有括號裡的帳號看得到：%s。', implode( $sep, $who( $n['bound'] ) ) );
+		}
+		if ( ! empty( $n['gated'] ) ) {
+			$lines[] = sprintf( '這些頁面綁定的帳號原本看不到它們，搬家後已經先改成隱藏，請到「全部選單」確認誰該看得到：%s。', implode( $sep, $who( $n['gated'] ) ) );
 		}
 		if ( ! empty( $n['anchors'] ) ) {
 			$lines[] = sprintf( '這些放在主選單的項目原本接在拆掉的選單群組後面，找不到新的位置，請到「全部選單」重新拖拉：%s。', implode( $sep, array_map( static fn( $a ) => $top_name( (string) ( $a['slug'] ?? '' ) ), $n['anchors'] ) ) );
