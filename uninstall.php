@@ -9,8 +9,9 @@
  * 注意：本外掛的選單設定與樣式設定皆儲存於 wp_options，自己沒有資料表。
  * v1.3.0 的「複製到主選單」（top_copies）與複製項的排序、名稱、圖示（wp_native.items[]）都存在
  * ys_admin_menu_config 裡，刪掉這個 option 就一起清除，沒有另外的 option 或暫存資料。
- * v1.5.0 的 YS CART 選單搬家另有四種 option：遷移標記 ys_admin_menu_moves_applied、遷移紀錄
- * ys_admin_menu_moves_log、遷移鎖 ys_admin_menu_moves_lock、遷移前備份 ys_admin_menu_config_pre_moves_<版本>。
+ * v1.5.0 的 YS CART 選單搬家另有五種 option：遷移標記 ys_admin_menu_moves_applied、遷移紀錄
+ * ys_admin_menu_moves_log、遷移鎖 ys_admin_menu_moves_lock、遷移前備份 ys_admin_menu_config_pre_moves_<版本>，
+ * 以及啟用時改用 YS CART 搬家前備份之前另存的 YS CART 那份 ys_admin_menu_core_copy_pre_activation。
  * 內嵌的 YS Plugin Hub Client 另有兩張資料表（{prefix}ys_hub_client_logs、{prefix}ys_hub_client_settings），
  * 那是站上所有 YS 外掛共用的，這裡不刪。
  *
@@ -32,11 +33,12 @@ if ( is_multisite() ) {
 	delete_option( 'ys_admin_menu_turnstile_secret_key' );
 }
 
-// v1.5.0：YS CART 選單搬家的遷移標記、遷移紀錄、遷移鎖與遷移前備份（ys_admin_menu_config_pre_moves_<版本>）。
+// v1.5.0：YS CART 選單搬家的遷移標記、遷移紀錄、遷移鎖、遷移前備份（ys_admin_menu_config_pre_moves_<版本>），以及啟用時
+// 另存的 YS CART 那份（ys_admin_menu_core_copy_pre_activation）。
 // 勾了「刪除外掛時一併清除所有設定」才刪；多站網路逐站看那個站自己的勾選、刪那個站的（單站在下面一起刪）。
 $ys_admin_menu_purge_moves = static function () {
 	global $wpdb;
-	foreach ( array( 'ys_admin_menu_moves_applied', 'ys_admin_menu_moves_log', 'ys_admin_menu_moves_lock' ) as $ys_admin_menu_moves_option ) {
+	foreach ( array( 'ys_admin_menu_moves_applied', 'ys_admin_menu_moves_log', 'ys_admin_menu_moves_lock', 'ys_admin_menu_core_copy_pre_activation' ) as $ys_admin_menu_moves_option ) {
 		delete_option( $ys_admin_menu_moves_option );
 	}
 	$ys_admin_menu_backups = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ys_admin_menu_config_pre_moves_' ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 備份的 option 名稱帶版本，要用前綴找。

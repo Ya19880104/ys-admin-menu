@@ -80,7 +80,8 @@ final class YSMenuMovesCommand {
 			'項目' => '啟用時的處理',
 			'值'   => null === $event
 				? '沒有紀錄'
-				: sprintf( '%s UTC，%s', gmdate( 'Y-m-d H:i:s', (int) ( $event['at'] ?? 0 ) ), self::label( (string) ( $event['type'] ?? '' ) ) ),
+				: sprintf( '%s UTC，%s', gmdate( 'Y-m-d H:i:s', (int) ( $event['at'] ?? 0 ) ), self::label( (string) ( $event['type'] ?? '' ) ) )
+					. ( is_string( $event['saved'] ?? null ) ? '（YS CART 那份另存在 ' . $event['saved'] . '）' : '' ),
 		];
 		$rows[] = [
 			'項目' => '後台提醒',
@@ -206,7 +207,7 @@ final class YSMenuMovesCommand {
 	 * @param array<string,mixed> $notice
 	 */
 	private static function notice_has_content( array $notice ): bool {
-		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors', 'v2_rules' ] as $k ) {
+		foreach ( [ 'moved', 'whitelist', 'parent_hidden', 'conflicts', 'bound', 'gated', 'group_titles', 'unknown', 'anchors', 'v2_rules', 'core_backup' ] as $k ) {
 			if ( ! empty( $notice[ $k ] ) ) {
 				return true;
 			}

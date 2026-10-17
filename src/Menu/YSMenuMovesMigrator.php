@@ -355,18 +355,19 @@ final class YSMenuMovesMigrator {
 	}
 
 	/**
-	 * 啟用本外掛時（YSMenuConfigBridge::synchronize( true )）做了什麼，記進遷移紀錄的 events（最近幾筆）：
-	 *   - core_backup：YS CART V3 已經自己搬過一次選單設定，改用它的搬家前備份交給本外掛遷移（option 名稱、是否就是上次鏡像）。
-	 *   - core_copy_v2：照 1.4.0 沿用 YS CART 那份，裡面有本外掛看不懂的 v2 規則（列出選單，另外放進後台提醒）。
+	 * 啟用本外掛時（YSMenuConfigBridge::synchronize( true )）做了什麼，記進遷移紀錄的 events（最近幾筆），並放進後台提醒：
+	 *   - core_backup：YS CART V3 已經自己搬過一次選單設定，改用它的搬家前備份交給本外掛遷移（備份的 option、Core 那份另存的
+	 *     option、備份是不是就是上次鏡像）；提醒 core_backup。
+	 *   - core_copy_v2：照 1.4.0 沿用 YS CART 那份，裡面有本外掛看不懂的 v2 規則；提醒 v2_rules（列出選單）。
 	 *
 	 * @param array<string,mixed> $data
-	 * @param array<int,string>   $v2_slugs 要列進後台提醒的選單。
+	 * @param array<string,mixed> $notice 要併進後台提醒的內容（empty_notice() 的鍵）。
 	 */
-	public static function record_activation( string $type, array $data, array $v2_slugs = [] ): void {
+	public static function record_activation( string $type, array $data, array $notice = [] ): void {
 		$log      = self::read_log( self::db_value( self::LOG_OPTION ) );
 		$events   = $log['events'];
 		$events[] = [ 'at' => time(), 'type' => $type ] + $data;
-		$notice   = self::merge_notice( $log['notice'], [ 'v2_rules' => $v2_slugs ] );
+		$notice   = self::merge_notice( $log['notice'], $notice );
 		$fresh    = $notice !== $log['notice'];
 
 		update_option(
@@ -411,6 +412,7 @@ final class YSMenuMovesMigrator {
 			'unknown'       => [],
 			'anchors'       => [],
 			'v2_rules'      => [],
+			'core_backup'   => false,
 			'titles'        => [],
 		];
 	}
@@ -435,7 +437,8 @@ final class YSMenuMovesMigrator {
 		sort( $ids );
 		$out['whitelist'] = $ids;
 
-		$out['rules'] = ! empty( $a['rules'] ) || ! empty( $b['rules'] );
+		$out['rules']       = ! empty( $a['rules'] ) || ! empty( $b['rules'] );
+		$out['core_backup'] = ! empty( $a['core_backup'] ) || ! empty( $b['core_backup'] );
 
 		foreach ( [ 'parent_hidden', 'bound', 'gated', 'group_titles', 'unknown', 'anchors' ] as $k ) {
 			$seen = [];
@@ -1935,6 +1938,11 @@ final class YSMenuMovesMigrator {
 		}
 		if ( ! empty( $n['unknown'] ) ) {
 			$lines[] = sprintf( '新版 YS CART 有 %d 項選單調整，這個版本的 YS 選單管理還看不懂，已經先略過，請更新 YS 選單管理。', count( $n['unknown'] ) );
+		}
+		if ( ! empty( $n['core_backup'] ) ) {
+			$copy    = YSMenuConfigBridge::CORE_COPY_OPTION;
+			$lines[] = '啟用時改用 YS CART 搬家前的那份選單設定，照本外掛的規則重新搬家。停用本外掛期間，如果升級 YS CART V3 之後在 YS CART 改過選單設定（包括 V3 的「全部隱藏」等規則），那些修改沒有帶過來；'
+				. ( false !== get_option( $copy, false ) ? sprintf( 'YS CART 那份已另存，可用 WP-CLI 查看：wp option get %s。', $copy ) : 'YS CART 那份當時不在資料庫裡，沒有另存。' );
 		}
 		if ( ! empty( $n['v2_rules'] ) ) {
 			$lines[] = sprintf( '啟用本外掛時沿用了 YS CART 那份選單設定，其中這些選單用了 YS CART V3 的新可見規則（全部隱藏、隱藏指定角色、僅限操作本人），本外掛看不懂這種規則，現在只照原本的隱藏、角色與「僅限本人」判斷，請到「選單與權限」確認誰看得到：%s。', implode( $sep, array_map( $name, $n['v2_rules'] ) ) );

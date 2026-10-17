@@ -44,7 +44,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - 搬完後台會提醒一次（只給管理員，可關掉），列出要你確認的帳號與頁面。使用者覆寫的可見清單不會自動改。
 - 搬家之前就打開的「選單與權限」設定頁，按「儲存設定」會請你重新整理再存，不會把搬好的設定寫回舊分組。
 - 遷移前的設定備份在 `ys_admin_menu_config_pre_moves_<版本>`。沒有自動還原；要還原時把備份的值寫回 `ys_admin_menu_config`。
-- 本外掛停用期間 YS CART 已經升到 V3、自己搬過一次選單設定的站：啟用本外掛時，只要 YS CART 那份還是它搬完時的樣子（指紋和 YS CART 的搬家標記相同），就改用 YS CART 搬家前存下的那份（`ys_ec_menu_config_pre_moves_<版本>`，只讀），照本外掛的規則重新搬一次再同步回去。不過 YS CART 在設定改過之後的下一個後台頁面就會更新它的搬家標記，所以它搬完之後在它那邊改過的選單設定多半看不出來、會被換掉，啟用後請檢查一次。沿用 YS CART 那份、裡面又有 V3 的新可見規則（全部隱藏、隱藏指定角色、僅限操作本人）時，本外掛看不懂這些規則，後台會提醒一次並列出選單。
+- 本外掛停用期間 YS CART 已經升到 V3、自己搬過一次選單設定的站：啟用本外掛時，只要本外掛自己還沒搬過這一批，就一律改用 YS CART 搬家前存下的那份（`ys_ec_menu_config_pre_moves_<版本>`，只讀），照本外掛的規則重新搬一次再同步回去。YS CART 搬完之後在它那邊改過的選單設定（包括 V3 的「全部隱藏」等新規則）不會帶過來；換掉之前 YS CART 原本那份會原樣另存，查看：`wp option get ys_admin_menu_core_copy_pre_activation`。本外掛已經搬過、或讀不到 YS CART 的搬家標記與備份時照 1.4.0 沿用 YS CART 那份；裡面有 V3 的新可見規則（全部隱藏、隱藏指定角色、僅限操作本人）時，本外掛看不懂這些規則，後台會提醒一次並列出選單。
 - WP-CLI（只讀）：`wp ys-admin-menu moves status` 看遷移狀態、`wp ys-admin-menu moves dry-run` 預覽會改哪些設定列。
 - 搭配舊版 YS CART 或沒有 YS CART 時不會做任何事。
 
@@ -66,7 +66,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - `ys_admin_menu_config` — 選單與權限設定（JSON）。子選單複製到主選單存在 `top_copies.items[]`（每筆只記來源 `slug`、`parent_slug`）；複製項在主選單的排序、名稱、圖示（`icon`）等存在 `wp_native.items[]`，`slug` 是 `./` 開頭的選單代稱（例：`./options-writing.php`）
   - `ys_admin_menu_theme_config` — 原生選單樣式設定
   - `ys_admin_menu_logo_url` / `ys_admin_menu_footer_text` — 白牌
-  - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、本外掛的規則版本、已套用的 `since:slug`；自動載入）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖，值是拿到鎖的請求自己的 token）、`ys_admin_menu_config_pre_moves_<版本>`（遷移前備份），後三種不自動載入
+  - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、本外掛的規則版本、已套用的 `since:slug`；自動載入）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖，值是拿到鎖的請求自己的 token）、`ys_admin_menu_config_pre_moves_<版本>`（遷移前備份）、`ys_admin_menu_core_copy_pre_activation`（啟用時改用 YS CART 搬家前備份之前，另存的 YS CART 那份原字串），後四種不自動載入
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options` + `wp_rest` nonce + body size cap）
 - **自動更新**：透過內嵌的 YS Plugin Hub Client。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
 - **防自我鎖死**：super admin（單站 administrator）不受隱藏、角色限制與使用者覆寫影響，避免把自己鎖在後台外。例外是「僅限本人」：綁定後連其他管理員也看不到該選單
