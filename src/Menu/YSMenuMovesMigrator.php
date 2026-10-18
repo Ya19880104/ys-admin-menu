@@ -1966,6 +1966,7 @@ final class YSMenuMovesMigrator {
 		$name     = static fn( string $slug ): string => self::notice_menu_name( $slug, $titles, false );
 		$top_name = static fn( string $slug ): string => self::notice_menu_name( $slug, $titles, true );
 		$sep      = '、';
+		$admin    = is_multisite() ? '超級管理員' : '管理員'; // 不受隱藏影響的是 super admin（單站就是管理員）
 		$lines    = [];
 
 		if ( ! empty( $n['moved'] ) ) {
@@ -1997,7 +1998,7 @@ final class YSMenuMovesMigrator {
 			$lines[] = sprintf( '這些帳號有自訂可見的選單，請到「使用者覆寫」照新的分組重新勾選：%s。', implode( $sep, $people ) );
 		}
 		if ( ! empty( $n['conflicts'] ) ) {
-			$lines[] = sprintf( '這些頁面設了「僅限本人」，但和原本的上層選單綁的不是同一個帳號，已經先改成隱藏：%s。現在除了綁定的管理員帳號，沒有任何帳號（包括其他管理員）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, array_map( $name, $n['conflicts'] ) ) );
+			$lines[] = sprintf( '這些頁面設了「僅限本人」，但和原本的上層選單綁的不是同一個帳號，已經先改成隱藏：%1$s。現在除了綁定的%2$s帳號，沒有任何帳號（包括其他%2$s）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, array_map( $name, $n['conflicts'] ) ), $admin );
 		}
 		$who = static function ( array $entries ) use ( $name ): array {
 			return array_map(
@@ -2013,7 +2014,7 @@ final class YSMenuMovesMigrator {
 			$lines[] = sprintf( '這些頁面沿用了原本上層選單的「僅限本人」，現在只有括號裡的帳號看得到：%s。', implode( $sep, $who( $n['bound'] ) ) );
 		}
 		if ( ! empty( $n['gated'] ) ) {
-			$lines[] = sprintf( '這些頁面綁定的帳號原本看不到它們，搬家後已經先改成隱藏：%s。現在沒有任何帳號（包括管理員）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, $who( $n['gated'] ) ) );
+			$lines[] = sprintf( '這些頁面綁定的帳號原本看不到它們，搬家後已經先改成隱藏：%1$s。現在沒有任何帳號（包括%2$s）看得到或打得開，要到「全部選單」調整後才會恢復。', implode( $sep, $who( $n['gated'] ) ), $admin );
 		}
 		if ( ! empty( $n['anchors'] ) ) {
 			$lines[] = sprintf( '這些放在主選單的項目原本接在拆掉的選單群組後面，找不到新的位置，請到「全部選單」重新拖拉：%s。', implode( $sep, array_map( static fn( $a ) => $top_name( (string) ( $a['slug'] ?? '' ) ), $n['anchors'] ) ) );
