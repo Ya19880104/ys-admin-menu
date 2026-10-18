@@ -22,6 +22,13 @@ final class YSMenuConfigBridge {
 	/** 本外掛認得的 Core 搬家批次（Core 搬家標記的 version）。之後的版本看得懂新的批次時再加。 */
 	private const KNOWN_CORE_MOVES_VERSIONS = [ 'b1' ];
 
+	/**
+	 * 改用 Core 的搬家前備份時，照 Core 目前那份的帳號層級設定（搬家不動它們；1.4.0 沿用 Core 那份時也是這些值）：
+	 * 「使用者覆寫」（可見清單、僅允許存取受保護的管理選單）、舊格式的可見清單、舊版的 hide_for_user_ids。
+	 * YS CART V3 的設定頁（save_menu_config）寫的鍵只有這三個與兩個分頁的選單列；選單列與複製到主選單（top_copies）用備份。
+	 */
+	private const ACCOUNT_PATHS = [ [ 'user_overrides' ], [ 'wp_native', 'user_overrides' ], [ 'ys_cart', 'hide_for_user_ids' ] ];
+
 	private const MIGRATION_OPTION = 'ys_admin_menu_config_bridge_version';
 
 	private const FINGERPRINT_OPTION = 'ys_admin_menu_config_bridge_fingerprint';
@@ -73,12 +80,12 @@ final class YSMenuConfigBridge {
 
 			if ( $force && $core_changed && $standalone_unchanged ) {
 				// v1.5.0：Core 那份變了，可能是本外掛停用期間 YS CART V3 自己做了選單搬家遷移（照 Core 的規則，含本外掛看不懂的
-				// v2 規則）。本外掛自己還沒搬過這一批時，一律改用 Core 的搬家前備份，交給本外掛自己遷移（再鏡像回去）：備份就是
-				// 當時 Core 那份，停用期間、V3 遷移之前在 Core 改過的也照樣採用；V3 遷移之後在 Core 改過的分不出來，照 D6 不放寬，
-				// 不帶過來（Core 那份先原樣另存）。其他情況照 1.4.0：改用 Core 那份（當成在 Core 改過）。
+				// v2 規則）。本外掛自己還沒搬過這一批時，選單列一律改用 Core 的搬家前備份，交給本外掛自己遷移（再鏡像回去）：備份就是
+				// 當時 Core 那份，停用期間、V3 遷移之前在 Core 改過的也照樣採用；V3 遷移之後在 Core 改的選單列分不出來，照 D6 不放寬，
+				// 不帶過來（Core 那份先原樣另存）。帳號層級的設定照 Core 目前那份（ACCOUNT_PATHS）。其他情況照 1.4.0：改用 Core 那份。
 				$backup = self::core_pre_moves_backup();
 				if ( null !== $backup ) {
-					$config = $backup['config'];
+					$config = $backup['saved'] ? self::with_account_settings( $backup['config'], $core_config ) : $backup['config'];
 				} else {
 					$config    = $core_config;
 					$from_core = true;
@@ -165,6 +172,38 @@ final class YSMenuConfigBridge {
 			}
 		}
 		return [ 'option' => $option, 'config' => $backup, 'saved' => null !== $raw ];
+	}
+
+	/**
+	 * 備份的選單列，加上 Core 目前那份的帳號層級設定（ACCOUNT_PATHS：Core 那份有就照它，沒有就拿掉）。
+	 *
+	 * @param array<string, mixed> $backup Core 的搬家前備份（已解成陣列）。
+	 * @param array<string, mixed> $core   Core 目前那份（已解成陣列）。
+	 * @return array<string, mixed>
+	 */
+	private static function with_account_settings( array $backup, array $core ): array {
+		$config = $backup;
+		foreach ( self::ACCOUNT_PATHS as $path ) {
+			$top = $path[0];
+			$sub = $path[1] ?? null;
+			if ( null === $sub ) {
+				if ( array_key_exists( $top, $core ) ) {
+					$config[ $top ] = $core[ $top ];
+				} else {
+					unset( $config[ $top ] );
+				}
+				continue;
+			}
+			if ( is_array( $core[ $top ] ?? null ) && array_key_exists( $sub, $core[ $top ] ) ) {
+				if ( ! is_array( $config[ $top ] ?? null ) ) {
+					$config[ $top ] = [];
+				}
+				$config[ $top ][ $sub ] = $core[ $top ][ $sub ];
+			} elseif ( is_array( $config[ $top ] ?? null ) ) {
+				unset( $config[ $top ][ $sub ] );
+			}
+		}
+		return $config;
 	}
 
 	/**

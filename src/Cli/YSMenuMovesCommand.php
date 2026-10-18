@@ -246,7 +246,7 @@ final class YSMenuMovesCommand {
 			'hide_sub_row'       => '拆掉的頂層原本隱藏，子選單也隱藏',
 			'top_rules_row'      => '拆掉的頂層只在主選單分頁存過規則，補一列帶這些規則的子選單列',
 			'mirror_failed'      => 'Core 那份鏡像沒寫成（指紋沒更新）',
-			'core_backup'        => 'YS CART 已經自己搬過一次：改用它的搬家前備份，由本外掛重搬',
+			'core_backup'        => 'YS CART 已經自己搬過一次：選單列改用它的搬家前備份由本外掛重搬，帳號設定照 YS CART 那份（那份不在時也用備份）',
 			'core_copy_v2'       => '沿用 YS CART 那份設定，裡面有本外掛看不懂的 v2 規則（已提醒）',
 			'rules_row'          => '新增只帶規則的列',
 			'convert'            => '頂層改成子選單',

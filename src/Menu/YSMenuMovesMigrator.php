@@ -2023,8 +2023,9 @@ final class YSMenuMovesMigrator {
 		}
 		if ( ! empty( $n['core_backup'] ) ) {
 			$copy    = YSMenuConfigBridge::CORE_COPY_OPTION;
-			$lines[] = '啟用時改用 YS CART 搬家前的那份選單設定，照本外掛的規則重新搬家。停用本外掛期間，如果升級 YS CART V3 之後在 YS CART 改過選單設定（包括 V3 的「全部隱藏」等規則），那些修改沒有帶過來；'
-				. ( false !== get_option( $copy, false ) ? sprintf( 'YS CART 那份已另存，可用 WP-CLI 查看：wp option get %s。', $copy ) : 'YS CART 那份當時不在資料庫裡，沒有另存。' );
+			$lines[] = false !== get_option( $copy, false )
+				? sprintf( '啟用時，帳號設定（「使用者覆寫」的可見清單、「僅允許存取受保護的管理選單」）照 YS CART 那份帶過來；選單的順序、名稱和規則改用升級 YS CART V3 之前的那份，照本外掛的規則重新搬家，停用本外掛期間、升級 V3 之後在 YS CART 改的選單設定（包括 V3 的「全部隱藏」等規則）沒有帶過來。YS CART 那份已另存，可用 WP-CLI 查看：wp option get %s。', $copy )
+				: '啟用時改用升級 YS CART V3 之前的那份選單設定（含帳號設定），照本外掛的規則重新搬家；YS CART 那份當時不在資料庫裡，沒有另存。';
 		}
 		if ( ! empty( $n['v2_rules'] ) ) {
 			$lines[] = sprintf( '啟用本外掛時沿用了 YS CART 那份選單設定，其中這些選單用了 YS CART V3 的新可見規則（全部隱藏、隱藏指定角色、僅限操作本人），本外掛看不懂這種規則，現在只照原本的隱藏、角色與「僅限本人」判斷，請到「選單與權限」確認誰看得到：%s。', implode( $sep, array_map( $name, $n['v2_rules'] ) ) );
