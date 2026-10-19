@@ -65,8 +65,9 @@ class YSMenuRouter {
 
 	/**
 	 * v1.3.0：本次請求實際插入側欄的「複製到主選單」項目：選單代稱（$menu[2]）=> 來源資訊。
+	 * v1.5.1：source＝原子選單在側欄上實際的 slug（網址帶 %xx 時跟存下的 slug 不同；判斷目前頁用它）。
 	 *
-	 * @var array<string, array{id:string,slug:string,parent:string,title:string,parent_title:string,parent_icon:string}>
+	 * @var array<string, array{id:string,slug:string,source:string,parent:string,title:string,parent_title:string,parent_icon:string}>
 	 */
 	private static array $copy_entries = [];
 
@@ -90,6 +91,13 @@ class YSMenuRouter {
 	 * @var array<int, array{0:string,1:string}>
 	 */
 	private static array $promoted_rows = [];
+
+	/**
+	 * v1.5.1：這次請求移到主選單的頂層項實際用的連結：「存下的 slug \0 存下的上層」=> 連結（fix_promoted_highlight() 用）。
+	 *
+	 * @var array<string, string>
+	 */
+	private static array $promoted_links = [];
 
 	/**
 	 * 輸出「分組標籤」CSS（帶標題的分隔列）。
@@ -287,23 +295,20 @@ class YSMenuRouter {
 				continue;
 			}
 
+			// v1.5.1：有原字串完全相同的列就用它（跟 1.5.0 一樣），沒有才比鍵（matching_rows()：網址帶 %xx 的子選單、「自訂」）。
 			if ( 'sub' === (string) ( $item['level'] ?? 'top' ) ) {
-				$parent = (string) ( $item['parent_slug'] ?? '' );
-				if ( '' === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+				$parent = self::submenu_parent( (string) ( $item['parent_slug'] ?? '' ) );
+				if ( null === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
 					continue;
 				}
-				foreach ( $submenu[ $parent ] as $i => $sub ) {
-					if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
-						$submenu[ $parent ][ $i ][0] = $name;
-						break;
-					}
+				$hit = self::matching_rows( $submenu[ $parent ], $slug );
+				if ( [] !== $hit ) {
+					$submenu[ $parent ][ $hit[0] ][0] = $name;
 				}
 			} elseif ( is_array( $menu ) ) {
-				foreach ( $menu as $i => $m ) {
-					if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $slug ) {
-						$menu[ $i ][0] = $name;
-						break;
-					}
+				$hit = self::matching_rows( $menu, $slug );
+				if ( [] !== $hit ) {
+					$menu[ $hit[0] ][0] = $name;
 				}
 			}
 		}
@@ -325,10 +330,12 @@ class YSMenuRouter {
 	 */
 	private static function promote_submenus_to_top( array $ys_cart_items ): void {
 		global $menu, $submenu;
+		self::$promoted_links = [];
 		if ( ! is_array( $menu ) ) {
 			return;
 		}
 
+		$promoted = []; // v1.5.1：已經移上去的列（上層 + 實際 slug）。用鍵對到的列只移一次。
 		foreach ( $ys_cart_items as $item ) {
 			if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) ) {
 				continue;
@@ -336,27 +343,28 @@ class YSMenuRouter {
 			if ( 'sub' !== (string) ( $item['level'] ?? 'top' ) ) {
 				continue;
 			}
-			$slug   = (string) ( $item['slug'] ?? '' );
-			$parent = (string) ( $item['parent_slug'] ?? '' );
-			if ( '' === $slug || '' === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
+			$slug          = (string) ( $item['slug'] ?? '' );
+			$stored_parent = (string) ( $item['parent_slug'] ?? '' );
+			$parent        = self::submenu_parent( $stored_parent );
+			if ( '' === $slug || null === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
 				continue;
 			}
 
-			// 從原父層子選單取出該列
-			$row = null;
-			foreach ( $submenu[ $parent ] as $idx => $sub ) {
-				if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
-					$row = $sub;
-					// 這一列先留在原父層：WordPress 要靠它找回這個頁面註冊時的父層（權限檢查與 page hook
-					// 都從父層推導）。父層是外掛頂層（admin.php?page=…）時，提早拿掉會讓該頁對所有人 403。
-					// 輸出側欄前才由 prepare_menu_for_render() 拿掉，畫面上仍然只出現在頂層。
-					self::$promoted_rows[] = [ $parent, (string) $sub[2] ];
-					break;
-				}
-			}
-			if ( null === $row ) {
+			// 從原父層子選單取出該列（v1.5.1：原字串對不到時比鍵，matching_rows()）。
+			$hit = self::matching_rows( $submenu[ $parent ], $slug );
+			if ( [] === $hit ) {
 				continue;
 			}
+			$row = $submenu[ $parent ][ $hit[0] ];
+			$raw = (string) $row[2];
+			if ( $raw !== $slug && isset( $promoted[ $parent . "\0" . $raw ] ) ) {
+				continue; // 同一列存了兩份字串不同的設定（例如「自訂」從不同網址存過）：只移一次。
+			}
+			$promoted[ $parent . "\0" . $raw ] = true;
+			// 這一列先留在原父層：WordPress 要靠它找回這個頁面註冊時的父層（權限檢查與 page hook
+			// 都從父層推導）。父層是外掛頂層（admin.php?page=…）時，提早拿掉會讓該頁對所有人 403。
+			// 輸出側欄前才由 prepare_menu_for_render() 拿掉，畫面上仍然只出現在頂層。
+			self::$promoted_rows[] = [ $parent, $raw ];
 
 			// 頂層 icon：沿用原父層選單的 icon，找不到用預設。
 			$icon = 'dashicons-admin-generic';
@@ -369,13 +377,16 @@ class YSMenuRouter {
 
 			$title   = (string) ( $row[0] ?? $slug );
 			$id_base = sanitize_html_class( str_replace( [ '.php', '?', '=', '&' ], '-', $slug ) );
+			// v1.5.1：連結用側欄上那一列實際的 slug 與上層（存下的字串少了 %xx，組出來的網址打不開）。
+			$link = self::promoted_menu_url( $raw, $parent );
+			self::$promoted_links[ $slug . "\0" . $stored_parent ] = $link;
 
 			// PHP 自動 max-int-key+1 append；之後 reorder_and_insert_separators 可依
 			// 「主選單（頂層）」tab 設定的 order 重排此項。
 			$menu[] = [
 				$title,
 				(string) ( $row[1] ?? 'read' ),
-				self::promoted_menu_url( $slug, $parent ),
+				$link,
 				(string) ( $row[3] ?? $title ),
 				'menu-top ys-am-promoted menu-top-' . $id_base,
 				'ys-am-promoted-' . $id_base,
@@ -429,7 +440,7 @@ class YSMenuRouter {
 				continue;
 			}
 			$slug = (string) ( $item['slug'] ?? '' );
-			if ( '' === $slug || $slug !== $current ) {
+			if ( '' === $slug || self::slug_key( $slug ) !== $current ) {
 				continue;
 			}
 
@@ -438,7 +449,8 @@ class YSMenuRouter {
 
 			self::$current_is_promoted = true;
 
-			return self::promoted_menu_url( $slug, (string) ( $item['parent_slug'] ?? '' ) );
+			$parent = (string) ( $item['parent_slug'] ?? '' );
+			return self::$promoted_links[ $slug . "\0" . $parent ] ?? self::promoted_menu_url( $slug, $parent );
 		}
 
 		return $parent_file;
@@ -589,7 +601,7 @@ class YSMenuRouter {
 	/**
 	 * v1.3.0：這次請求插入側欄的複製項（設定頁標示「複製」、排序與 badge 用）。
 	 *
-	 * @return array<string, array{id:string,slug:string,parent:string,title:string,parent_title:string,parent_icon:string}>
+	 * @return array<string, array{id:string,slug:string,source:string,parent:string,title:string,parent_title:string,parent_icon:string}>
 	 */
 	public static function copy_entries(): array {
 		return self::$copy_entries;
@@ -629,7 +641,7 @@ class YSMenuRouter {
 	 *   - 圖示：主選單分頁設定的圖示，沒設定沿用原父選單的圖示。
 	 */
 	private static function insert_top_level_copies( array $config, int $user_id, array $user_roles ): void {
-		global $menu;
+		global $menu, $_wp_real_parent_file;
 
 		self::$copy_entries     = [];
 		self::$current_copy_key = '';
@@ -639,10 +651,11 @@ class YSMenuRouter {
 			return;
 		}
 
+		// v1.5.1：複製項自己的設定列以鍵索引（「自訂」這類 return 每頁不同的複製項，兩個分頁存下的字串不一樣）。
 		$native_rows = [];
 		foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $row ) {
 			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
-				$native_rows[ (string) $row['slug'] ] = $row;
+				$native_rows[ self::slug_key( (string) $row['slug'] ) ] = $row;
 			}
 		}
 
@@ -656,7 +669,7 @@ class YSMenuRouter {
 			$slug   = (string) ( $copy['slug'] ?? '' );
 			$parent = (string) ( $copy['parent_slug'] ?? '' );
 			$key    = self::copy_menu_key( $slug, $parent );
-			if ( '' === $key || isset( self::$copy_entries[ $key ] ) ) {
+			if ( '' === $key ) {
 				continue;
 			}
 
@@ -666,7 +679,20 @@ class YSMenuRouter {
 			}
 			[ $row, $real_parent ] = $source;
 
-			$own     = $native_rows[ $key ] ?? [];
+			// v1.5.1：原子選單或它的上層是用鍵對到的（網址帶 %xx），連結改用側欄上實際的 slug 與上層組（存下的字串少了 %xx）。
+			// 上層照原字串找得到（或是 WordPress 換過代稱的 $_wp_real_parent_file）時照 1.5.0 用存下的上層。
+			$source_slug = (string) ( $row[2] ?? '' );
+			$link_parent = ( $real_parent === $parent || ( is_array( $_wp_real_parent_file ?? null ) && ( $_wp_real_parent_file[ $parent ] ?? null ) === $real_parent ) )
+				? $parent
+				: $real_parent;
+			if ( wp_specialchars_decode( $source_slug ) !== wp_specialchars_decode( $slug ) || $link_parent !== $parent ) {
+				$key = self::copy_menu_key( $source_slug, $link_parent );
+			}
+			if ( '' === $key || isset( self::$copy_entries[ $key ] ) ) {
+				continue;
+			}
+
+			$own     = $native_rows[ self::slug_key( $key ) ] ?? [];
 			$own_uid = (int) ( $own['self_only_uid'] ?? 0 );
 			if ( $own_uid > 0 && $own_uid !== $user_id ) {
 				continue;
@@ -715,6 +741,7 @@ class YSMenuRouter {
 			self::$copy_entries[ $key ] = [
 				'id'           => 'ys-am-copy-' . $id_base,
 				'slug'         => $slug,
+				'source'       => $source_slug,
 				'parent'       => $parent,
 				'title'        => trim( wp_strip_all_tags( $title ) ),
 				'parent_title' => $parent_meta['title'],
@@ -764,13 +791,42 @@ class YSMenuRouter {
 		if ( is_array( $_wp_real_parent_file ?? null ) && isset( $_wp_real_parent_file[ $parent ] ) ) {
 			$parents[] = (string) $_wp_real_parent_file[ $parent ];
 		}
-
+		// v1.5.1：上層照原字串找不到時比鍵（submenu_parent()）。
+		$found = [];
 		foreach ( array_unique( $parents ) as $p ) {
+			$actual = self::submenu_parent( (string) $p );
+			if ( null !== $actual ) {
+				$found[] = $actual;
+			}
+		}
+		$found = array_values( array_unique( $found ) );
+
+		foreach ( $found as $p ) {
 			if ( empty( $submenu[ $p ] ) || ! is_array( $submenu[ $p ] ) ) {
 				continue;
 			}
 			foreach ( $submenu[ $p ] as $sub ) {
 				if ( is_array( $sub ) && wp_specialchars_decode( (string) ( $sub[2] ?? '' ) ) === $want ) {
+					return [ $sub, (string) $p ];
+				}
+			}
+		}
+
+		// v1.5.1：原字串都對不到，才找存檔時會被改掉、鍵又相同的子選單（網址帶 %xx）。
+		$key = self::slug_key( $want );
+		if ( '' === $key ) {
+			return null;
+		}
+		foreach ( $found as $p ) {
+			if ( empty( $submenu[ $p ] ) || ! is_array( $submenu[ $p ] ) ) {
+				continue;
+			}
+			foreach ( $submenu[ $p ] as $sub ) {
+				if ( ! is_array( $sub ) ) {
+					continue;
+				}
+				$raw = wp_specialchars_decode( (string) ( $sub[2] ?? '' ) );
+				if ( self::slug_is_altered( $raw ) && self::slug_key( $raw ) === $key ) {
 					return [ $sub, (string) $p ];
 				}
 			}
@@ -858,9 +914,9 @@ class YSMenuRouter {
 			$parents[ $key ] = $info['parent'];
 		}
 		if ( ! empty( $anchored ) ) {
-			$anchored_ids = [];
+			$anchored_ids = []; // v1.5.1：以鍵比（「自訂」移到主選單後，兩個分頁存下的代稱字串不同）。
 			foreach ( $anchored as $row ) {
-				$anchored_ids[ wp_specialchars_decode( (string) $row['slug'] ) ] = true;
+				$anchored_ids[ self::slug_key( wp_specialchars_decode( (string) $row['slug'] ) ) ] = true;
 			}
 			foreach ( $ys_cart_items as $item ) {
 				if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) || 'sub' !== (string) ( $item['level'] ?? '' ) ) {
@@ -868,7 +924,7 @@ class YSMenuRouter {
 				}
 				$parent = (string) ( $item['parent_slug'] ?? '' );
 				$key    = self::promoted_menu_url( (string) ( $item['slug'] ?? '' ), $parent );
-				if ( isset( $anchored_ids[ wp_specialchars_decode( $key ) ] ) ) {
+				if ( isset( $anchored_ids[ self::slug_key( wp_specialchars_decode( $key ) ) ] ) ) {
 					$parents[ $key ] = $parent;
 				}
 			}
@@ -877,20 +933,22 @@ class YSMenuRouter {
 			return $wp_native_items;
 		}
 
+		// v1.5.1：以鍵比（複製項的代稱是側欄上實際的連結，網址帶 %xx 時跟存下的字串不同）。
 		$order_by_slug = [];
 		foreach ( $wp_native_items as $row ) {
 			if ( is_array( $row ) && empty( $row['separator'] ) && isset( $row['slug'] ) ) {
-				$order_by_slug[ (string) $row['slug'] ] = (int) ( $row['order'] ?? 0 );
+				$order_by_slug[ self::slug_key( (string) $row['slug'] ) ] = (int) ( $row['order'] ?? 0 );
 			}
 		}
 
 		foreach ( $parents as $key => $parent ) {
-			if ( isset( $order_by_slug[ $key ] ) || ! isset( $order_by_slug[ $parent ] ) ) {
+			$key = (string) $key;
+			if ( isset( $order_by_slug[ self::slug_key( $key ) ] ) || ! isset( $order_by_slug[ self::slug_key( (string) $parent ) ] ) ) {
 				continue;
 			}
 			$wp_native_items[] = [
 				'slug'  => $key,
-				'order' => $order_by_slug[ $parent ],
+				'order' => $order_by_slug[ self::slug_key( (string) $parent ) ],
 			];
 		}
 
@@ -948,6 +1006,7 @@ class YSMenuRouter {
 		}
 
 		$key_of = []; // 代稱（還原 &amp;）=> $menu 鍵
+		$by_key = []; // v1.5.1：存檔時會被改掉的代稱，鍵 => 代稱（第一個）
 		foreach ( $menu as $k => $m ) {
 			if ( ! is_array( $m ) || ! isset( $m[2] ) || '' === (string) $m[2] ) {
 				continue;
@@ -956,12 +1015,22 @@ class YSMenuRouter {
 			if ( ! isset( $key_of[ $id ] ) ) {
 				$key_of[ $id ] = $k;
 			}
+			if ( self::slug_is_altered( $id ) && ! isset( $by_key[ self::slug_key( $id ) ] ) ) {
+				$by_key[ self::slug_key( $id ) ] = $id;
+			}
 		}
+		// v1.5.1：存下的代稱照原字串找不到時，換成鍵相同的實際代稱（網址帶 %xx、「自訂」的 return 每頁不同）。
+		$live_id = static function ( string $stored ) use ( $key_of, $by_key ): string {
+			if ( '' === $stored || isset( $key_of[ $stored ] ) ) {
+				return $stored;
+			}
+			return $by_key[ self::slug_key( $stored ) ] ?? $stored;
+		};
 
 		$pending = []; // 代稱 => [ 錨點, 設定列 ]
 		foreach ( $anchored as $row ) {
-			$id    = wp_specialchars_decode( (string) $row['slug'] );
-			$after = wp_specialchars_decode( (string) $row['after'] );
+			$id    = $live_id( wp_specialchars_decode( (string) $row['slug'] ) );
+			$after = $live_id( wp_specialchars_decode( (string) $row['after'] ) );
 			if ( isset( $key_of[ $id ] ) && $after !== $id && ! isset( $pending[ $id ] ) ) {
 				$pending[ $id ] = [ $after, $row ];
 			}
@@ -1042,7 +1111,7 @@ class YSMenuRouter {
 		}
 
 		foreach ( self::$copy_entries as $key => $info ) {
-			if ( isset( $present[ $key ] ) && self::copy_matches_request( $info['slug'] ) ) {
+			if ( isset( $present[ $key ] ) && self::copy_matches_request( $info['source'] ) ) {
 				self::$current_copy_key = $key;
 				break;
 			}
@@ -1140,7 +1209,8 @@ class YSMenuRouter {
 			return;
 		}
 
-		// parent_slug => [ child_slug => order ]
+		// 實際的上層 => [ 實際的子選單 slug => order ]
+		// v1.5.1：存下的上層、子選單照原字串找不到時比鍵（submenu_parent()、matching_rows()），換成側欄上實際的字串。
 		$order_map = [];
 		foreach ( $ys_cart_items as $item ) {
 			if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
@@ -1158,7 +1228,15 @@ class YSMenuRouter {
 			if ( ! isset( $item['order'] ) ) {
 				continue;
 			}
-			$order_map[ $parent ][ $slug ] = (int) $item['order'];
+			$parent = self::submenu_parent( $parent );
+			if ( null === $parent || ! is_array( $submenu[ $parent ] ) ) {
+				continue;
+			}
+			$hit = self::matching_rows( $submenu[ $parent ], $slug );
+			if ( [] === $hit ) {
+				continue;
+			}
+			$order_map[ $parent ][ (string) $submenu[ $parent ][ $hit[0] ][2] ] = (int) $item['order'];
 		}
 
 		if ( empty( $order_map ) ) {
@@ -1270,8 +1348,9 @@ class YSMenuRouter {
 			return;
 		}
 
-		// slug → allowed roles 映射
-		$rule = [];
+		// slug → allowed roles 映射（v1.5.1：另存一份以鍵索引的，給存檔時會被改掉的實際 slug 用）
+		$rule     = [];
+		$rule_key = [];
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
 				continue;
@@ -1282,6 +1361,9 @@ class YSMenuRouter {
 			}
 			$roles = array_map( 'sanitize_key', (array) ( $item['roles'] ?? [] ) );
 			$rule[ $slug ] = $roles;
+			if ( '' !== self::slug_key( $slug ) ) {
+				$rule_key[ self::slug_key( $slug ) ] = $roles;
+			}
 		}
 
 		foreach ( $menu as $position => $menu_item ) {
@@ -1289,10 +1371,16 @@ class YSMenuRouter {
 				continue;
 			}
 			$slug = isset( $menu_item[2] ) ? (string) $menu_item[2] : '';
-			if ( '' === $slug || ! isset( $rule[ $slug ] ) ) {
+			if ( '' === $slug ) {
 				continue;
 			}
-			$allowed = $rule[ $slug ];
+			if ( isset( $rule[ $slug ] ) ) {
+				$allowed = $rule[ $slug ];
+			} elseif ( self::slug_is_altered( $slug ) && isset( $rule_key[ self::slug_key( $slug ) ] ) ) {
+				$allowed = $rule_key[ self::slug_key( $slug ) ];
+			} else {
+				continue;
+			}
 			if ( empty( $allowed ) ) {
 				// 沒設 roles → 不限制
 				continue;
@@ -1311,7 +1399,8 @@ class YSMenuRouter {
 		if ( ! is_array( $menu ) || empty( $visible_slugs ) ) {
 			return;
 		}
-		$visible = array_flip( $visible_slugs );
+		$visible     = array_flip( $visible_slugs );
+		$visible_key = self::key_set( $visible_slugs ); // v1.5.1：存檔時會被改掉的實際 slug 用鍵比。
 		foreach ( $menu as $position => $menu_item ) {
 			if ( ! is_array( $menu_item ) ) {
 				continue;
@@ -1326,9 +1415,14 @@ class YSMenuRouter {
 				continue;
 			}
 			// v1.5.0：導覽列（admin.php?page=<YS CART 頁面>&…）在 V3 上用它指向的頁面比對白名單（nav_target()）。
-			if ( ! isset( $visible[ self::nav_target( $slug ) ] ) ) {
-				unset( $menu[ $position ] );
+			$target = self::nav_target( $slug );
+			if ( isset( $visible[ $target ] ) ) {
+				continue;
 			}
+			if ( self::slug_is_altered( $target ) && isset( $visible_key[ self::slug_key( $target ) ] ) ) {
+				continue;
+			}
+			unset( $menu[ $position ] );
 		}
 	}
 
@@ -1531,10 +1625,11 @@ class YSMenuRouter {
 		$user       = get_userdata( $user_id );
 		$user_roles = $user ? array_map( 'sanitize_key', (array) $user->roles ) : [];
 
+		// v1.5.1：$slug 已經是鍵，存下的那邊也換成鍵再比（跟 apply_config() 對存檔時會被改掉的 slug 一樣）。
 		if ( $top ) {
 			$allowed = [];
 			foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $item ) {
-				if ( is_array( $item ) && empty( $item['separator'] ) && (string) ( $item['slug'] ?? '' ) === $slug ) {
+				if ( is_array( $item ) && empty( $item['separator'] ) && self::slug_key( (string) ( $item['slug'] ?? '' ) ) === $slug ) {
 					$allowed = array_map( 'sanitize_key', (array) ( $item['roles'] ?? [] ) );
 				}
 			}
@@ -1542,14 +1637,14 @@ class YSMenuRouter {
 				return false;
 			}
 			$visible = self::resolve_visible_slugs_for_user( $config, $user_id );
-			if ( ! empty( $visible ) && ! in_array( self::nav_target( $slug ), $visible, true ) ) {
+			if ( ! empty( $visible ) && ! isset( self::key_set( $visible )[ self::nav_target( $slug ) ] ) ) {
 				return false;
 			}
 		}
 
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
 			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
-				if ( ! is_array( $item ) || empty( $item['hide'] ) || (string) ( $item['slug'] ?? '' ) !== $slug ) {
+				if ( ! is_array( $item ) || empty( $item['hide'] ) || self::slug_key( (string) ( $item['slug'] ?? '' ) ) !== $slug ) {
 					continue;
 				}
 				$sub_row = 'sub' === (string) ( $item['level'] ?? 'top' );
@@ -1570,9 +1665,11 @@ class YSMenuRouter {
 	 * @param array<string,mixed> $config
 	 */
 	public static function copy_allows( string $slug, string $parent, array $config, int $user_id ): bool {
+		// v1.5.1：以鍵比（跟側欄 insert_top_level_copies() 一樣）。
 		$found = false;
 		foreach ( (array) ( $config['top_copies']['items'] ?? [] ) as $copy ) {
-			if ( is_array( $copy ) && (string) ( $copy['slug'] ?? '' ) === $slug && (string) ( $copy['parent_slug'] ?? '' ) === $parent ) {
+			if ( is_array( $copy ) && self::slug_key( (string) ( $copy['slug'] ?? '' ) ) === self::slug_key( $slug )
+				&& self::slug_key( (string) ( $copy['parent_slug'] ?? '' ) ) === self::slug_key( $parent ) ) {
 				$found = true;
 				break;
 			}
@@ -1581,10 +1678,10 @@ class YSMenuRouter {
 			return false;
 		}
 
-		$key = self::copy_menu_key( $slug, $parent );
+		$key = self::slug_key( self::copy_menu_key( $slug, $parent ) );
 		$own = [];
 		foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $row ) {
-			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) && (string) $row['slug'] === $key ) {
+			if ( '' !== $key && is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) && self::slug_key( (string) $row['slug'] ) === $key ) {
 				$own = $row;
 			}
 		}
@@ -1941,8 +2038,14 @@ class YSMenuRouter {
 				continue;
 			}
 
-			$slugs[] = (string) ( $item['slug'] ?? '' );
-			$slugs[] = (string) ( $item['parent_slug'] ?? '' );
+			foreach ( [ (string) ( $item['slug'] ?? '' ), (string) ( $item['parent_slug'] ?? '' ) ] as $s ) {
+				// v1.5.1：customize.php 的列不收。鍵不比 return 之後，存下的「自訂」會對上每一頁的「自訂」；1.5.0 只有在
+				// 存檔的那一頁對得上。這張表決定「僅允許存取受保護的管理選單」（與舊版 hide_for_user_ids）的帳號看得到什麼，
+				// 「自訂」是 WordPress 的頁面，不因為這一版就多放行。
+				if ( ! self::is_customize_link( $s ) ) {
+					$slugs[] = $s;
+				}
+			}
 		}
 
 		$slugs = array_merge(
@@ -1984,22 +2087,136 @@ class YSMenuRouter {
 	}
 
 	private static function normalize_admin_slug( string $slug ): string {
-		$slug = trim( $slug );
-		if ( '' === $slug ) {
-			return '';
-		}
+		return self::slug_key( $slug );
+	}
 
-		return function_exists( 'sanitize_text_field' )
-			? sanitize_text_field( $slug )
-			: ( preg_replace( '/[^\w.\-?=&:\/]/', '', $slug ) ?: '' );
+	/** v1.5.1：slug_key() 的結果（同一個請求裡同一個字串會算很多次）。 */
+	private static array $key_cache = [];
+
+	/**
+	 * v1.5.1：比對「存下的 slug」與「側欄上實際的 slug」用的鍵。
+	 *
+	 * - 存檔時 slug 經過 sanitize_text_field()，WordPress 會把 %xx 這種百分比編碼整段拿掉，舊存檔就是這個樣子。
+	 *   實際的 slug 經過同一個函式就對得上，不用重存；sanitize_text_field() 對清過的字串不會再改，存下的鍵就是它自己。
+	 * - customize.php 的 return 參數是 WordPress 依「目前這一頁」加上的，每一頁都不一樣：只留參數名、不比值。
+	 *   直接開 customize.php 的請求鍵是 customize.php（不帶參數），跟「自訂」那一列的鍵不同，直連守門照舊。
+	 * - 不還原 &amp;：原本先還原再比的地方照舊先還原，再算鍵。
+	 *
+	 * 什麼時候用鍵：原字串對得上的列一律照原字串（跟 1.5.0 完全一樣）；只有「存檔時會被改掉」的實際 slug
+	 * （slug_is_altered()）原字串對不上，才改用鍵。權限判斷（current_user_can_access_admin_slug() 這一系列）
+	 * 從 1.4.0 起就是兩邊都正規化再比，這裡只是讓 customize.php 的 return 也不比。
+	 */
+	public static function slug_key( string $slug ): string {
+		if ( isset( self::$key_cache[ $slug ] ) ) {
+			return self::$key_cache[ $slug ];
+		}
+		$key = trim( $slug );
+		if ( '' !== $key ) {
+			if ( self::is_customize_link( $key ) ) {
+				$key = (string) preg_replace( '/([?&;])return=[^&]*/', '$1return=', $key );
+			}
+			$key = function_exists( 'sanitize_text_field' )
+				? (string) sanitize_text_field( $key )
+				: ( preg_replace( '/[^\w.\-?=&:\/]/', '', $key ) ?: '' );
+		}
+		if ( count( self::$key_cache ) >= 5000 ) {
+			self::$key_cache = [];
+		}
+		self::$key_cache[ $slug ] = $key;
+		return $key;
+	}
+
+	/** v1.5.1：customize.php 帶參數的連結（「自訂」「頁首」「背景」；複製到主選單的 ./customize.php?… 也算）。 */
+	private static function is_customize_link( string $slug ): bool {
+		return 1 === preg_match( '#^(?:\./)?customize\.php\?#', trim( $slug ) );
+	}
+
+	/**
+	 * v1.5.1：這個實際的 slug 存檔時會不會被改掉（帶 %xx、前後空白、customize.php 的 return…）。
+	 * 會被改掉的，存下的設定跟它的原字串永遠對不上，只能用鍵對。
+	 */
+	public static function slug_is_altered( string $slug ): bool {
+		return '' !== $slug && self::slug_key( $slug ) !== $slug;
+	}
+
+	/**
+	 * v1.5.1：在一串側欄列（$menu，或 $submenu 的某個上層）裡找存下的 slug 對到的列。
+	 *   - 有原字串完全相同的列：就是它們（跟 1.5.0 一樣）。
+	 *   - 一列都沒有：找「存檔時會被改掉」、鍵又相同的列（網址帶 %xx 的子選單、「自訂」）。
+	 *
+	 * @param array<int|string, mixed> $rows
+	 * @return array<int, int|string> 對到的列在陣列裡的鍵（依陣列順序）。
+	 */
+	private static function matching_rows( array $rows, string $stored ): array {
+		$exact = [];
+		$keyed = [];
+		$want  = self::slug_key( $stored );
+		foreach ( $rows as $i => $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$raw = (string) ( $row[2] ?? '' );
+			if ( '' === $raw ) {
+				continue;
+			}
+			if ( $raw === $stored ) {
+				$exact[] = $i;
+			} elseif ( '' !== $want && self::slug_is_altered( $raw ) && self::slug_key( $raw ) === $want ) {
+				$keyed[] = $i;
+			}
+		}
+		return [] !== $exact ? $exact : $keyed;
+	}
+
+	/**
+	 * v1.5.1：存下的上層 slug 對到的實際 $submenu 鍵：原字串有就用它，沒有才找鍵相同、存檔時會被改掉的上層。
+	 */
+	private static function submenu_parent( string $parent ): ?string {
+		global $submenu;
+		if ( '' === $parent || ! is_array( $submenu ) ) {
+			return null;
+		}
+		if ( isset( $submenu[ $parent ] ) ) {
+			return $parent;
+		}
+		$want = self::slug_key( $parent );
+		if ( '' === $want ) {
+			return null;
+		}
+		foreach ( array_keys( $submenu ) as $p ) {
+			$p = (string) $p;
+			if ( self::slug_is_altered( $p ) && self::slug_key( $p ) === $want ) {
+				return $p;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * v1.5.1：一串 slug 換成鍵的對照表（鍵 => true）；空字串不收。
+	 *
+	 * @param array<int, mixed> $slugs
+	 * @return array<string, bool>
+	 */
+	private static function key_set( array $slugs ): array {
+		$out = [];
+		foreach ( $slugs as $slug ) {
+			$key = is_scalar( $slug ) ? self::slug_key( (string) $slug ) : '';
+			if ( '' !== $key ) {
+				$out[ $key ] = true;
+			}
+		}
+		return $out;
 	}
 
 	private static function apply_hide_flags( array $config ): void {
 		global $menu, $submenu;
 
-		// 收集所有 hide=true 的 slug
+		// 收集所有 hide=true 的 slug（v1.5.1：另收一份鍵，給存檔時會被改掉的實際 slug 用：網址帶 %xx、「自訂」）
 		$hidden_top = [];
 		$hidden_sub = []; // [ slug => true ]
+		$top_keys   = [];
+		$sub_keys   = [];
 
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
 			$items = (array) ( $config[ $tab ]['items'] ?? [] );
@@ -2012,10 +2229,17 @@ class YSMenuRouter {
 				if ( '' === $slug ) {
 					continue;
 				}
+				$key = self::slug_key( $slug );
 				if ( 'sub' === $level ) {
 					$hidden_sub[ $slug ] = true;
+					if ( '' !== $key ) {
+						$sub_keys[ $key ] = true;
+					}
 				} else {
 					$hidden_top[ $slug ] = true;
+					if ( '' !== $key ) {
+						$top_keys[ $key ] = true;
+					}
 				}
 			}
 		}
@@ -2024,6 +2248,13 @@ class YSMenuRouter {
 			return;
 		}
 
+		$hidden = static function ( string $slug, array $exact, array $keys ): bool {
+			if ( '' === $slug ) {
+				return false;
+			}
+			return isset( $exact[ $slug ] ) || ( self::slug_is_altered( $slug ) && isset( $keys[ self::slug_key( $slug ) ] ) );
+		};
+
 		// Top-level：從 $menu 移除
 		if ( ! empty( $hidden_top ) && is_array( $menu ) ) {
 			foreach ( $menu as $position => $menu_item ) {
@@ -2031,7 +2262,7 @@ class YSMenuRouter {
 					continue;
 				}
 				$slug = isset( $menu_item[2] ) ? (string) $menu_item[2] : '';
-				if ( '' !== $slug && isset( $hidden_top[ $slug ] ) ) {
+				if ( $hidden( $slug, $hidden_top, $top_keys ) ) {
 					unset( $menu[ $position ] );
 				}
 			}
@@ -2048,7 +2279,7 @@ class YSMenuRouter {
 						continue;
 					}
 					$sub_slug = isset( $sub[2] ) ? (string) $sub[2] : '';
-					if ( '' !== $sub_slug && isset( $hidden_sub[ $sub_slug ] ) ) {
+					if ( $hidden( $sub_slug, $hidden_sub, $sub_keys ) ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}
@@ -2132,9 +2363,11 @@ class YSMenuRouter {
 			}
 		}
 
+		// v1.5.1：存下的 slug 也換成鍵再比（$page 已經是鍵；存檔時清過的字串，鍵就是它自己）。
+		// 「自訂」那一列的鍵是 customize.php?return=，直接開 customize.php 的鍵是 customize.php，照舊不相等。
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
 			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
-				if ( is_array( $item ) && ! empty( $item['hide'] ) && ( $item['slug'] ?? '' ) === $page ) {
+				if ( is_array( $item ) && ! empty( $item['hide'] ) && is_string( $item['slug'] ?? null ) && self::slug_key( $item['slug'] ) === $page ) {
 					return false;
 				}
 			}
@@ -2264,6 +2497,7 @@ class YSMenuRouter {
 		// 收集現有 menu items（依 slug 索引）
 		$existing_by_slug = [];
 		$untracked        = []; // 未被 config 列出的（保留尾巴）
+		$altered_by_key   = []; // v1.5.1：存檔時會被改掉的 slug：鍵 => [ slug, … ]（側欄順序）
 		foreach ( $menu as $menu_item ) {
 			if ( ! is_array( $menu_item ) ) {
 				continue;
@@ -2273,6 +2507,9 @@ class YSMenuRouter {
 				continue;
 			}
 			$existing_by_slug[ $slug ] = $menu_item;
+			if ( self::slug_is_altered( $slug ) && '' !== self::slug_key( $slug ) ) {
+				$altered_by_key[ self::slug_key( $slug ) ][ $slug ] = true;
+			}
 		}
 
 		// 排序 config items
@@ -2314,8 +2551,22 @@ class YSMenuRouter {
 			}
 
 			$slug = isset( $item['slug'] ) ? (string) $item['slug'] : '';
-			if ( '' === $slug || ! isset( $existing_by_slug[ $slug ] ) ) {
+			if ( '' === $slug ) {
 				continue;
+			}
+			if ( ! isset( $existing_by_slug[ $slug ] ) ) {
+				// v1.5.1：原字串對不到時，改用鍵相同、還沒排進去的第一列（網址帶 %xx、「自訂」的 return 每頁不同）。
+				$found = null;
+				foreach ( array_keys( $altered_by_key[ self::slug_key( $slug ) ] ?? [] ) as $candidate ) {
+					if ( ! isset( $used_slugs[ (string) $candidate ] ) ) {
+						$found = (string) $candidate;
+						break;
+					}
+				}
+				if ( null === $found ) {
+					continue;
+				}
+				$slug = $found;
 			}
 			$menu_item = $existing_by_slug[ $slug ];
 
@@ -2362,9 +2613,15 @@ class YSMenuRouter {
 		// menu-dashboard、menu-pages 這種語意名稱，無法從 slug 推出來，只能查 $menu）。
 		global $menu;
 		$id_by_slug = [];
+		$id_by_key  = []; // v1.5.1：存檔時會被改掉的 slug（網址帶 %xx、「自訂」）：鍵 => id（第一個）
 		foreach ( (array) $menu as $menu_item ) {
 			if ( is_array( $menu_item ) && isset( $menu_item[2] ) && ! empty( $menu_item[5] ) ) {
-				$id_by_slug[ (string) $menu_item[2] ] = (string) preg_replace( '|[^a-zA-Z0-9_:.]|', '-', (string) $menu_item[5] );
+				$li_id = (string) preg_replace( '|[^a-zA-Z0-9_:.]|', '-', (string) $menu_item[5] );
+				$slug  = (string) $menu_item[2];
+				$id_by_slug[ $slug ] = $li_id;
+				if ( self::slug_is_altered( $slug ) && '' !== self::slug_key( $slug ) && ! isset( $id_by_key[ self::slug_key( $slug ) ] ) ) {
+					$id_by_key[ self::slug_key( $slug ) ] = $li_id;
+				}
 			}
 		}
 
@@ -2382,7 +2639,7 @@ class YSMenuRouter {
 			if ( ! $color ) {
 				continue;
 			}
-			$li_id = $id_by_slug[ $slug ] ?? '';
+			$li_id = $id_by_slug[ $slug ] ?? ( $id_by_key[ self::slug_key( $slug ) ] ?? '' );
 			if ( '' === $li_id ) {
 				continue; // 這個身分的側欄沒有這一項。
 			}
