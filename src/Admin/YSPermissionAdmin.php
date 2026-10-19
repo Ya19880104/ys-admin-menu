@@ -1314,7 +1314,7 @@ class YSPermissionAdmin {
 					<p class="description ysca-muted-text ysca-permission-description">
 						為特定使用者設定「白名單」選單可見範圍。勾選的選單以外，該使用者
 						<strong>看不到</strong>且<strong>無法直接訪問</strong>。<br>
-						勾選「僅允許存取受保護的管理選單」後，該使用者只看得到、進得去 YS CART 的頁面、本外掛的頁面，以及透過 <code>ys_admin_menu_extra_admin_slugs</code> filter 指定的頁面（側欄與直接開網址都是）；綁給這位使用者的「僅限本人」選單照樣看得到。控制台、個人資料與其他外掛的頁面都進不去。
+						勾選「僅允許存取受保護的管理選單」後，該使用者只看得到、進得去 YS CART 的頁面（含 YS CART 附加外掛登記給 YS CART 的頁面，例如分潤）、本外掛的頁面，以及透過 <code>ys_admin_menu_extra_admin_slugs</code> filter 指定的頁面（側欄與直接開網址都是）；綁給這位使用者的「僅限本人」選單照樣看得到。控制台、個人資料，以及 Rank Math 這類跟 YS CART 無關的外掛頁面都進不去。
 					</p>
 
 					<div class="ys-ec-user-overrides-toolbar">
