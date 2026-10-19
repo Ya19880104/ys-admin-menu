@@ -73,6 +73,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - **YS CART 的搬家版本**：本外掛只認得 b1（`YSMenuConfigBridge::KNOWN_CORE_MOVES_VERSIONS`）。YS CART 的搬家版本換成 b1 以外的版本時，本外掛要同時更新，否則啟用時改回 1.4.0 的做法（沿用 YS CART 那份）。
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options` + `wp_rest` nonce + body size cap）
 - **自動更新**：透過內嵌的 YS Plugin Hub Client。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
+- **slug 比對**（v1.5.1）：存檔時 slug 經過 `sanitize_text_field()`，網址裡的 %xx 編碼會被拿掉。比對存下的設定與側欄上實際的 slug 時，兩邊都換成同一個鍵（`YSMenuRouter::slug_key()`：同一個函式清理；customize.php 的 `return` 參數只留名稱、不比值）。實際 slug 存檔時不會被改掉的，照原字串比對；會被改掉的（帶 %xx、customize.php 帶 return）原字串對不上時才用鍵。存法不變。
 - **防自我鎖死**：super admin（單站 administrator）不受隱藏、角色限制與使用者覆寫影響，避免把自己鎖在後台外。例外是「僅限本人」：綁定後連其他管理員也看不到該選單
 - **隱藏不是權限**：隱藏與角色限制是整理介面用的。被隱藏的頂層選單底下的子頁要各自設定；真正要禁止的功能請調整角色的 capability
 
