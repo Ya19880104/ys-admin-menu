@@ -258,8 +258,9 @@ class YSPermissionAdmin {
 		$promoted_keys = [];
 		if ( 'wp_native' === $tab ) {
 			foreach ( (array) ( $saved_config['ys_cart']['items'] ?? [] ) as $pi ) {
+				// v1.5.1：外部網址的子選單不移到主選單（YSMenuRouter::is_external_url()），不標「已提升」。
 				if ( is_array( $pi ) && ! empty( $pi['promote_to_top'] )
-					&& 'sub' === (string) ( $pi['level'] ?? '' ) && ! empty( $pi['slug'] ) ) {
+					&& 'sub' === (string) ( $pi['level'] ?? '' ) && ! empty( $pi['slug'] ) && ! YSMenuRouter::is_external_url( (string) $pi['slug'] ) ) {
 					$url                   = YSMenuRouter::promoted_menu_url( (string) $pi['slug'], (string) ( $pi['parent_slug'] ?? '' ) );
 					$promoted_urls[ $url ] = true;
 					$promoted_keys[ YSMenuRouter::slug_key( $url ) ] = true;
@@ -495,10 +496,12 @@ class YSPermissionAdmin {
 		};
 
 		// 已移到主選單（promote_to_top）的子選單：改成頂層列顯示，不在原父選單底下重複。
+		// v1.5.1：外部網址的子選單不移到主選單，存過也照原位列成子選單（跟側欄一樣）。
 		$promoted_subs   = [];
 		$promoted_by_key = [];
 		foreach ( $ys_cart_items as $ci ) {
-			if ( is_array( $ci ) && ! empty( $ci['promote_to_top'] ) && 'sub' === (string) ( $ci['level'] ?? '' ) && ! empty( $ci['slug'] ) ) {
+			if ( is_array( $ci ) && ! empty( $ci['promote_to_top'] ) && 'sub' === (string) ( $ci['level'] ?? '' ) && ! empty( $ci['slug'] )
+				&& ! YSMenuRouter::is_external_url( (string) $ci['slug'] ) ) {
 				$promoted_subs[ (string) $ci['slug'] ]                            = $ci;
 				$promoted_by_key[ YSMenuRouter::slug_key( (string) $ci['slug'] ) ] = $ci;
 			}
@@ -686,8 +689,8 @@ class YSPermissionAdmin {
 						'parent_title' => $top_titles[ $item_parent ] ?? $item_parent,
 						'copy_key'     => $row_key,
 						'copied'       => '' !== $row_key && isset( $copied_keys[ $row_key ] ),
-						// 移到主選單用的頂層代稱（原生網址；% 編碼的代稱不提供）。
-						'promote_key'  => ( '' !== $row_key && false === strpos( $item_slug . $item_parent, '%' ) )
+						// 移到主選單用的頂層代稱（原生網址；% 編碼的代稱不提供；v1.5.1：外部網址不提供）。
+						'promote_key'  => ( '' !== $row_key && false === strpos( $item_slug . $item_parent, '%' ) && ! YSMenuRouter::is_external_url( $item_slug ) )
 							? YSMenuRouter::promoted_menu_url( $item_slug, $item_parent )
 							: '',
 					];
@@ -1020,10 +1023,12 @@ class YSPermissionAdmin {
 			</td>
 			<td class="ys-ec-row-actions">
 				<?php if ( 'wp_native' !== $tab && $is_sub ) : ?>
+					<?php if ( ! YSMenuRouter::is_external_url( $slug ) ) : // v1.5.1：外部網址不提供「移到主選單」（請用複製到主選單）。 ?>
 					<button type="button" class="ys-ec-row-btn ys-ec-move-btn"
 						title="移到主選單：變成 wp-admin 頂層選單，原位置移除">
 						<span class="dashicons dashicons-arrow-up-alt" aria-hidden="true"></span><span class="ys-ec-row-btn__label">移到主選單</span>
 					</button>
+					<?php endif; ?>
 					<?php if ( '' !== $copy_key ) : ?>
 						<?php self::render_copy_button( $copied ); ?>
 					<?php endif; ?>

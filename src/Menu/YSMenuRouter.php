@@ -375,6 +375,11 @@ class YSMenuRouter {
 			if ( '' === $slug || null === $parent || empty( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
 				continue;
 			}
+			// v1.5.1：外部網址的子選單一律不移（連結會組成 admin.php?page=https://…，打不開；1.1.0 起）。
+			// 以前存下的設定也一樣，子選單留在原位；要放上主選單請用「複製到主選單」。
+			if ( self::is_external_url( $slug ) ) {
+				continue;
+			}
 
 			// 從原父層子選單取出該列（v1.5.1：原字串對不到時比鍵，matching_rows()）。
 			$hit = self::matching_rows( $submenu[ $parent ], $slug );
@@ -435,6 +440,14 @@ class YSMenuRouter {
 		}
 		$base = ( false !== strpos( $parent, '.php' ) ) ? $parent : 'admin.php';
 		return $base . ( ( false === strpos( $base, '?' ) ) ? '?' : '&' ) . 'page=' . $slug;
+	}
+
+	/**
+	 * v1.5.1：選單代稱是不是外部網址（https:// 這類「名稱://」開頭，跟 copy_menu_key() 同一個判斷）。
+	 * 外部網址的子選單不移到主選單（promote_submenus_to_top()），設定頁也不提供「移到主選單」。
+	 */
+	public static function is_external_url( string $slug ): bool {
+		return 1 === preg_match( '#^[a-z][a-z0-9+.\-]*://#i', trim( wp_specialchars_decode( $slug ) ) );
 	}
 
 	/**
