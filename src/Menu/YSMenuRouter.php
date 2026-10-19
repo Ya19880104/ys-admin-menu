@@ -1519,6 +1519,7 @@ class YSMenuRouter {
 	 * v1.5.1 起照字面：YS CART 核心的登錄表、YS CART 的頁面（ys-cart、ys-cart-*、ys-ec-*、ys-provider-*；導覽列照它指向的頁面）、
 	 * 本外掛的頁面，以及 ys_admin_menu_extra_admin_slugs、ys_admin_menu_external_admin_pages 指定的頁面。
 	 * 1.5.0 以前「全部選單」分頁存過的每一列也算，存過那個分頁的站幾乎每一頁都算受保護。
+	 * YS CART 2.37.1～2.52.8 有核心的 YSMenuRouter 類別、沒有 is_ys_cart_admin_slug()：叫不到時當成核心沒有提供這個判斷。
 	 */
 	public static function is_ys_cart_admin_slug( string $slug ): bool {
 		$slug = self::normalize_admin_slug( $slug );
@@ -1527,7 +1528,7 @@ class YSMenuRouter {
 		}
 
 		if (
-			class_exists( \YangSheep\Ecommerce\Permission\YSMenuRouter::class )
+			is_callable( [ \YangSheep\Ecommerce\Permission\YSMenuRouter::class, 'is_ys_cart_admin_slug' ] )
 			&& \YangSheep\Ecommerce\Permission\YSMenuRouter::is_ys_cart_admin_slug( $slug )
 		) {
 			return true;
