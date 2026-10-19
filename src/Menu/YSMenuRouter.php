@@ -1628,7 +1628,7 @@ class YSMenuRouter {
 		// v1.5.1：$slug 已經是鍵，存下的那邊也換成鍵再比（跟 apply_config() 對存檔時會被改掉的 slug 一樣）。
 		if ( $top ) {
 			$allowed = [];
-			foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $item ) {
+			foreach ( self::rule_rows( $config, 'wp_native' ) as $item ) {
 				if ( is_array( $item ) && empty( $item['separator'] ) && self::slug_key( (string) ( $item['slug'] ?? '' ) ) === $slug ) {
 					$allowed = array_map( 'sanitize_key', (array) ( $item['roles'] ?? [] ) );
 				}
@@ -1643,7 +1643,7 @@ class YSMenuRouter {
 		}
 
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
-			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
+			foreach ( self::rule_rows( $config, $tab ) as $item ) {
 				if ( ! is_array( $item ) || empty( $item['hide'] ) || self::slug_key( (string) ( $item['slug'] ?? '' ) ) !== $slug ) {
 					continue;
 				}
@@ -1730,7 +1730,7 @@ class YSMenuRouter {
 	private static function sidebar_self_only_uid( string $slug, array $config ): int {
 		$uid = 0;
 		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
-			foreach ( (array) ( $config[ $section ]['items'] ?? [] ) as $item ) {
+			foreach ( self::rule_rows( $config, $section ) as $item ) {
 				if ( ! is_array( $item ) || empty( $item['slug'] ) || (int) ( $item['self_only_uid'] ?? 0 ) <= 0 ) {
 					continue;
 				}
@@ -1806,12 +1806,13 @@ class YSMenuRouter {
 
 	/**
 	 * 設定列的規則：任一列（兩個分頁）slug 相同、勾了隱藏或限制角色而不符合，就擋。
+	 * v1.5.1：「複製到主選單」的複製項自己的那一列不算（rule_rows()），它只管複製項。
 	 *
 	 * @param array<int, string> $user_roles
 	 */
 	private static function passes_item_rules( string $slug, array $config, array $user_roles ): bool {
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
-			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
+			foreach ( self::rule_rows( $config, $tab ) as $item ) {
 				if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
 					continue;
 				}
@@ -1946,10 +1947,7 @@ class YSMenuRouter {
 	private static function self_only_uid_for_slug( string $slug, array $config ): int {
 		$slug = self::normalize_admin_slug( $slug );
 		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
-			$items = $config[ $section ]['items'] ?? [];
-			if ( ! is_array( $items ) ) {
-				continue;
-			}
+			$items = self::rule_rows( $config, $section );
 			foreach ( $items as $item ) {
 				if ( ! is_array( $item ) || empty( $item['slug'] ) ) {
 					continue;
@@ -1970,10 +1968,7 @@ class YSMenuRouter {
 
 		$map = [];
 		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
-			$items = $config[ $section ]['items'] ?? [];
-			if ( ! is_array( $items ) ) {
-				continue;
-			}
+			$items = self::rule_rows( $config, $section );
 			foreach ( $items as $item ) {
 				if ( ! is_array( $item ) || empty( $item['slug'] ) ) {
 					continue;
@@ -2190,6 +2185,69 @@ class YSMenuRouter {
 			}
 		}
 		return null;
+	}
+
+	/** v1.5.1：copy_row_keys() 的結果（同一份 top_copies 只算一次）。 */
+	private static array $copy_keys_cache = [];
+
+	/**
+	 * v1.5.1：「複製到主選單」的複製項在主選單分頁那一列（slug＝copy_menu_key()）的鍵。
+	 *
+	 * 這些列只管複製項（insert_top_level_copies()、copy_allows() 另外讀），不參與其他選單的權限判斷：外部網址的複製項代稱就是
+	 * 網址本身，跟原子選單同一個字串，不排除的話複製項的角色、隱藏、僅限本人會一起套到原子選單（1.3.0 起）。
+	 * ./ 開頭的代稱本來就對不到任何選單，排除了也一樣。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,bool>
+	 */
+	private static function copy_row_keys( array $config ): array {
+		$copies = $config['top_copies']['items'] ?? [];
+		if ( empty( $copies ) || ! is_array( $copies ) ) {
+			return [];
+		}
+		$sig = md5( serialize( $copies ) );
+		if ( isset( self::$copy_keys_cache[ $sig ] ) ) {
+			return self::$copy_keys_cache[ $sig ];
+		}
+		$out = [];
+		foreach ( $copies as $copy ) {
+			if ( ! is_array( $copy ) ) {
+				continue;
+			}
+			$key = self::slug_key( self::copy_menu_key( (string) ( $copy['slug'] ?? '' ), (string) ( $copy['parent_slug'] ?? '' ) ) );
+			if ( '' !== $key ) {
+				$out[ $key ] = true;
+			}
+		}
+		if ( count( self::$copy_keys_cache ) >= 50 ) {
+			self::$copy_keys_cache = [];
+		}
+		self::$copy_keys_cache[ $sig ] = $out;
+		return $out;
+	}
+
+	/**
+	 * v1.5.1：權限判斷（隱藏、角色、僅限本人）要看的設定列：主選單分頁拿掉複製項自己的那幾列（copy_row_keys()）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<int|string, mixed>
+	 */
+	private static function rule_rows( array $config, string $tab ): array {
+		$items = $config[ $tab ]['items'] ?? [];
+		if ( ! is_array( $items ) ) {
+			return [];
+		}
+		if ( 'wp_native' !== $tab ) {
+			return $items;
+		}
+		$copy_keys = self::copy_row_keys( $config );
+		if ( [] === $copy_keys ) {
+			return $items;
+		}
+		return array_filter(
+			$items,
+			static fn( $row ): bool => ! ( is_array( $row ) && empty( $row['separator'] ) && isset( $copy_keys[ self::slug_key( (string) ( $row['slug'] ?? '' ) ) ] ) )
+		);
 	}
 
 	/**
