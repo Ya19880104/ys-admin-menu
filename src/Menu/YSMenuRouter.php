@@ -248,6 +248,10 @@ class YSMenuRouter {
 		// 5.「僅限本人」：不分 super-admin，綁定特定帳號的選單只有該帳號的 sidebar 看得到
 		self::apply_self_only_filter( $config, $current_user_id );
 
+		// 5.2 v1.5.1：外部網址的子選單存了「移到主選單」、因為是外部網址而留在原位：「主選單」分頁替移上去的那一項
+		//     存的角色、隱藏、僅限本人照樣套用（1.5.0 移上去時由那一列決定誰看得到；只會更嚴）。放在複製項之前：複製項跟著原子選單。
+		self::apply_kept_promote_rows( $config, $current_user_id, $user_roles );
+
 		// 5.5 v1.3.0：子選單「複製到主選單」（top_copies）。放在所有過濾之後：原子選單對這個帳號
 		//     還在（沒被隱藏、角色、僅限本人、白名單拿掉），複製項才會出現；複製項自己的
 		//     隱藏／角色／僅限本人在插入時另外判斷。
@@ -1663,6 +1667,19 @@ class YSMenuRouter {
 				return false;
 			}
 		}
+		// v1.5.1：留在原位的外部網址子選單，「主選單」分頁替移上去的那一項存的列照樣擋（跟側欄 apply_kept_promote_rows() 一樣）。
+		if ( ! $top && null !== $parent ) {
+			$kept = self::kept_promote_rows( $config )[ $slug . "\0" . self::slug_key( (string) $parent ) ] ?? [];
+			if ( [] !== $kept ) {
+				$kept_user  = get_userdata( $user_id );
+				$kept_roles = $kept_user ? array_map( 'sanitize_key', (array) $kept_user->roles ) : [];
+				foreach ( $kept as $row ) {
+					if ( self::promote_row_denies( $row, $user_id, $kept_roles, is_super_admin( $user_id ) ) ) {
+						return false;
+					}
+				}
+			}
+		}
 		if ( is_super_admin( $user_id ) ) {
 			return true;
 		}
@@ -2307,6 +2324,96 @@ class YSMenuRouter {
 			$items,
 			static fn( $row ): bool => ! ( is_array( $row ) && empty( $row['separator'] ) && isset( $copy_keys[ self::slug_key( (string) ( $row['slug'] ?? '' ) ) ] ) )
 		);
+	}
+
+	/**
+	 * v1.5.1：存了「移到主選單」、但因為是外部網址而留在原位的子選單（promote_submenus_to_top() 不移），對到「主選單」分頁替
+	 * 移上去的那一項存的列：wp_native 裡鍵＝slug_key( promoted_menu_url( 存下的 slug, 存下的上層 ) ) 的每一列。
+	 * 鍵：子選單的鍵 + "\0" + 上層的鍵（都用存下的字串算，網址帶 %xx 的舊設定也對得上側欄上的實際 slug）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string, array<int, array<string,mixed>>>
+	 */
+	private static function kept_promote_rows( array $config ): array {
+		$native = [];
+		foreach ( (array) ( $config['wp_native']['items'] ?? [] ) as $row ) {
+			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
+				$native[ self::slug_key( (string) $row['slug'] ) ][] = $row;
+			}
+		}
+		if ( [] === $native ) {
+			return [];
+		}
+		$out = [];
+		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $item ) {
+			if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) || 'sub' !== (string) ( $item['level'] ?? 'top' ) ) {
+				continue;
+			}
+			$slug   = (string) ( $item['slug'] ?? '' );
+			$parent = (string) ( $item['parent_slug'] ?? '' );
+			if ( '' === $slug || ! self::is_external_url( $slug ) ) {
+				continue;
+			}
+			$rows = $native[ self::slug_key( self::promoted_menu_url( $slug, $parent ) ) ] ?? [];
+			if ( [] !== $rows ) {
+				$k         = self::slug_key( $slug ) . "\0" . self::slug_key( $parent );
+				$out[ $k ] = array_merge( $out[ $k ] ?? [], $rows );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.5.1：「主選單」分頁那一列擋不擋這個帳號（跟 1.5.0 移上去的那一項一樣：僅限本人綁給別人時連 super-admin 都擋；
+	 * 隱藏與角色只擋 super-admin 以外的帳號）。
+	 *
+	 * @param array<string,mixed> $row
+	 * @param array<int,string>   $user_roles
+	 */
+	private static function promote_row_denies( array $row, int $user_id, array $user_roles, bool $is_super ): bool {
+		$bound = (int) ( $row['self_only_uid'] ?? 0 );
+		if ( $bound > 0 && $bound !== $user_id ) {
+			return true;
+		}
+		if ( $is_super ) {
+			return false;
+		}
+		if ( ! empty( $row['hide'] ) ) {
+			return true;
+		}
+		$allowed = array_values( array_filter( array_map( 'sanitize_key', (array) ( $row['roles'] ?? [] ) ) ) );
+		return ! empty( $allowed ) && empty( array_intersect( $user_roles, $allowed ) );
+	}
+
+	/**
+	 * v1.5.1：留在原位的外部網址子選單，被「主選單」分頁那一列擋的帳號從側欄拿掉（kept_promote_rows()）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<int,string>   $user_roles
+	 */
+	private static function apply_kept_promote_rows( array $config, int $user_id, array $user_roles ): void {
+		global $submenu;
+		$kept = self::kept_promote_rows( $config );
+		if ( [] === $kept || ! is_array( $submenu ) ) {
+			return;
+		}
+		$is_super = is_super_admin( $user_id );
+		foreach ( $submenu as $parent => $rows ) {
+			if ( ! is_array( $rows ) ) {
+				continue;
+			}
+			foreach ( $rows as $idx => $sub ) {
+				if ( ! is_array( $sub ) ) {
+					continue;
+				}
+				foreach ( $kept[ self::slug_key( (string) ( $sub[2] ?? '' ) ) . "\0" . self::slug_key( (string) $parent ) ] ?? [] as $row ) {
+					if ( self::promote_row_denies( $row, $user_id, $user_roles, $is_super ) ) {
+						unset( $submenu[ $parent ][ $idx ] );
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	/**
