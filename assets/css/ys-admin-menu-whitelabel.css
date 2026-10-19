@@ -582,6 +582,10 @@ body.ysca-wl-active .ys-am-toggle-field__text strong {
     font-weight: 600;
     color: #374151;
 }
+/* v1.5.1：兩個開關上下相鄰時（登入頁的「返回首頁」與「語言切換」）留一點間距。 */
+body.ysca-wl-active .ys-am-toggle-field + .ys-am-toggle-field {
+    margin-top: 16px;
+}
 
 /* ─── 區塊標題左側 indigo 色條 ─── */
 body.ysca-wl-active .ysca-wl-card__title {

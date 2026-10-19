@@ -359,7 +359,7 @@ $log_labels = [
 							<input type="checkbox" name="login_enabled" value="yes" <?php checked( ! empty( $login_page['enabled'] ) ); ?>>
 							<span class="ys-am-toggle__slider"></span>
 						</span>
-						<span class="ys-am-toggle-field__text"><strong>啟用自訂登入頁</strong>wp-login.php 改成深藍品牌版面：左側品牌區、右側登入卡片，手機上改成單欄。只改外觀與文字，登入流程、帳號密碼的驗證都不變。</span>
+						<span class="ys-am-toggle-field__text"><strong>啟用自訂登入頁</strong>wp-login.php 改成 YS CRM 登入頁的樣子：接近黑的深藍底、左側品牌區、右側白色大圓角登入卡片（膠囊形欄位與按鈕），手機上改成單欄。只改外觀與文字，登入流程、帳號密碼的驗證都不變；登入網址被其他外掛改掉（例如 WPS Hide Login）也照樣套用。</span>
 					</label>
 					<p class="ysca-wl-field__hint">
 						檢視方式：用無痕視窗開啟 <a href="<?php echo esc_url( (string) ( $login_page['login_url'] ?? wp_login_url() ) ); ?>" target="_blank" rel="noopener noreferrer">登入頁</a>（已登入時打開登入頁會直接轉到後台）。忘記密碼、註冊、設定新密碼的畫面也套用同一套配色。
@@ -403,7 +403,7 @@ $log_labels = [
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-logo">從媒體庫選擇</button>
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-logo">清除</button>
 							</div>
-							<p class="ysca-wl-field__hint">留空沿用「後台品牌」分頁的後台 LOGO。只接受 http／https 網址。</p>
+							<p class="ysca-wl-field__hint">留空沿用「後台品牌」分頁的後台 LOGO。只接受 http／https 網址。都沒有 LOGO 時，寬螢幕的左上角改放網站標題（字距拉開；和品牌名稱一樣就不重複放）。</p>
 						</div>
 						<div class="ysca-wl-field">
 							<label for="ys-am-login-bg" class="ysca-wl-field__label">背景圖</label>
@@ -414,7 +414,7 @@ $log_labels = [
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-bg">從媒體庫選擇</button>
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-bg">清除</button>
 							</div>
-							<p class="ysca-wl-field__hint">留空用深藍漸層。圖片上會疊一層深藍，文字才看得清楚。</p>
+							<p class="ysca-wl-field__hint">留空用接近黑的深藍漸層（寬螢幕左邊兩團淡藍光暈）。圖片上會疊一層深藍，文字才看得清楚。</p>
 						</div>
 					</div>
 
@@ -431,6 +431,14 @@ $log_labels = [
 							<span class="ys-am-toggle__slider"></span>
 						</span>
 						<span class="ys-am-toggle-field__text"><strong>顯示「← 返回首頁」連結</strong>卡片下方回到網站首頁的連結。</span>
+					</label>
+
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="login_language_switcher" value="yes" <?php checked( ! empty( $login_page['language_switcher'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>顯示語言切換</strong>WordPress 放在登入頁最下方的語言選單。預設不顯示，登入頁用網站的語言；網站裝了其他語言、要讓人在登入前切換時再打開。</span>
 					</label>
 				</div>
 			</div>

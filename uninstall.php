@@ -89,6 +89,8 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_login_bg_url',
 	'ys_admin_menu_login_footer_text',
 	'ys_admin_menu_login_back_link',
+	// v1.5.1：自訂登入頁的「顯示語言切換」。
+	'ys_admin_menu_login_language_switcher',
 	'ys_admin_menu_turnstile_enabled',
 	'ys_admin_menu_turnstile_site_key',
 	'ys_admin_menu_turnstile_secret_key',

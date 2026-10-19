@@ -1,14 +1,17 @@
 <?php
 /**
- * 自訂 wp-login.php 登入頁（v1.4.0）：YS CRM 的深藍品牌版面。
+ * 自訂 wp-login.php 登入頁（v1.4.0）：YS CRM 的品牌版面。v1.5.1 改成 YS CRM 線上版登入頁的樣子：
+ * 接近黑的深藍底、白色大圓角登入卡片、膠囊形欄位與按鈕。
  *
  * 只改外觀與文字：
  *   - 用 login_enqueue_scripts 掛獨立的 CSS（assets/css/ys-admin-menu-login.css），不改 wp-login.php。
  *   - 登入表單的欄位 id（#loginform、#user_login、#user_pass、#wp-submit…）、label、送出流程、
  *     錯誤訊息、密碼處理全部維持 WordPress 原樣；其他外掛掛在表單上的欄位照常出現。
- *   - 品牌區（LOGO＋品牌名稱＋標語）用 login_header 輸出，卡片標題用 login_message 輸出，
+ *   - 品牌區（左上 LOGO 或字標＋品牌名稱＋標語）用 login_header 輸出，卡片標題用 login_message 輸出，
  *     頁尾文字用 login_footer 輸出；「返回首頁」用 login_site_html_link。
  *   - 忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。
+ *   - WordPress 的語言切換預設不顯示（login_display_language_dropdown），白牌設定可以打開。
+ *   - 登入網址被其他外掛改掉（例如 WPS Hide Login）時照樣套用：它們在新網址載入的還是 wp-login.php。
  *
  * 總開關 ys_admin_menu_login_enabled（預設關）。沒開時不載入任何東西，登入頁維持 WordPress 預設。
  *
@@ -51,6 +54,9 @@ final class YSLoginPage {
 	/** wp_options key — 是否顯示「返回首頁」（yes／no，預設 yes＝與 WordPress 預設一樣有這個連結）。 */
 	public const OPTION_BACK_LINK = 'ys_admin_menu_login_back_link';
 
+	/** wp_options key — 是否顯示 WordPress 的語言切換（yes／no，預設 no＝不顯示；v1.5.1）。 */
+	public const OPTION_LANGUAGE_SWITCHER = 'ys_admin_menu_login_language_switcher';
+
 	private const TEXT_MAX   = 120;
 	private const FOOTER_MAX = 2000;
 
@@ -78,6 +84,7 @@ final class YSLoginPage {
 		// 最後才跑、把卡片標題放在最前面（其他外掛的 login_message 接在後面）。
 		add_filter( 'login_message', [ self::class, 'prepend_card_head' ], 9999 );
 		add_filter( 'login_site_html_link', [ self::class, 'back_link' ] );
+		add_filter( 'login_display_language_dropdown', [ self::class, 'language_dropdown' ] );
 		// 在 wp_print_footer_scripts（priority 20）之前輸出頁尾。
 		add_action( 'login_footer', [ self::class, 'render_footer' ], 5 );
 	}
@@ -151,6 +158,22 @@ final class YSLoginPage {
 
 	public static function show_back_link(): bool {
 		return 'no' !== get_option( self::OPTION_BACK_LINK, 'yes' );
+	}
+
+	/** 語言切換：沒存過或存 no 都不顯示（YS CRM 的登入頁沒有這一項）。 */
+	public static function show_language_switcher(): bool {
+		return 'yes' === get_option( self::OPTION_LANGUAGE_SWITCHER, 'no' );
+	}
+
+	/**
+	 * 左上角的字標：沒有 LOGO 時放網站標題（字距拉開）。和品牌名稱（左側大標）一樣時不重複，回傳空字串。
+	 */
+	public static function get_wordmark(): string {
+		if ( '' !== self::get_logo_url() ) {
+			return '';
+		}
+		$site = trim( wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) );
+		return ( '' === $site || $site === self::get_brand() ) ? '' : $site;
 	}
 
 	/* ─────────────────────────── 消毒 ─────────────────────────── */
@@ -259,7 +282,7 @@ final class YSLoginPage {
 	}
 
 	/**
-	 * login_header：背景層與左側品牌區（LOGO、品牌名稱、標語）。
+	 * login_header：背景層與左側品牌區（左上 LOGO 或字標、品牌名稱、標語）。
 	 */
 	public static function render_brand_panel(): void {
 		$bg = self::get_bg_url();
@@ -273,8 +296,9 @@ final class YSLoginPage {
 			return;
 		}
 
-		$logo    = self::get_logo_url();
-		$tagline = self::get_tagline();
+		$logo     = self::get_logo_url();
+		$wordmark = self::get_wordmark();
+		$tagline  = self::get_tagline();
 
 		echo '<div class="ys-am-login-brand">';
 		if ( '' !== $logo ) {
@@ -282,6 +306,12 @@ final class YSLoginPage {
 			printf(
 				'<div class="ys-am-login-brand__top"><img class="ys-am-login-brand__logo" src="%s" alt="" decoding="async"></div>',
 				esc_url( $logo )
+			);
+		} elseif ( '' !== $wordmark ) {
+			// 沒有 LOGO：左上角放網站標題當字標（只在寬螢幕顯示）。
+			printf(
+				'<div class="ys-am-login-brand__top ys-am-login-brand__top--text"><p class="ys-am-login-brand__wordmark">%s</p></div>',
+				esc_html( $wordmark )
 			);
 		}
 		echo '<div class="ys-am-login-brand__hero">';
@@ -342,6 +372,16 @@ final class YSLoginPage {
 			esc_url( home_url( '/' ) ),
 			esc_html__( '← 返回首頁', 'ys-admin-menu' )
 		);
+	}
+
+	/**
+	 * login_display_language_dropdown：白牌設定沒打開就不顯示語言切換；打開時照 WordPress（與其他外掛）原本的判斷。
+	 *
+	 * @param bool $display
+	 * @return bool
+	 */
+	public static function language_dropdown( $display ) {
+		return self::show_language_switcher() ? (bool) $display : false;
 	}
 
 	/**
@@ -408,6 +448,7 @@ final class YSLoginPage {
 		update_option( self::OPTION_FOOTER, self::sanitize_footer( $footer ), false );
 
 		update_option( self::OPTION_BACK_LINK, ! empty( $post['login_back_link'] ) ? 'yes' : 'no', false );
+		update_option( self::OPTION_LANGUAGE_SWITCHER, ! empty( $post['login_language_switcher'] ) ? 'yes' : 'no', false );
 	}
 
 	/**
@@ -417,19 +458,20 @@ final class YSLoginPage {
 	 */
 	public static function settings_view(): array {
 		return [
-			'enabled'          => self::is_enabled(),
-			'brand'            => self::get_brand_setting(),
-			'brand_default'    => wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ),
-			'title'            => self::get_title_setting(),
-			'title_default'    => self::default_title(),
-			'subtitle'         => self::get_subtitle(),
-			'subtitle_default' => self::default_subtitle(),
-			'tagline'          => self::get_tagline(),
-			'logo_url'         => self::get_logo_setting(),
-			'bg_url'           => self::get_bg_url(),
-			'footer'           => self::get_footer_html(),
-			'back_link'        => self::show_back_link(),
-			'login_url'        => wp_login_url(),
+			'enabled'           => self::is_enabled(),
+			'brand'             => self::get_brand_setting(),
+			'brand_default'     => wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ),
+			'title'             => self::get_title_setting(),
+			'title_default'     => self::default_title(),
+			'subtitle'          => self::get_subtitle(),
+			'subtitle_default'  => self::default_subtitle(),
+			'tagline'           => self::get_tagline(),
+			'logo_url'          => self::get_logo_setting(),
+			'bg_url'            => self::get_bg_url(),
+			'footer'            => self::get_footer_html(),
+			'back_link'         => self::show_back_link(),
+			'language_switcher' => self::show_language_switcher(),
+			'login_url'         => wp_login_url(),
 		];
 	}
 }

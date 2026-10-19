@@ -443,8 +443,8 @@ final class YSTurnstile {
 	private static function widget_html( string $action ): string {
 		self::enqueue_script();
 
-		// 自訂登入頁是深藍底，用深色 widget；其他地方跟著訪客的系統設定。
-		$theme = ( did_action( 'login_init' ) && YSLoginPage::is_enabled() ) ? 'dark' : 'auto';
+		// 自訂登入頁的卡片是白底（v1.5.1 起），用淺色 widget；其他地方跟著訪客的系統設定。
+		$theme = ( did_action( 'login_init' ) && YSLoginPage::is_enabled() ) ? 'light' : 'auto';
 
 		return sprintf(
 			'<div class="ys-am-turnstile"><div class="cf-turnstile" data-sitekey="%1$s" data-action="%2$s" data-theme="%3$s" data-size="flexible"></div></div>',
