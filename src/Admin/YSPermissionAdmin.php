@@ -321,7 +321,7 @@ class YSPermissionAdmin {
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
-			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設置分頁">
+			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設定分頁">
 				<?php foreach ( $tabs as $key => $label ) :
 					$is_active = ( $tab === $key );
 					$class     = 'ysca-wl-tab' . ( $is_active ? ' ysca-wl-tab--active' : '' );
@@ -1287,7 +1287,7 @@ class YSPermissionAdmin {
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
-			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設置分頁">
+			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設定分頁">
 				<?php foreach ( $tabs as $key => $label ) :
 					$is_active = ( 'user_overrides' === $key );
 					$class     = 'ysca-wl-tab' . ( $is_active ? ' ysca-wl-tab--active' : '' );

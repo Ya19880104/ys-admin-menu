@@ -2,7 +2,7 @@
 /**
  * 白牌設置頁面 template（v2.37.1 / v2.45.39 ADR-047 .ysca-wl-* 獨立樣式；v1.4.0 分頁）
  *
- * 從 YSWhiteLabelAdmin::render_settings() 載入。整頁是一個表單，「儲存白牌設置」一次存全部分頁。
+ * 從 YSWhiteLabelAdmin::render_settings() 載入。整頁是一個表單，「儲存白牌設定」一次存全部分頁。
  *
  * 分頁（沒有 JavaScript 時四塊依序全部顯示）：
  *   1. 後台品牌：後台 LOGO（頂層選單圖示＋選單上方 LOGO 區塊）、Footer 文字、後台頁尾、背景色、資料清除
@@ -623,7 +623,7 @@ $log_labels = [
 		</section>
 
 		<div class="ysca-wl-actions">
-			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設置</button>
+			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設定</button>
 		</div>
 	</form>
 </div>

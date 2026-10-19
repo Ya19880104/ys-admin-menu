@@ -352,7 +352,7 @@ class YSWhiteLabelAdmin {
 		$purge_on_uninstall = self::get_purge_on_uninstall();
 		$notice      = '';
 		if ( ! empty( $_GET['ys_ec_wl_saved'] ) ) {
-			$notice = '白牌設置已儲存。';
+			$notice = '白牌設定已儲存。';
 		}
 
 		// v1.4.0：選單上方 LOGO 區塊、Admin Bar、登入頁、Turnstile。
@@ -375,7 +375,7 @@ class YSWhiteLabelAdmin {
 		if ( file_exists( $template ) ) {
 			include $template;
 		} else {
-			echo '<div class="card"><p>白牌設置樣板不存在。</p></div>';
+			echo '<div class="card"><p>白牌設定樣板不存在。</p></div>';
 		}
 
 		echo '</div>';
