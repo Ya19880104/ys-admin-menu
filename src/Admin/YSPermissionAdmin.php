@@ -255,17 +255,21 @@ class YSPermissionAdmin {
 
 		// v1.1.0：頂層 tab 標記「已提升」的項目（promoted 項的 $menu[2] = promoted URL）。
 		$promoted_urls = [];
+		$promoted_keys = [];
 		if ( 'wp_native' === $tab ) {
 			foreach ( (array) ( $saved_config['ys_cart']['items'] ?? [] ) as $pi ) {
 				if ( is_array( $pi ) && ! empty( $pi['promote_to_top'] )
 					&& 'sub' === (string) ( $pi['level'] ?? '' ) && ! empty( $pi['slug'] ) ) {
-					$promoted_urls[ YSMenuRouter::promoted_menu_url( (string) $pi['slug'], (string) ( $pi['parent_slug'] ?? '' ) ) ] = true;
+					$url                   = YSMenuRouter::promoted_menu_url( (string) $pi['slug'], (string) ( $pi['parent_slug'] ?? '' ) );
+					$promoted_urls[ $url ] = true;
+					$promoted_keys[ YSMenuRouter::slug_key( $url ) ] = true;
 				}
 			}
 		}
 
 		// Index saved items by slug + 收集 separator
 		$saved_by_slug    = [];
+		$saved_by_key     = [];
 		$saved_separators = [];
 		foreach ( $saved_items as $row ) {
 			if ( ! is_array( $row ) ) {
@@ -277,6 +281,26 @@ class YSPermissionAdmin {
 			}
 			if ( ! empty( $row['slug'] ) ) {
 				$saved_by_slug[ (string) $row['slug'] ] = $row;
+				$saved_by_key[ YSMenuRouter::slug_key( (string) $row['slug'] ) ] = $row;
+			}
+		}
+
+		// v1.5.1：網址帶 %xx 的選單（存檔時 %xx 被拿掉）、「自訂」（return 每頁不同）：這次列出的實際 slug 原字串對不到
+		// 已存的設定時，以鍵（YSMenuRouter::slug_key()）找，表格才會顯示已存的順序、名稱、角色、隱藏。
+		foreach ( $items as $it ) {
+			$live = (string) ( $it['slug'] ?? '' );
+			if ( '' === $live || ! YSMenuRouter::slug_is_altered( $live ) ) {
+				continue;
+			}
+			$live_key = YSMenuRouter::slug_key( $live );
+			if ( '' === $live_key ) {
+				continue;
+			}
+			if ( ! isset( $saved_by_slug[ $live ] ) && isset( $saved_by_key[ $live_key ] ) ) {
+				$saved_by_slug[ $live ] = $saved_by_key[ $live_key ];
+			}
+			if ( isset( $promoted_keys[ $live_key ] ) ) {
+				$promoted_urls[ $live ] = true;
 			}
 		}
 
@@ -457,28 +481,51 @@ class YSPermissionAdmin {
 		$native_items  = (array) ( $saved_config['wp_native']['items'] ?? [] );
 
 		// wp_native 的頂層設定列（複製／已移到主選單項目的 after / 名稱 / 圖示 / 角色 / 隱藏 / 僅限本人）。
+		// v1.5.1：另以鍵索引（YSMenuRouter::slug_key()）：「自訂」移到主選單後，兩個分頁存下的代稱字串不一樣。
 		$native_by_slug = [];
+		$native_by_key  = [];
 		foreach ( $native_items as $r ) {
 			if ( is_array( $r ) && empty( $r['separator'] ) && ! empty( $r['slug'] ) ) {
 				$native_by_slug[ (string) $r['slug'] ] = $r;
+				$native_by_key[ YSMenuRouter::slug_key( (string) $r['slug'] ) ] = $r;
 			}
 		}
+		$native_for = static function ( string $key ) use ( $native_by_slug, $native_by_key ): array {
+			return $native_by_slug[ $key ] ?? ( $native_by_key[ YSMenuRouter::slug_key( $key ) ] ?? [] );
+		};
 
 		// 已移到主選單（promote_to_top）的子選單：改成頂層列顯示，不在原父選單底下重複。
-		$promoted_subs = [];
+		$promoted_subs   = [];
+		$promoted_by_key = [];
 		foreach ( $ys_cart_items as $ci ) {
 			if ( is_array( $ci ) && ! empty( $ci['promote_to_top'] ) && 'sub' === (string) ( $ci['level'] ?? '' ) && ! empty( $ci['slug'] ) ) {
-				$promoted_subs[ (string) $ci['slug'] ] = $ci;
+				$promoted_subs[ (string) $ci['slug'] ]                            = $ci;
+				$promoted_by_key[ YSMenuRouter::slug_key( (string) $ci['slug'] ) ] = $ci;
 			}
 		}
 
-		// 真實頂層的代稱集合（判斷 after 錨點是否還在側欄裡）。
-		$real_tops = [];
-		foreach ( $items as $it ) {
-			if ( 'sub' !== (string) ( $it['level'] ?? 'top' ) ) {
-				$real_tops[ (string) ( $it['slug'] ?? '' ) ] = true;
+		// v1.5.1：複製項以鍵也找得到（原子選單網址帶 %xx 時，側欄上的複製項代稱是實際字串）。
+		$copy_by_key = [];
+		foreach ( $copy_entries as $ck => $ce ) {
+			$ck = (string) $ck;
+			if ( YSMenuRouter::slug_is_altered( $ck ) && ! isset( $copy_by_key[ YSMenuRouter::slug_key( $ck ) ] ) ) {
+				$copy_by_key[ YSMenuRouter::slug_key( $ck ) ] = $ce;
 			}
 		}
+
+		// 頂層名稱：存下的上層原字串對不到時，以鍵找存檔時會被改掉的頂層（網址帶 %xx）。
+		$top_title_for = static function ( string $parent ) use ( $top_titles ): ?string {
+			if ( isset( $top_titles[ $parent ] ) ) {
+				return $top_titles[ $parent ];
+			}
+			foreach ( $top_titles as $top => $title ) {
+				$top = (string) $top;
+				if ( '' !== $parent && YSMenuRouter::slug_is_altered( $top ) && YSMenuRouter::slug_key( $top ) === YSMenuRouter::slug_key( $parent ) ) {
+					return $title;
+				}
+			}
+			return null;
+		};
 
 		// 1) 骨架：真實頂層＋父選單預設頁＋真實子頁＋分隔列，依 order 排序（略過已移到主選單的子頁）。
 		//    v1.5.0：還沒有順序值的子頁（新出現的子選單、選單搬家時照預設順序或只帶規則的列）不照列舉序號排，
@@ -493,8 +540,10 @@ class YSPermissionAdmin {
 				continue;
 			}
 			$is_sub = 'sub' === (string) ( $item['level'] ?? 'top' );
-			if ( $is_sub && isset( $promoted_subs[ $slug ] )
-				&& (string) ( $promoted_subs[ $slug ]['parent_slug'] ?? '' ) === (string) ( $item['parent_slug'] ?? '' ) ) {
+			$promo  = $promoted_subs[ $slug ]
+				?? ( YSMenuRouter::slug_is_altered( $slug ) ? ( $promoted_by_key[ YSMenuRouter::slug_key( $slug ) ] ?? null ) : null );
+			if ( $is_sub && null !== $promo
+				&& YSMenuRouter::slug_key( (string) ( $promo['parent_slug'] ?? '' ) ) === YSMenuRouter::slug_key( (string) ( $item['parent_slug'] ?? '' ) ) ) {
 				continue;
 			}
 			$saved = $saved_by_slug[ $slug ] ?? [];
@@ -565,9 +614,9 @@ class YSPermissionAdmin {
 				continue;
 			}
 			$copied_keys[ $key ] = true;
-			$live                = $copy_entries[ $key ] ?? null;
-			$own                 = $native_by_slug[ $key ] ?? [];
-			$parent_title        = $top_titles[ $sc['parent_slug'] ] ?? ( null !== $live ? $live['parent_title'] : $sc['parent_slug'] );
+			$live                = $copy_entries[ $key ] ?? ( $copy_by_key[ YSMenuRouter::slug_key( $key ) ] ?? null );
+			$own                 = $native_for( $key );
+			$parent_title        = $top_title_for( $sc['parent_slug'] ) ?? ( null !== $live ? $live['parent_title'] : $sc['parent_slug'] );
 			$title               = null !== $live ? $live['title'] : self::copy_source_title( $sc['slug'], $sc['parent_slug'], $ys_cart_items );
 			$descriptors[]       = [
 				'kind'         => 'copy',
@@ -584,16 +633,17 @@ class YSPermissionAdmin {
 			];
 		}
 		foreach ( $promoted_subs as $sub_slug => $ci ) {
-			$parent = (string) ( $ci['parent_slug'] ?? '' );
-			$key    = YSMenuRouter::promoted_menu_url( $sub_slug, $parent );
-			$own    = $native_by_slug[ $key ] ?? [];
+			$sub_slug = (string) $sub_slug;
+			$parent   = (string) ( $ci['parent_slug'] ?? '' );
+			$key      = YSMenuRouter::promoted_menu_url( $sub_slug, $parent );
+			$own      = $native_for( $key );
 			$descriptors[] = [
 				'kind'         => 'promoted',
 				'key'          => $key,
 				'sub_slug'     => $sub_slug,
 				'parent'       => $parent,
 				'title'        => self::promoted_title( $key, $sub_slug, $ci ),
-				'parent_title' => $top_titles[ $parent ] ?? $parent,
+				'parent_title' => $top_title_for( $parent ) ?? $parent,
 				'after'        => isset( $own['after'] ) ? (string) $own['after'] : null,
 				'own'          => $own,
 				'sub'          => $ci,
@@ -602,10 +652,13 @@ class YSPermissionAdmin {
 		}
 
 		// 4) 把 descriptor 插到錨點（after 的真實頂層；退回原父選單；再退回最後）。
+		//    v1.5.1：after 與原父選單照原字串找不到時，以鍵找存檔時會被改掉的代稱（resolve_owner()）。
 		foreach ( $descriptors as $d ) {
-			$anchor = ( null !== $d['after'] && ( '' === $d['after'] || isset( $real_tops[ $d['after'] ] ) || self::tokens_have_key( $tokens, $d['after'] ) ) )
-				? $d['after']
-				: ( isset( $real_tops[ $d['parent'] ] ) ? $d['parent'] : $d['parent'] );
+			$after  = null === $d['after'] ? '' : ( '' === $d['after'] ? '' : self::resolve_owner( $tokens, $d['after'] ) );
+			$parent = self::resolve_owner( $tokens, $d['parent'] );
+			$anchor = ( null !== $d['after'] && ( '' === $d['after'] || '' !== $after ) )
+				? $after
+				: ( '' !== $parent ? $parent : $d['parent'] );
 			$at     = self::anchor_insert_index( $tokens, $anchor );
 			array_splice( $tokens, $at, 0, [ [ 'type' => $d['kind'], 'owner' => $d['key'], 'desc' => $d ] ] );
 		}
@@ -714,17 +767,32 @@ class YSPermissionAdmin {
 	}
 
 	/**
-	 * v1.3.2：token 串裡有沒有某個擁有者（複製／提升列可錨定在另一個複製／提升列之後）。
+	 * v1.3.2：token 串裡對到某個代稱的擁有者（複製／提升列可錨定在真實頂層，或另一個複製／提升列之後）。
+	 *
+	 * v1.5.1：原字串有就用它；沒有才找存檔時會被改掉、鍵又相同的擁有者（網址帶 %xx、「自訂」，YSMenuRouter::slug_key()）。
+	 * 都沒有回空字串。
 	 *
 	 * @param array<int, array<string, mixed>> $tokens
 	 */
-	private static function tokens_have_key( array $tokens, string $key ): bool {
+	private static function resolve_owner( array $tokens, string $want ): string {
+		if ( '' === $want ) {
+			return '';
+		}
+		$key      = YSMenuRouter::slug_key( $want );
+		$fallback = '';
 		foreach ( $tokens as $t ) {
-			if ( (string) ( $t['owner'] ?? '' ) === $key && '' !== $key ) {
-				return true;
+			$owner = (string) ( $t['owner'] ?? '' );
+			if ( '' === $owner ) {
+				continue;
+			}
+			if ( $owner === $want ) {
+				return $owner;
+			}
+			if ( '' === $fallback && '' !== $key && YSMenuRouter::slug_is_altered( $owner ) && YSMenuRouter::slug_key( $owner ) === $key ) {
+				$fallback = $owner;
 			}
 		}
-		return false;
+		return $fallback;
 	}
 
 	/**
@@ -769,13 +837,10 @@ class YSPermissionAdmin {
 	 * @param array<string, mixed> $ci ys_cart.items 的那一列。
 	 */
 	private static function promoted_title( string $key, string $sub_slug, array $ci ): string {
-		global $menu;
-		foreach ( (array) $menu as $m ) {
-			if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $key ) {
-				$t = trim( wp_strip_all_tags( (string) ( $m[0] ?? '' ) ) );
-				if ( '' !== $t ) {
-					return $t;
-				}
+		foreach ( self::live_top_rows( $key ) as $m ) {
+			$t = trim( wp_strip_all_tags( (string) ( $m[0] ?? '' ) ) );
+			if ( '' !== $t ) {
+				return $t;
 			}
 		}
 		return ! empty( $ci['title_override'] ) ? (string) $ci['title_override'] : $sub_slug;
@@ -785,13 +850,37 @@ class YSPermissionAdmin {
 	 * v1.3.2：頂層選單的圖示（複製／提升列預設沿用原父選單圖示）。
 	 */
 	private static function parent_icon_for( string $parent ): string {
-		global $menu;
-		foreach ( (array) $menu as $m ) {
-			if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $parent && ! empty( $m[6] ) ) {
+		foreach ( self::live_top_rows( $parent ) as $m ) {
+			if ( ! empty( $m[6] ) ) {
 				return (string) $m[6];
 			}
 		}
 		return 'dashicons-admin-generic';
+	}
+
+	/**
+	 * v1.5.1：側欄上對到某個存下代稱的頂層項：原字串相同的；一個都沒有才找存檔時會被改掉、鍵又相同的
+	 * （網址帶 %xx、「自訂」移到主選單後的連結，YSMenuRouter::slug_key()）。
+	 *
+	 * @return array<int, array<int, mixed>>
+	 */
+	private static function live_top_rows( string $stored ): array {
+		global $menu;
+		$exact = [];
+		$keyed = [];
+		$key   = YSMenuRouter::slug_key( $stored );
+		foreach ( (array) $menu as $m ) {
+			if ( ! is_array( $m ) ) {
+				continue;
+			}
+			$live = (string) ( $m[2] ?? '' );
+			if ( '' !== $stored && $live === $stored ) {
+				$exact[] = $m;
+			} elseif ( '' !== $key && YSMenuRouter::slug_is_altered( $live ) && YSMenuRouter::slug_key( $live ) === $key ) {
+				$keyed[] = $m;
+			}
+		}
+		return [] !== $exact ? $exact : $keyed;
 	}
 
 	/**
@@ -1277,6 +1366,15 @@ class YSPermissionAdmin {
 		$ys_cart_only  = ! empty( $ov['ys_cart_only'] );
 		$slug_count    = count( $all_slugs );
 		$picked_count  = count( $visible_slugs );
+		// v1.5.1：勾選狀態以鍵也對得上（網址帶 %xx 的選單存檔時 %xx 被拿掉、「自訂」的 return 每頁不同；
+		// 以前這種列顯示成沒勾，再按一次儲存就從清單裡掉了）。
+		$visible_exact = array_fill_keys( array_map( 'strval', $visible_slugs ), true );
+		$visible_keys  = [];
+		foreach ( $visible_slugs as $vs ) {
+			if ( is_scalar( $vs ) && '' !== YSMenuRouter::slug_key( (string) $vs ) ) {
+				$visible_keys[ YSMenuRouter::slug_key( (string) $vs ) ] = true;
+			}
+		}
 		?>
 		<div class="ys-ec-user-override-card" data-user-id="<?php echo (int) $user_id; ?>">
 			<div class="card-header">
@@ -1298,10 +1396,14 @@ class YSPermissionAdmin {
 						展開可見 slug 清單（已選 <span class="picked-count"><?php echo (int) $picked_count; ?></span> / <?php echo (int) $slug_count; ?> 個；空白 = 不限制）
 					</summary>
 					<div class="slug-grid">
-						<?php foreach ( $all_slugs as $slug => $title ) : ?>
+						<?php foreach ( $all_slugs as $slug => $title ) :
+							$slug   = (string) $slug;
+							$picked = isset( $visible_exact[ $slug ] )
+								|| ( YSMenuRouter::slug_is_altered( $slug ) && isset( $visible_keys[ YSMenuRouter::slug_key( $slug ) ] ) );
+							?>
 							<label>
 								<input type="checkbox" class="visible-slug" value="<?php echo esc_attr( $slug ); ?>"
-									<?php checked( in_array( $slug, $visible_slugs, true ) ); ?>>
+									<?php checked( $picked ); ?>>
 								<span><?php echo esc_html( $title ); ?></span>
 								<code><?php echo esc_html( $slug ); ?></code>
 							</label>

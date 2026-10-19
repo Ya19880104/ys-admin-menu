@@ -447,15 +447,17 @@ class YSPermissionController {
 			return $submitted;
 		}
 
+		// v1.5.1：以鍵比（YSMenuRouter::slug_key()）。「自訂」的 slug 帶著開頁那一頁的網址（return），存下的字串跟這次
+		// 列出的不一定一樣；只比字串的話，舊的那一列會被當成「頁面上沒列出」一直留著。
 		$known = [];
 		foreach ( $rendered as $slug ) {
 			if ( is_string( $slug ) && '' !== $slug ) {
-				$known[ sanitize_text_field( $slug ) ] = true;
+				$known[ YSMenuRouter::slug_key( $slug ) ] = true;
 			}
 		}
 		foreach ( $submitted as $row ) {
 			if ( empty( $row['separator'] ) && isset( $row['slug'] ) ) {
-				$known[ (string) $row['slug'] ] = true;
+				$known[ YSMenuRouter::slug_key( (string) $row['slug'] ) ] = true;
 			}
 		}
 
@@ -463,7 +465,7 @@ class YSPermissionController {
 			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) ) {
 				continue;
 			}
-			if ( ! isset( $known[ (string) $row['slug'] ] ) ) {
+			if ( ! isset( $known[ YSMenuRouter::slug_key( (string) $row['slug'] ) ] ) ) {
 				$submitted[] = $row;
 			}
 		}
@@ -487,12 +489,13 @@ class YSPermissionController {
 			return $submitted;
 		}
 
+		// v1.5.1：選單代稱也以鍵比（同 merge_unrendered_items()）。
 		$known = [];
 		foreach ( array_merge( self::sanitize_top_copies( $rendered ), $submitted ) as $row ) {
-			$known[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] = true;
+			$known[ YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ) ] = true;
 		}
 		foreach ( $stored as $row ) {
-			if ( ! isset( $known[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] ) ) {
+			if ( ! isset( $known[ YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ) ] ) ) {
 				$submitted[] = $row;
 			}
 		}
@@ -509,14 +512,15 @@ class YSPermissionController {
 	 * @return array<int, mixed>
 	 */
 	private static function drop_removed_copy_rows( array $native_items, array $before, array $after ): array {
+		// v1.5.1：以鍵比（同 merge_unrendered_items()）。
 		$kept = [];
 		foreach ( $after as $row ) {
-			$kept[ YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ] = true;
+			$kept[ YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) ) ] = true;
 		}
 		$removed = [];
 		foreach ( $before as $row ) {
-			$key = YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] );
-			if ( ! isset( $kept[ $key ] ) ) {
+			$key = YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( $row['slug'], $row['parent_slug'] ) );
+			if ( '' !== $key && ! isset( $kept[ $key ] ) ) {
 				$removed[ $key ] = true;
 			}
 		}
@@ -528,7 +532,7 @@ class YSPermissionController {
 			array_filter(
 				$native_items,
 				static function ( $row ) use ( $removed ): bool {
-					return ! ( is_array( $row ) && empty( $row['separator'] ) && isset( $removed[ (string) ( $row['slug'] ?? '' ) ] ) );
+					return ! ( is_array( $row ) && empty( $row['separator'] ) && isset( $removed[ YSMenuRouter::slug_key( (string) ( $row['slug'] ?? '' ) ) ] ) );
 				}
 			)
 		);
@@ -554,10 +558,11 @@ class YSPermissionController {
 			$slug   = isset( $row['slug'] ) && is_scalar( $row['slug'] ) ? wp_specialchars_decode( sanitize_text_field( (string) $row['slug'] ) ) : '';
 			$parent = isset( $row['parent_slug'] ) && is_scalar( $row['parent_slug'] ) ? wp_specialchars_decode( sanitize_text_field( (string) $row['parent_slug'] ) ) : '';
 			$key    = YSMenuRouter::copy_menu_key( $slug, $parent );
-			if ( '' === $key || isset( $seen[ $key ] ) ) {
+			// v1.5.1：同一個複製項以鍵判斷（YSMenuRouter::slug_key()）。
+			if ( '' === $key || isset( $seen[ YSMenuRouter::slug_key( $key ) ] ) ) {
 				continue;
 			}
-			$seen[ $key ] = true;
+			$seen[ YSMenuRouter::slug_key( $key ) ] = true;
 			$out[]        = [
 				'slug'        => $slug,
 				'parent_slug' => $parent,
@@ -773,9 +778,10 @@ class YSPermissionController {
 			return $out;
 		}
 
+		// v1.5.1：以鍵比（YSMenuRouter::slug_key()）：網址帶 %xx 的子選單，列舉出來的是實際字串，存下的少了 %xx。
 		$listed = [];
 		foreach ( $out as $row ) {
-			$listed[ (string) $row['slug'] ] = true;
+			$listed[ YSMenuRouter::slug_key( (string) $row['slug'] ) ] = true;
 		}
 
 		// parent_slug => 補回列
@@ -786,17 +792,17 @@ class YSPermissionController {
 			}
 			$slug   = (string) ( $ci['slug'] ?? '' );
 			$parent = (string) ( $ci['parent_slug'] ?? '' );
-			if ( '' === $slug || '' === $parent || isset( $listed[ $slug ] ) ) {
+			if ( '' === $slug || '' === $parent || isset( $listed[ YSMenuRouter::slug_key( $slug ) ] ) ) {
 				continue;
 			}
 
 			// title：從提升後的頂層項（classes 含 ys-am-promoted）以 URL 對照取回。
 			$title        = $slug;
-			$promoted_url = \YangSheep\AdminMenu\Menu\YSMenuRouter::promoted_menu_url( $slug, $parent );
+			$promoted_key = YSMenuRouter::slug_key( YSMenuRouter::promoted_menu_url( $slug, $parent ) );
 			foreach ( (array) $menu as $m ) {
 				if ( is_array( $m )
 					&& false !== strpos( (string) ( $m[4] ?? '' ), 'ys-am-promoted' )
-					&& (string) ( $m[2] ?? '' ) === $promoted_url ) {
+					&& YSMenuRouter::slug_key( (string) ( $m[2] ?? '' ) ) === $promoted_key ) {
 					$title = wp_strip_all_tags( (string) ( $m[0] ?? $slug ) );
 					break;
 				}
@@ -808,7 +814,7 @@ class YSPermissionController {
 				'level'       => 'sub',
 				'parent_slug' => $parent,
 			];
-			$listed[ $slug ] = true;
+			$listed[ YSMenuRouter::slug_key( $slug ) ] = true;
 		}
 
 		if ( empty( $insertions ) ) {
@@ -935,17 +941,19 @@ class YSPermissionController {
 	 * @return array<int, mixed>
 	 */
 	private static function merge_top_rows( array $native_items, array $submitted, array $rendered ): array {
-		$submitted_by_slug = [];
+		// v1.5.1：以鍵比（YSMenuRouter::slug_key()）。「自訂」移到主選單後的代稱帶著開頁那一頁的網址，兩個分頁存下的
+		// 字串不一樣；同一個鍵的既有列只留第一列（換成這次送回的），其餘是同一項的舊字串。
+		$submitted_by_key = [];
 		foreach ( $submitted as $row ) {
 			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) ) {
-				$submitted_by_slug[ (string) $row['slug'] ] = $row;
+				$submitted_by_key[ YSMenuRouter::slug_key( (string) $row['slug'] ) ] = $row;
 			}
 		}
 
 		$rendered_set = [];
 		foreach ( $rendered as $slug ) {
 			if ( is_string( $slug ) && '' !== $slug ) {
-				$rendered_set[ sanitize_text_field( $slug ) ] = true;
+				$rendered_set[ YSMenuRouter::slug_key( $slug ) ] = true;
 			}
 		}
 
@@ -957,21 +965,28 @@ class YSPermissionController {
 				$out[] = $row;
 				continue;
 			}
-			$slug = (string) $row['slug'];
-			if ( isset( $submitted_by_slug[ $slug ] ) ) {
-				$out[]          = $submitted_by_slug[ $slug ];
-				$seen[ $slug ]  = true;
+			$key = YSMenuRouter::slug_key( (string) $row['slug'] );
+			if ( isset( $submitted_by_key[ $key ] ) ) {
+				if ( empty( $seen[ $key ] ) ) {
+					$out[]        = $submitted_by_key[ $key ];
+					$seen[ $key ] = true;
+				}
 				continue;
 			}
-			if ( isset( $rendered_set[ $slug ] ) ) {
+			if ( isset( $rendered_set[ $key ] ) ) {
 				continue; // 頁面列出、這次沒送回 → 使用者移除。
 			}
 			$out[] = $row; // 沒列出的原樣保留。
 		}
 		// 新增的（第一次複製／移到主選單的列）。
 		foreach ( $submitted as $row ) {
-			if ( is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['slug'] ) && empty( $seen[ (string) $row['slug'] ] ) ) {
-				$out[] = $row;
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) ) {
+				continue;
+			}
+			$key = YSMenuRouter::slug_key( (string) $row['slug'] );
+			if ( empty( $seen[ $key ] ) ) {
+				$out[]        = $row;
+				$seen[ $key ] = true;
 			}
 		}
 		return $out;
