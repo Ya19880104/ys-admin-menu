@@ -220,7 +220,8 @@ class YSMenuRouter {
 		// ─────────────────────────────────────────────
 		$wp_native_items = (array) ( $config['wp_native']['items'] ?? [] );
 		if ( ! empty( $wp_native_items ) ) {
-			self::filter_menu_by_roles( $wp_native_items, $user_roles, $current_user_id );
+			// v1.5.1：外部網址複製項自己的那一列只管複製項（rule_rows()），不套到同網址的其他頂層選單。
+			self::filter_menu_by_roles( self::rule_rows( $config, 'wp_native' ), $user_roles, $current_user_id );
 		}
 
 		// ─────────────────────────────────────────────
@@ -2233,7 +2234,9 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v1.5.1：權限判斷（隱藏、角色、僅限本人）要看的設定列：主選單分頁拿掉複製項自己的那幾列（copy_row_keys()）。
+	 * v1.5.1：隱藏、角色、僅限本人要看的設定列：主選單分頁拿掉複製項自己的那幾列（copy_row_keys()）。
+	 * 側欄的角色與隱藏過濾、權限判斷、僅限本人、sidebar_allows() 都讀這一份。外部網址的複製項代稱就是網址本身，
+	 * 同網址的頂層選單分不出哪一列是誰的，這幾列一律算複製項的，只在插入複製項時用（insert_top_level_copies()）。
 	 *
 	 * @param array<string,mixed> $config
 	 * @return array<int|string, mixed>
@@ -2283,7 +2286,8 @@ class YSMenuRouter {
 		$sub_keys   = [];
 
 		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
-			$items = (array) ( $config[ $tab ]['items'] ?? [] );
+			// v1.5.1：外部網址複製項自己的那一列只管複製項（rule_rows()；複製項的隱藏在插入時另外判斷）。
+			$items = self::rule_rows( $config, $tab );
 			foreach ( $items as $item ) {
 				if ( ! is_array( $item ) || empty( $item['hide'] ) ) {
 					continue;
