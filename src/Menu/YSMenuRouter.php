@@ -186,6 +186,9 @@ class YSMenuRouter {
 			return;
 		}
 
+		// v1.5.1：「電商工具箱」的共用整理（Hub client 2.0.4 起）先在這裡跑，本外掛的設定在它之後生效。
+		self::take_over_toolbox_normalizer();
+
 		// ─────────────────────────────────────────────
 		// 1. 隱藏 YS CART 給特定使用者（v2.37.1 legacy hide_for_user_ids
 		//    + v2.39.0 user_overrides.items[].hide_ys_cart）
@@ -271,6 +274,28 @@ class YSMenuRouter {
 		if ( ! empty( $ys_cart_items ) ) {
 			self::reorder_submenus( $ys_cart_items );
 		}
+	}
+
+	/**
+	 * v1.5.1：內附的 YS Plugin Hub Client 2.0.4 起有 YSToolboxMenuNormalizer：在 admin_menu 的最後（PHP_INT_MAX）
+	 * 把「電商工具箱」改回固定的名稱、圖示與位置 56，系統資訊、聯絡我們補回並排在最後。那一步跑在本外掛
+	 * （9999）之後，會蓋掉本外掛對電商工具箱的改名、排序、隱藏、角色、僅限本人與白名單。
+	 *
+	 * 本外掛有設定、要套用到側欄時：先在這裡跑一次（名稱、圖示、位置先照 Hub client 的共用規則，之後再照本外掛的設定），
+	 * 再拿掉它最後那一步。沒有本外掛的設定、或站上的 Hub client 沒有這個類別時，什麼都不做。
+	 */
+	private static function take_over_toolbox_normalizer(): void {
+		$class = 'YangSheep\\PluginHubClient\\Admin\\YSToolboxMenuNormalizer';
+		if ( ! class_exists( $class, false ) || ! is_callable( [ $class, 'normalize' ] ) ) {
+			return;
+		}
+		$callback = [ $class, 'normalize' ];
+		$priority = has_action( 'admin_menu', $callback );
+		if ( false === $priority ) {
+			return;
+		}
+		call_user_func( $callback );
+		remove_action( 'admin_menu', $callback, (int) $priority );
 	}
 
 	/**
