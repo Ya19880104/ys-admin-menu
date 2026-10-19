@@ -1488,6 +1488,13 @@ class YSMenuRouter {
 		return self::user_can_access_admin_slug( $slug, $config, $user_id, $user_roles );
 	}
 
+	/**
+	 * 「僅允許存取受保護的管理選單」（與舊版 hide_for_user_ids）的帳號看得到、進得去的頁面。
+	 *
+	 * v1.5.1 起照字面：YS CART 核心的登錄表、YS CART 的頁面（ys-cart、ys-cart-*、ys-ec-*、ys-provider-*；導覽列照它指向的頁面）、
+	 * 本外掛的頁面，以及 ys_admin_menu_extra_admin_slugs、ys_admin_menu_external_admin_pages 指定的頁面。
+	 * 1.5.0 以前「全部選單」分頁存過的每一列也算，存過那個分頁的站幾乎每一頁都算受保護。
+	 */
 	public static function is_ys_cart_admin_slug( string $slug ): bool {
 		$slug = self::normalize_admin_slug( $slug );
 		if ( '' === $slug ) {
@@ -1501,7 +1508,8 @@ class YSMenuRouter {
 			return true;
 		}
 
-		if ( self::is_ys_cart_namespace_slug( $slug ) ) {
+		$page = self::admin_page_of( $slug );
+		if ( self::is_ys_cart_namespace_slug( $slug ) || ( '' !== $page && self::is_ys_cart_namespace_slug( $page ) ) ) {
 			return true;
 		}
 
@@ -1895,9 +1903,25 @@ class YSMenuRouter {
 		return [];
 	}
 
+	/**
+	 * v1.5.1：admin.php?page=X（後面可以接其他參數：導覽列、移到主選單的頁面）的 X；其他寫法回空字串。
+	 * 跟 YS CART 核心判斷受保護頁面時一樣，看網址指向的那一頁。
+	 */
+	private static function admin_page_of( string $slug ): string {
+		$decoded = wp_specialchars_decode( trim( $slug ) );
+		return 1 === preg_match( '/^admin\.php\?page=([^&#=]+)/', $decoded, $m ) ? self::normalize_admin_slug( $m[1] ) : '';
+	}
+
+	/**
+	 * 本外掛的頁面，以及 YS CART 的頁面（v1.5.1；跟 YS CART 核心的命名空間相同，沒裝 YS CART 時也照這個判斷）。
+	 */
 	private static function is_ys_cart_namespace_slug( string $slug ): bool {
 		return 'ys-admin-menu' === $slug
-			|| str_starts_with( $slug, 'ys-admin-menu-' );
+			|| str_starts_with( $slug, 'ys-admin-menu-' )
+			|| 'ys-cart' === $slug
+			|| str_starts_with( $slug, 'ys-cart-' )
+			|| str_starts_with( $slug, 'ys-ec-' )
+			|| str_starts_with( $slug, 'ys-provider-' );
 	}
 
 	/**
@@ -2023,26 +2047,13 @@ class YSMenuRouter {
 	}
 
 	/**
+	 * 「僅允許存取受保護的管理選單」額外放行的頁面：本外掛的首頁與兩個 filter 指定的頁面。
+	 * v1.5.1：不再收「全部選單」分頁存過的列（那張表存的是整個側欄，收進來就幾乎每一頁都放行）。
+	 *
 	 * @return array<string,bool>
 	 */
 	private static function ys_cart_admin_slug_map(): array {
 		$slugs = [ 'ys-admin-menu' ];
-
-		$config = self::get_config();
-		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $item ) {
-			if ( ! is_array( $item ) || ! empty( $item['separator'] ) ) {
-				continue;
-			}
-
-			foreach ( [ (string) ( $item['slug'] ?? '' ), (string) ( $item['parent_slug'] ?? '' ) ] as $s ) {
-				// v1.5.1：customize.php 的列不收。鍵不比 return 之後，存下的「自訂」會對上每一頁的「自訂」；1.5.0 只有在
-				// 存檔的那一頁對得上。這張表決定「僅允許存取受保護的管理選單」（與舊版 hide_for_user_ids）的帳號看得到什麼，
-				// 「自訂」是 WordPress 的頁面，不因為這一版就多放行。
-				if ( ! self::is_customize_link( $s ) ) {
-					$slugs[] = $s;
-				}
-			}
-		}
 
 		$slugs = array_merge(
 			$slugs,
