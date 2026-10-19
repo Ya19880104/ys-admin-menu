@@ -345,7 +345,7 @@ $number_fields = [
 				<div class="ys-ec-form-group">
 					<label for="submenu_indent">面板左縮排</label>
 					<input type="number" id="submenu_indent" name="submenu_indent" value="<?php echo esc_attr( (string) ( $cfg['submenu_indent'] ?? 42 ) ); ?>" min="0" max="80" step="1" class="ysca-field--xs">
-					<p class="description">px，整個子選單面板相對主選單的左縮排（預設 42）；各選項自身的左留白用下方「左留白」。</p>
+					<p class="description">px，YS CART 選單抽屜裡子選單面板的左縮排（預設 42）。WordPress 側欄展開時（含手機抽屜），子選單文字固定對齊上一層名稱，不用這個值。</p>
 				</div>
 				</div>
 				<div class="ys-ec-form-row ysca-inline-row ysca-inline-row--wide">
@@ -367,7 +367,7 @@ $number_fields = [
 				<div class="ys-ec-form-group">
 					<label for="submenu_item_padding_left">左留白</label>
 					<input type="number" id="submenu_item_padding_left" name="submenu_item_padding_left" value="<?php echo esc_attr( (string) ( $cfg['submenu_item_padding_left'] ?? 12 ) ); ?>" min="0" max="60" step="1" class="ysca-field--xs">
-					<p class="description">px</p>
+					<p class="description">px。側欄展開時子選單文字固定對齊上一層名稱，左邊不用這個值。</p>
 				</div>
 				</div>
 			</div>

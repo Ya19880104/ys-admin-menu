@@ -247,6 +247,26 @@ body.ys-theme-active #adminmenu .wp-submenu a:focus {
         margin: 0 8px 2px 0;
     }
 
+    /* v1.5.1：子選單文字的起點跟上一層名稱對齊，所有狀態都一樣（目前選單、展開的其他群組、作用中那一列、滑過，
+       含 ≤782px 的手機抽屜）。上一層名稱的起點＝列的左內距＋圖示 20px＋圖示與名稱的間距，所以：
+       - 面板的左內距＝列的左內距：每一列的反白底從圖示那一欄開始。
+       - 拿掉 WordPress 給飛出子選單的 5px 左框（非目前選單的群組才有，展開時會多推 5px）。
+       - 連結的左內距＝圖示 20px＋間距（WordPress 在手機寬度另給 20px，這裡一律蓋掉）。作用中、滑過時 WordPress 在連結
+         左緣畫的白條（inset box-shadow 4px）落在這段留白裡，不壓到文字。
+       用兩個 id 的選擇器，勝過 WordPress 自己 #adminmenu 開頭的規則。圖示列（<100px：手動收合、783–960px 自動收合）
+       不在這個 @container 內，浮出子選單照 WordPress 原本的做法（「左留白」設定照舊作用在浮出子選單）。 */
+    body.ys-theme-active #adminmenuwrap #adminmenu li.wp-has-submenu > .wp-submenu,
+    body.ys-theme-active #adminmenuwrap #adminmenu li.wp-has-submenu > .wp-submenu-wrap,
+    body.ys-theme-active #adminmenuwrap #adminmenu .wp-has-current-submenu .wp-submenu {
+        padding-left: var( --ys-theme-menu-item-pl );
+        border-left-width: 0;
+    }
+
+    body.ys-theme-active #adminmenuwrap #adminmenu .wp-submenu a {
+        margin-left: 0;
+        padding-left: calc( 20px + var( --ys-theme-menu-item-gap ) );
+    }
+
     /* Keep current WordPress submenus inline on native WordPress pages. */
     body.ys-theme-active #adminmenu li.wp-has-current-submenu.opensub > .wp-submenu,
     #adminmenu li[id^="toplevel_page_ys-"].wp-has-current-submenu.opensub > .wp-submenu {
