@@ -2095,7 +2095,8 @@ class YSMenuRouter {
 	 *   實際的 slug 經過同一個函式就對得上，不用重存；sanitize_text_field() 對清過的字串不會再改，存下的鍵就是它自己。
 	 * - customize.php 的 return 參數是 WordPress 依「目前這一頁」加上的，每一頁都不一樣：只留參數名、不比值。
 	 *   直接開 customize.php 的請求鍵是 customize.php（不帶參數），跟「自訂」那一列的鍵不同，直連守門照舊。
-	 * - 不還原 &amp;：原本先還原再比的地方照舊先還原，再算鍵。
+	 * - 帶 %xx 的網址與 customize.php 的連結先還原 HTML 實體（設定頁存下的是瀏覽器還原過的字串）。
+	 *   其他 slug 不還原（例如自訂文章類型分類子選單的 &amp;）：原本先還原再比的地方照舊先還原，再算鍵。
 	 *
 	 * 什麼時候用鍵：原字串對得上的列一律照原字串（跟 1.5.0 完全一樣）；只有「存檔時會被改掉」的實際 slug
 	 * （slug_is_altered()）原字串對不上，才改用鍵。權限判斷（current_user_can_access_admin_slug() 這一系列）
@@ -2107,6 +2108,11 @@ class YSMenuRouter {
 		}
 		$key = trim( $slug );
 		if ( '' !== $key ) {
+			// 帶 %xx 的網址與 customize.php 的連結：設定頁從表格（data-slug）讀回 slug 時，瀏覽器已經把 HTML 實體還原
+			// （&#038;、&amp; 變成 &，例如「頁首」「背景」的 &#038;autofocus），存下的是還原過的；比對時這邊也還原。
+			if ( ( self::is_customize_link( $key ) || 1 === preg_match( '/%[0-9a-f]{2}/i', $key ) ) && function_exists( 'wp_specialchars_decode' ) ) {
+				$key = (string) wp_specialchars_decode( $key );
+			}
 			if ( self::is_customize_link( $key ) ) {
 				$key = (string) preg_replace( '/([?&;])return=[^&]*/', '$1return=', $key );
 			}
