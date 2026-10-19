@@ -73,7 +73,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - v1.5.0 YS CART 選單搬家：`ys_admin_menu_moves_applied`（遷移標記：版本、對照的 sha256、本外掛的規則版本、已套用的 `since:slug`、有沒有還沒關掉的提醒；自動載入。後台提醒只在它記著有提醒時才去讀遷移紀錄；沒有 YS CART V3 的站不會遷移，平常後台頁不會多查資料庫）、`ys_admin_menu_moves_log`（遷移紀錄與提醒）、`ys_admin_menu_moves_lock`（遷移時的暫時鎖，值是拿到鎖的請求自己的 token）、`ys_admin_menu_config_pre_moves_b1`（遷移前備份，最後一段是 YS CART 的搬家版本）、`ys_admin_menu_core_copy_pre_activation`（啟用時改用 YS CART 搬家前備份之前，另存的 YS CART 那份原字串），後四種不自動載入
 - **YS CART 的搬家版本**：本外掛只認得 b1（`YSMenuConfigBridge::KNOWN_CORE_MOVES_VERSIONS`）。YS CART 的搬家版本換成 b1 以外的版本時，本外掛要同時更新，否則啟用時改回 1.4.0 的做法（沿用 YS CART 那份）。
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options` + `wp_rest` nonce + body size cap）
-- **自動更新**：透過內嵌的 YS Plugin Hub Client。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
+- **自動更新**：透過內嵌的 YS Plugin Hub Client（2.0.7；外掛市集走 WordPress REST，更新與下載只接受 yangsheep.com.tw 的網址；同站有其他版本時先載入的那份負責連線，「電商工具箱」選單的名稱與位置由 2.0.4 起的共用整理統一，本外掛有設定時先整理再套用設定）。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）
 - **slug 比對**（v1.5.1）：存檔時 slug 經過 `sanitize_text_field()`，網址裡的 %xx 編碼會被拿掉。比對存下的設定與側欄上實際的 slug 時，兩邊都換成同一個鍵（`YSMenuRouter::slug_key()`：帶 %xx 的網址與 customize.php 的連結先還原 HTML 實體，再用同一個函式清理；customize.php 的 `return` 參數只留名稱、不比值）。實際 slug 存檔時不會被改掉的，照原字串比對；會被改掉的（帶 %xx、customize.php 帶 return）原字串對不上時才用鍵。存法不變。
 - **防自我鎖死**：super admin（單站 administrator）不受隱藏、角色限制與使用者覆寫影響，避免把自己鎖在後台外。例外是「僅限本人」：綁定後連其他管理員也看不到該選單
 - **隱藏不是權限**：隱藏與角色限制是整理介面用的。被隱藏的頂層選單底下的子頁要各自設定；真正要禁止的功能請調整角色的 capability
