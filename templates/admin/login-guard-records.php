@@ -123,12 +123,12 @@ $lr_form    = static function ( string $action, string $id ) use ( $lr_post ): v
 									<?php foreach ( (array) $lr['xsite'] as $lr_src ) : ?>
 										<?php $lr_origin = (string) $lr_src['origin']; ?>
 										<tr>
-											<td><code><?php echo esc_html( $lr_origin ); ?></code></td>
+											<td><?php if ( '' !== $lr_origin ) : ?><code><?php echo esc_html( $lr_origin ); ?></code><?php else : ?>（沒有帶來源）<?php endif; ?></td>
 											<td><?php echo esc_html( (string) $lr_src['entries'] ); ?></td>
 											<td><?php echo esc_html( (string) (int) $lr_src['count'] ); ?><?php echo (int) $lr_src['observed'] > 0 ? esc_html( '（觀察中 ' . (int) $lr_src['observed'] . '）' ) : ''; ?></td>
 											<td><?php echo esc_html( wp_date( 'Y-m-d H:i', (int) $lr_src['last'] ) ); ?></td>
 											<td>
-												<?php if ( $lr_origin === YSLoginGuardSettings::valid_origin( $lr_origin ) ) : ?>
+												<?php if ( '' !== $lr_origin && $lr_origin === YSLoginGuardSettings::valid_origin( $lr_origin ) ) : ?>
 													<button type="submit" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" name="lg_origin" value="<?php echo esc_attr( $lr_origin ); ?>" data-ys-am-lg-action="allow-origin">允許這個來源</button>
 												<?php else : ?>
 													<small>要允許請手動填</small>
@@ -167,11 +167,14 @@ $lr_form    = static function ( string $action, string $id ) use ( $lr_post ): v
 							</thead>
 							<tbody>
 								<?php foreach ( (array) $lr['logs'] as $lr_log ) : ?>
-									<?php $lr_event = (string) $lr_log['event']; ?>
+									<?php
+									$lr_event = (string) $lr_log['event'];
+									$lr_where = '' !== (string) $lr_log['ip'] ? (string) $lr_log['ip'] : (string) $lr_log['ip_key']; // 跨站、清空這類事件沒有 IP
+									?>
 									<tr>
 										<td><?php echo esc_html( wp_date( 'Y-m-d H:i:s', (int) $lr_log['created_at'] ) ); ?></td>
 										<td><?php echo esc_html( $lr_events[ $lr_event ] ?? $lr_event ); ?></td>
-										<td><code><?php echo esc_html( '' !== (string) $lr_log['ip'] ? (string) $lr_log['ip'] : (string) $lr_log['ip_key'] ); ?></code></td>
+										<td><?php if ( '' !== $lr_where ) : ?><code><?php echo esc_html( $lr_where ); ?></code><?php else : ?>—<?php endif; ?></td>
 										<td><?php echo esc_html( (string) $lr_log['username'] ); ?></td>
 										<td><?php echo esc_html( (string) $lr_log['source'] ); ?></td>
 										<td><?php echo esc_html( 'xsite' === $lr_event ? (string) $lr_log['origin'] . '（' . (string) $lr_log['code'] . '）' : (string) $lr_log['code'] ); ?></td>
