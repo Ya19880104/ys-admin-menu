@@ -11,8 +11,8 @@
  * - 查詢失敗時回 null，呼叫的人照樣放行（fail-open），並記 health。
  * - 紀錄：一般失敗每分鐘 120 筆、被拒的跨站登入每分鐘 20 筆（各自的保留列原子計數），每個 IP 每分鐘一筆；
  *   鎖定、解鎖、清空不受額度限制。
- *
- * 計數表的列數上限、依網段的 overflow、立刻清理與它的互斥在另外一顆提交（設計 r5 審查中）。
+ * - 上限（§4.7.3）：哪一次失敗記到哪裡由 YSLoginGuardCapacity 決定；這裡只提供它用的 SQL：只更新既有列的 UPDATE、
+ *   數同一個 /48 的列數、保留列的原子加 1、照上限刪與重算列數、清理互斥（GET_LOCK 與 ~cleanup 租約）。
  *
  * @package YangSheep\AdminMenu\Security
  * @since   1.6.0
@@ -50,7 +50,7 @@ final class YSLoginGuardStore {
 	 * 一次有主鍵的查詢，取回這些鍵的列。
 	 *
 	 * @param string[] $keys
-	 * @return null|array<string, array{locked_until:int,fail_count:int,window_start:int,lockout_count:int}> 查詢失敗回 null。
+	 * @return null|array<string, array{locked_until:int,fail_count:int,window_start:int,lockout_count:int,total_failures:int,blocked_count:int}> 查詢失敗回 null。
 	 */
 	public static function rows( array $keys ): ?array {
 		global $wpdb;
@@ -59,7 +59,7 @@ final class YSLoginGuardStore {
 			return [];
 		}
 		$in   = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
-		$sql  = $wpdb->prepare( 'SELECT ip_key, locked_until, fail_count, window_start, lockout_count FROM ' . YSLoginGuardSchema::counter_table() . " WHERE ip_key IN ({$in})", $keys ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名與佔位符是系統產生的
+		$sql  = $wpdb->prepare( 'SELECT ip_key, locked_until, fail_count, window_start, lockout_count, total_failures, blocked_count FROM ' . YSLoginGuardSchema::counter_table() . " WHERE ip_key IN ({$in})", $keys ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名與佔位符是系統產生的
 		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- 上一行 prepare 過
 		if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
 			self::query_failed( 'rows' );
@@ -68,27 +68,30 @@ final class YSLoginGuardStore {
 		$out = [];
 		foreach ( $rows as $row ) {
 			$out[ (string) $row['ip_key'] ] = [
-				'locked_until'  => (int) $row['locked_until'],
-				'fail_count'    => (int) $row['fail_count'],
-				'window_start'  => (int) $row['window_start'],
-				'lockout_count' => (int) $row['lockout_count'],
+				'locked_until'   => (int) $row['locked_until'],
+				'fail_count'     => (int) $row['fail_count'],
+				'window_start'   => (int) $row['window_start'],
+				'lockout_count'  => (int) $row['lockout_count'],
+				'total_failures' => (int) $row['total_failures'],
+				'blocked_count'  => (int) $row['blocked_count'],
 			];
 		}
 		return $out;
 	}
 
 	/**
-	 * 計數（設計 §4.7.2 的寫法）。
+	 * 計數（設計 §4.7.2 的寫法）。新增的是 IPv6 的 IP 鍵時，帶上它所在的 /48（net48，§4.7.3）。
 	 *
+	 * @param null|string $net48 YSClientIp::network( $ip, 48 )；其他鍵是 null（存成 NULL）。
 	 * @return null|array{count:int,inserted:bool} 加完的次數、這一句是不是新增了這個鍵。查詢失敗回 null。
 	 */
-	public static function count_failure( string $key, string $ip, string $source, int $now, int $window ): ?array {
+	public static function count_failure( string $key, string $ip, string $source, int $now, int $window, ?string $net48 = null ): ?array {
 		global $wpdb;
 		$table   = YSLoginGuardSchema::counter_table();
 		$expired = $now - $window;
 		$sql     = $wpdb->prepare(
-			"INSERT INTO {$table} (ip_key, last_ip, fail_count, window_start, total_failures, last_source, created_at, updated_at)
-			VALUES (%s, %s, 1, %d, 1, %s, %d, %d)
+			"INSERT INTO {$table} (ip_key, net48, last_ip, fail_count, window_start, total_failures, last_source, created_at, updated_at)
+			VALUES (%s, " . ( null === $net48 ? 'NULL' : '%s' ) . ", %s, 1, %d, 1, %s, %d, %d)
 			ON DUPLICATE KEY UPDATE
 				fail_count = LAST_INSERT_ID( IF( window_start <= %d, 1, fail_count + 1 ) ),
 				window_start = IF( window_start <= %d, %d, window_start ),
@@ -96,18 +99,11 @@ final class YSLoginGuardStore {
 				last_ip = %s,
 				last_source = %s,
 				updated_at = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
-			$key,
-			$ip,
-			$now,
-			$source,
-			$now,
-			$now,
-			$expired,
-			$expired,
-			$now,
-			$ip,
-			$source,
-			$now
+			array_merge(
+				[ $key ],
+				null === $net48 ? [] : [ $net48 ],
+				[ $ip, $now, $source, $now, $now, $expired, $expired, $now, $ip, $source, $now ]
+			)
 		);
 		$result = self::query_with_retry( $sql );
 		if ( false === $result ) {
@@ -119,6 +115,93 @@ final class YSLoginGuardStore {
 			return [ 'count' => 1, 'inserted' => true ];
 		}
 		return [ 'count' => max( 1, (int) $wpdb->insert_id ), 'inserted' => false ];
+	}
+
+	/**
+	 * 只更新已經存在的列（表滿了、或 IPv6 的 IP 鍵要先看自己有沒有列時，§4.4 失敗時第 2 步）。SET 跟計數那一句一樣，
+	 * 加完的次數用 LAST_INSERT_ID( 運算式 ) 記在這個連線上，再一句 SELECT LAST_INSERT_ID() 取回
+	 * （wpdb 只在 INSERT／REPLACE 之後更新 insert_id）。
+	 *
+	 * @return null|array{count:int,matched:bool} matched＝這個鍵有列（加過了）。查詢失敗回 null。
+	 */
+	public static function count_existing( string $key, string $ip, string $source, int $now, int $window ): ?array {
+		global $wpdb;
+		$table   = YSLoginGuardSchema::counter_table();
+		$expired = $now - $window;
+		$sql     = $wpdb->prepare(
+			"UPDATE {$table} SET
+				fail_count = LAST_INSERT_ID( IF( window_start <= %d, 1, fail_count + 1 ) ),
+				window_start = IF( window_start <= %d, %d, window_start ),
+				total_failures = total_failures + 1,
+				last_ip = %s,
+				last_source = %s,
+				updated_at = %d
+			WHERE ip_key = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+			$expired,
+			$expired,
+			$now,
+			$ip,
+			$source,
+			$now,
+			$key
+		);
+		$result = self::query_with_retry( $sql );
+		if ( false === $result ) {
+			self::query_failed( 'count' );
+			return null;
+		}
+		if ( (int) $wpdb->rows_affected < 1 ) {
+			return [ 'count' => 0, 'matched' => false ];
+		}
+		$count = $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 同一個連線上剛剛那一句設的值
+		return [ 'count' => max( 1, (int) $count ), 'matched' => true ];
+	}
+
+	/**
+	 * 同一個 /48 已經有幾列（走 net48 的索引，最多數到 $limit 個，跟表多大無關）。查詢失敗回 null。
+	 */
+	public static function count48( string $net48, int $limit ): ?int {
+		global $wpdb;
+		$value = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ( SELECT 1 FROM ' . YSLoginGuardSchema::counter_table() . ' WHERE net48 = %s LIMIT %d ) t', $net48, $limit ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		if ( null === $value || '' !== (string) $wpdb->last_error ) {
+			self::query_failed( 'count48' );
+			return null;
+		}
+		return (int) $value;
+	}
+
+	/**
+	 * 保留列的原子加 1（~rows、~rows_ovf、~rows_acct 的計數，§4.7.3）。INSERT … ON DUPLICATE KEY UPDATE：
+	 * 這一列不見了就補回來，值就是這次加的量。
+	 *
+	 * @param array<string, int> $add fail_count、total_failures、blocked_count 要加多少。
+	 * @return null|bool true＝這一列剛剛不見了、現在補回來（新插入）；false＝原本就在；查詢失敗回 null。
+	 */
+	public static function bump_reserved( string $row, array $add, int $now ): ?bool {
+		global $wpdb;
+		$inc = [];
+		foreach ( [ 'fail_count', 'total_failures', 'blocked_count' ] as $field ) {
+			$inc[ $field ] = max( 0, (int) ( $add[ $field ] ?? 0 ) );
+		}
+		$sql = $wpdb->prepare(
+			'INSERT INTO ' . YSLoginGuardSchema::counter_table() . ' (ip_key, fail_count, total_failures, blocked_count, created_at, updated_at) VALUES (%s, %d, %d, %d, %d, %d)
+			ON DUPLICATE KEY UPDATE fail_count = fail_count + %d, total_failures = total_failures + %d, blocked_count = blocked_count + %d, updated_at = %d', // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+			$row,
+			$inc['fail_count'],
+			$inc['total_failures'],
+			$inc['blocked_count'],
+			$now,
+			$now,
+			$inc['fail_count'],
+			$inc['total_failures'],
+			$inc['blocked_count'],
+			$now
+		);
+		if ( false === self::query_with_retry( $sql ) ) {
+			self::query_failed( 'reserved' );
+			return null;
+		}
+		return 1 === (int) $wpdb->rows_affected;
 	}
 
 	/** 這個鍵目前的視窗起點（「鍵＋帳號」小表用，§4.4.2）。讀不到回 null。 */
@@ -198,24 +281,40 @@ final class YSLoginGuardStore {
 
 	/**
 	 * 失敗時：這一列記的視窗跟計數表的 window_start 不同時從 1 重算，否則加 1。
+	 * 小表已經滿了（$can_insert＝false，§4.4.2 的上限）時只更新已經有的列，不新增：結果只是少了原諒，計數照常。
+	 *
+	 * @return null|bool true＝新增了一列（呼叫的人把 ~rows_acct 加 1）；false＝更新了既有的列或沒有寫；查詢失敗回 null。
 	 */
-	public static function acct_record( string $key, string $acct, int $window_start, int $now ): void {
+	public static function acct_record( string $key, string $acct, int $window_start, int $now, bool $can_insert = true ): ?bool {
 		global $wpdb;
 		$table = YSLoginGuardSchema::acct_table();
-		$sql   = $wpdb->prepare(
-			"INSERT INTO {$table} (ip_key, acct, fail_count, acct_window, updated_at) VALUES (%s, %s, 1, %d, %d)
-			ON DUPLICATE KEY UPDATE fail_count = IF( acct_window = %d, fail_count + 1, 1 ), acct_window = %d, updated_at = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
-			$key,
-			$acct,
-			$window_start,
-			$now,
-			$window_start,
-			$window_start,
-			$now
-		);
+		if ( $can_insert ) {
+			$sql = $wpdb->prepare(
+				"INSERT INTO {$table} (ip_key, acct, fail_count, acct_window, updated_at) VALUES (%s, %s, 1, %d, %d)
+				ON DUPLICATE KEY UPDATE fail_count = IF( acct_window = %d, fail_count + 1, 1 ), acct_window = %d, updated_at = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+				$key,
+				$acct,
+				$window_start,
+				$now,
+				$window_start,
+				$window_start,
+				$now
+			);
+		} else {
+			$sql = $wpdb->prepare(
+				"UPDATE {$table} SET fail_count = IF( acct_window = %d, fail_count + 1, 1 ), acct_window = %d, updated_at = %d WHERE ip_key = %s AND acct = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+				$window_start,
+				$window_start,
+				$now,
+				$key,
+				$acct
+			);
+		}
 		if ( false === self::query_with_retry( $sql ) ) {
 			self::query_failed( 'acct' );
+			return null;
 		}
+		return $can_insert && 1 === (int) $wpdb->rows_affected;
 	}
 
 	/**
@@ -444,22 +543,18 @@ final class YSLoginGuardStore {
 	/* ─────────────────────────── 清理（§4.7.3） ─────────────────────────── */
 
 	/**
-	 * 記失敗時順手清理：距上次一小時以上才做。先寫下時間再做，同一時間被很多請求觸發的機會比較小。
-	 */
-	public static function maybe_cleanup( int $now ): void {
-		$last = (int) get_option( YSLoginGuardSettings::OPTION_LAST_CLEANUP, 0 );
-		if ( $now - $last < self::CLEANUP_INTERVAL ) {
-			return;
-		}
-		update_option( YSLoginGuardSettings::OPTION_LAST_CLEANUP, $now, false );
-		self::cleanup( $now );
-	}
-
-	/**
-	 * 清理：沒在鎖定中、而且很久沒動的列，視窗過了的「鍵＋帳號」，超過保留天數或超過 50,000 筆的紀錄。
-	 * 一次可以連跑多輪 LIMIT 5000，時間上限 200 毫秒。保留列不刪，清理開頭先補齊。
+	 * 清理。只在 YSLoginGuardCapacity::run_cleanup() 拿到互斥之後呼叫（記失敗時順手、後台開頁、WP-Cron、WP-CLI）。
 	 *
-	 * @return array{counter:int,acct:int,log:int,done:bool} 刪了幾列、有沒有在時間內清完。
+	 * - 開頭先 INSERT IGNORE 全部保留列（不見的補回來）。
+	 * - 刪：沒在鎖定中、而且很久沒動的列；視窗過了的「鍵＋帳號」；超過保留天數的紀錄。保留列不刪。
+	 * - 照上限刪：計數表的 IP 鍵（含 agg48:，不含共用桶與 overflow 分桶）還在上限以上時，先刪最久沒動、沒在鎖定中的，
+	 *   刪到上限的九成，騰出空間讓新鍵有自己的列。正在鎖定中的不刪。
+	 * - 紀錄表超過 50,000 筆時從最舊的刪。
+	 * - 一次可以連跑多輪 LIMIT 5000，時間上限 200 毫秒。
+	 * - 最後把 ~rows、~rows_ovf、~rows_acct 設成實際的列數，~rows 的「新增幾列」「記到 overflow 幾次」歸零
+	 *   （數完到寫回之間的新增會被蓋掉，量很小，下次清理就修正，§11 R4-P3-2）。
+	 *
+	 * @return array{counter:int,cap:int,acct:int,log:int,done:bool,rows:?int,ovf:?int,acct_rows:?int} 刪了幾列、有沒有在時間內清完、重算後的列數。
 	 */
 	public static function cleanup( int $now ): array {
 		global $wpdb;
@@ -470,7 +565,7 @@ final class YSLoginGuardStore {
 		$keep    = max( YSLoginGuardSettings::window_seconds(), YSLoginGuardSettings::escalate_period_seconds(), 86400 );
 		$counter = YSLoginGuardSchema::counter_table();
 		$done    = true;
-		$deleted = [ 'counter' => 0, 'acct' => 0, 'log' => 0 ];
+		$deleted = [ 'counter' => 0, 'cap' => 0, 'acct' => 0, 'log' => 0 ];
 
 		$deleted['counter'] = self::delete_batches(
 			$wpdb->prepare( "DELETE FROM {$counter} WHERE ip_key NOT LIKE %s AND locked_until <= %d AND updated_at < %d LIMIT " . self::BATCH, $wpdb->esc_like( '~' ) . '%', $now, $now - $keep ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名與數字是系統產生的
@@ -488,6 +583,30 @@ final class YSLoginGuardStore {
 			$deadline,
 			$done
 		);
+
+		// 照上限刪：IP 鍵還在上限以上，先刪最久沒動、沒在鎖定中的，刪到上限的九成。
+		$ip_rows = self::count_ip_rows();
+		if ( null !== $ip_rows && $ip_rows >= YSLoginGuardCapacity::ROWS_MAX ) {
+			while ( $ip_rows > YSLoginGuardCapacity::ROWS_LOW ) {
+				if ( microtime( true ) > $deadline ) {
+					$done = false;
+					break;
+				}
+				$want   = min( self::BATCH, $ip_rows - YSLoginGuardCapacity::ROWS_LOW );
+				$result = $wpdb->query( $wpdb->prepare( "DELETE FROM {$counter} WHERE ip_key NOT LIKE %s AND ip_key NOT LIKE %s AND locked_until <= %d ORDER BY updated_at ASC LIMIT %d", $wpdb->esc_like( '~' ) . '%', $wpdb->esc_like( 'via:' ) . '%', $now, $want ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+				if ( false === $result ) {
+					self::query_failed( 'cleanup' );
+					$done = false;
+					break;
+				}
+				$deleted['cap'] += (int) $result;
+				$ip_rows        -= (int) $result;
+				if ( (int) $result < $want ) {
+					break; // 剩下的都在鎖定中
+				}
+			}
+		}
+
 		if ( $done ) {
 			$cut = $wpdb->get_var( "SELECT id FROM {$log} ORDER BY id DESC LIMIT 1 OFFSET " . self::LOG_MAX ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名與數字是系統產生的
 			if ( null !== $cut ) {
@@ -498,7 +617,94 @@ final class YSLoginGuardStore {
 				);
 			}
 		}
-		return $deleted + [ 'done' => $done ];
+		return $deleted + [ 'done' => $done ] + self::recount( $now );
+	}
+
+	/**
+	 * 計數表裡 IP 鍵的列數（含 agg48:，不含 ~ 開頭的保留列與 via: 開頭的共用桶、overflow 分桶），跟 ~rows 記的是同一種列。
+	 */
+	public static function count_ip_rows(): ?int {
+		global $wpdb;
+		$value = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . YSLoginGuardSchema::counter_table() . ' WHERE ip_key NOT LIKE %s AND ip_key NOT LIKE %s', $wpdb->esc_like( '~' ) . '%', $wpdb->esc_like( 'via:' ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return null === $value || '' !== (string) $wpdb->last_error ? null : (int) $value;
+	}
+
+	/**
+	 * 把記列數的三列設成實際的列數；~rows 的「上次清理後新增幾列」「記到 overflow 幾次」歸零。
+	 *
+	 * @return array{rows:?int,ovf:?int,acct_rows:?int}
+	 */
+	private static function recount( int $now ): array {
+		global $wpdb;
+		$counter = YSLoginGuardSchema::counter_table();
+		$rows    = self::count_ip_rows();
+		$ovf     = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$counter} WHERE ip_key LIKE %s", $wpdb->esc_like( YSLoginGuardCapacity::OVERFLOW_PREFIX ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		$ovf     = null === $ovf || '' !== (string) $wpdb->last_error ? null : (int) $ovf;
+		$acct    = $wpdb->get_var( 'SELECT COUNT(*) FROM ' . YSLoginGuardSchema::acct_table() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- 表名是系統產生的
+		$acct    = null === $acct || '' !== (string) $wpdb->last_error ? null : (int) $acct;
+		if ( null !== $rows ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$counter} SET fail_count = %d, total_failures = 0, blocked_count = 0, updated_at = %d WHERE ip_key = '~rows'", $rows, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		}
+		if ( null !== $ovf ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$counter} SET fail_count = %d, updated_at = %d WHERE ip_key = '~rows_ovf'", $ovf, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		}
+		if ( null !== $acct ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$counter} SET fail_count = %d, updated_at = %d WHERE ip_key = '~rows_acct'", $acct, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		}
+		return [ 'rows' => $rows, 'ovf' => $ovf, 'acct_rows' => $acct ];
+	}
+
+	/* ─────────────────────────── 清理互斥（§4.7.3） ─────────────────────────── */
+
+	/**
+	 * GET_LOCK( 名稱, 0 )。
+	 *
+	 * @return null|int 1＝拿到、0＝別的請求正在清；回 NULL 或查詢錯誤（有些叢集或代理環境限制 GET_LOCK）回 null，改用租約。
+	 */
+	public static function get_lock( string $name ): ?int {
+		global $wpdb;
+		$value = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 0 )', $name ) );
+		if ( null === $value || '' !== (string) $wpdb->last_error ) {
+			return null;
+		}
+		return '1' === (string) $value ? 1 : 0;
+	}
+
+	public static function release_lock( string $name ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $name ) );
+	}
+
+	/**
+	 * ~cleanup 的租約（GET_LOCK 不能用時）：先 INSERT IGNORE 這一列（不見了 UPDATE 永遠影響 0 列，清理就再也不會跑），
+	 * 再用有條件的 UPDATE 拿，影響一列才算拿到。不用一句 INSERT … ON DUPLICATE KEY UPDATE：主機定義了 CLIENT_FOUND_ROWS 時
+	 * 「沒改到」也回 1，分不出有沒有拿到。
+	 *
+	 * @return int 拿到時回寫進去的時間（釋放時要帶），沒拿到回 0。
+	 */
+	public static function take_lease( int $now, int $seconds ): int {
+		global $wpdb;
+		$table = YSLoginGuardSchema::counter_table();
+		$wpdb->query( "INSERT IGNORE INTO {$table} (ip_key, created_at, updated_at) VALUES ('~cleanup', 0, 0)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		$result = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET window_start = %d WHERE ip_key = '~cleanup' AND window_start < %d", $now, $now - $seconds ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return false !== $result && 1 === (int) $wpdb->rows_affected ? $now : 0;
+	}
+
+	/** 釋放租約：只放自己寫進去的那一個（審查 R4-P3-1；超過 30 秒還沒結束的舊請求不會把新請求的租約放掉）。 */
+	public static function release_lease( int $token ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . " SET window_start = 0 WHERE ip_key = '~cleanup' AND window_start = %d", $token ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+	}
+
+	/** 上一次清理做完的時間（~cleanup 的 updated_at；直接讀資料庫，不經過 option 的快取）。 */
+	public static function last_cleaned(): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( 'SELECT updated_at FROM ' . YSLoginGuardSchema::counter_table() . " WHERE ip_key = '~cleanup'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- 沒有變數
+	}
+
+	public static function mark_cleaned( int $now ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . " SET updated_at = %d WHERE ip_key = '~cleanup'", $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
 	}
 
 	/**

@@ -10,8 +10,8 @@
  * - wp_login 10：只原諒這個帳號自己在這次的鍵上的失敗。
  * - determine_current_user 19、rest_authentication_errors 80：REST 的應用程式密碼只執行鎖定、不計數。
  * - 這次記在哪個鍵（§4.4.1）：分不出訪客是誰的請求記到共用桶（via: 開頭），照常計數、照常鎖、不逐次加長。
- *
- * 計數表的列數上限與依網段的 overflow 在另外一顆提交（設計 r5 審查中），會接在 lookup_keys() 與 count_target()。
+ * - 計數表的上限與依網段的 overflow（§4.4 第 5 步、§4.7.3）在 YSLoginGuardCapacity：查鎖定時一起讀自己網段的
+ *   overflow 桶與記列數的保留列；失敗記到哪裡、/48 彙總與「鍵＋帳號」的上限、立刻清理都經過它。
  *
  * @package YangSheep\AdminMenu\Security
  * @since   1.6.0
@@ -67,6 +67,7 @@ final class YSLoginGuard {
 		YSAuthGate::reset();
 		YSClientIp::reset();
 		YSLoginGuardHealth::reset();
+		YSLoginGuardCapacity::reset();
 		if ( ! YSLoginGuardSettings::active() ) {
 			return;
 		}
@@ -125,8 +126,13 @@ final class YSLoginGuard {
 	}
 
 	public static function cron_cleanup(): void {
-		if ( YSLoginGuardSchema::is_ready() ) {
-			YSLoginGuardStore::cleanup( time() );
+		if ( ! YSLoginGuardSchema::is_ready() ) {
+			return;
+		}
+		try {
+			YSLoginGuardCapacity::run_cleanup( time(), 'manual' );
+		} catch ( \Throwable $e ) {
+			YSLoginGuardHealth::record( 'cleanup_failed', [ 'why' => 'cron' ] );
 		}
 	}
 
@@ -228,7 +234,8 @@ final class YSLoginGuard {
 	}
 
 	/**
-	 * 查鎖定要看的鍵。
+	 * 查鎖定時一句 IN 要帶的鍵：這次的鍵、/48 彙總的鍵；不是共用桶時再加自己網段的 overflow 桶與記列數的保留列（§4.4 第 5 步）。
+	 * 全站的 via:overflow 只計數、不鎖，不在裡面。
 	 *
 	 * @return string[]
 	 */
@@ -238,20 +245,12 @@ final class YSLoginGuard {
 		if ( null !== $agg ) {
 			$keys[] = $agg;
 		}
-		return $keys;
+		return array_values( array_unique( array_merge( $keys, YSLoginGuardCapacity::lookup_keys( $d ) ) ) );
 	}
 
 	/**
-	 * 這次的失敗記在哪個鍵（目前就是這次的鍵）。
-	 *
-	 * @return array{key:string,mult:int,shared:bool,ip:string,from_header:bool}
-	 */
-	private static function count_target( array $d ): array {
-		return $d;
-	}
-
-	/**
-	 * 這次的鍵（與 /48 鍵）現在有沒有被鎖。查詢失敗當成沒鎖（fail-open，§4.6），已經記 health。
+	 * 這次的鍵（與 /48 鍵）現在有沒有被鎖；這個鍵不在表裡時，再看自己網段的 overflow 桶擋不擋
+	 * （表已經超過上限，或 IPv6 的 /48 已經有 256 列，r7）。查詢失敗當成沒鎖（fail-open，§4.6），已經記 health。
 	 *
 	 * @return null|array{key:string,until:int}
 	 */
@@ -259,13 +258,26 @@ final class YSLoginGuard {
 		if ( null !== self::$lock ) {
 			return self::$lock['lock'];
 		}
-		$keys = self::lookup_keys( $d );
-		$rows = YSLoginGuardStore::rows( $keys );
+		$rows = YSLoginGuardStore::rows( self::lookup_keys( $d ) );
 		$lock = null;
-		foreach ( is_array( $rows ) ? $keys : [] as $key ) {
-			$until = (int) ( $rows[ $key ]['locked_until'] ?? 0 );
-			if ( $until > $now && ( null === $lock || $until > $lock['until'] ) ) {
-				$lock = [ 'key' => $key, 'until' => $until ];
+		if ( is_array( $rows ) ) {
+			if ( empty( $d['shared'] ) ) {
+				YSLoginGuardCapacity::remember( $rows );
+			}
+			$candidates = [ (string) $d['key'] ];
+			$agg        = self::agg48_key( $d );
+			if ( null !== $agg ) {
+				$candidates[] = $agg;
+			}
+			foreach ( $candidates as $key ) {
+				$until = (int) ( $rows[ $key ]['locked_until'] ?? 0 );
+				if ( $until > $now && ( null === $lock || $until > $lock['until'] ) ) {
+					$lock = [ 'key' => $key, 'until' => $until ];
+				}
+			}
+			$overflow = YSLoginGuardCapacity::overflow_lock( $d, $rows, $now );
+			if ( null !== $overflow && ( null === $lock || $overflow['until'] > $lock['until'] ) ) {
+				$lock = $overflow;
 			}
 		}
 		self::$lock = [ 'lock' => $lock ];
@@ -355,86 +367,93 @@ final class YSLoginGuard {
 		self::$counted = true;
 		$now           = time();
 		$source        = self::source();
-		$target        = self::count_target( $d );
+		$ip            = (string) $d['ip'];
 
-		$count = self::count_and_lock( $target, $target['mult'], ! $target['shared'], $now, $source, $username, $code );
+		// 記到哪裡由上限決定（§4.4 失敗時第 2 步）：自己的鍵、自己網段的 overflow 桶，或全站的 via:overflow（只計數、不鎖）。
+		$target = YSLoginGuardCapacity::record( $d, $now, $source );
+		if ( null !== $target ) {
+			self::maybe_lock( $target, $ip, $now, $source, $username );
+		}
 
 		$agg = self::agg48_key( $d );
 		if ( null !== $agg ) {
-			self::count_and_lock( [ 'key' => $agg, 'ip' => $d['ip'], 'shared' => false ], self::AGG48_MULT, true, $now, $source, $username, $code );
+			$agg_count = YSLoginGuardCapacity::record_agg48( $agg, $ip, $now, $source );
+			if ( null !== $agg_count ) {
+				self::maybe_lock( [ 'key' => $agg, 'count' => $agg_count, 'mult' => self::AGG48_MULT, 'shared' => false, 'lockable' => true, 'escalate' => true, 'overflow' => '' ], $ip, $now, $source, $username );
+			}
 		}
 
-		if ( null !== $count ) {
+		if ( null !== $target ) {
 			YSLoginGuardStore::set_username( $target['key'], $username );
 			$user = self::existing_user( $username );
-			if ( null !== $user ) {
+			if ( null !== $user && 'global' !== $target['overflow'] ) {
 				$window = YSLoginGuardStore::window_start( $target['key'] );
 				if ( null !== $window && $window > 0 ) {
-					YSLoginGuardStore::acct_record( $target['key'], YSLoginGuardStore::acct_hash( (int) $user->ID ), $window, $now );
+					YSLoginGuardCapacity::record_acct( $target['key'], YSLoginGuardStore::acct_hash( (int) $user->ID ), $window, $now );
 				}
 			}
-			YSLoginGuardStore::log_fail( $target['key'], (string) $d['ip'], $username, $source, $code, $now );
+			YSLoginGuardStore::log_fail( $target['key'], $ip, $username, $source, $code, $now );
 		}
 		self::note_stats( $d, $now );
-		YSLoginGuardStore::maybe_cleanup( $now );
+		YSLoginGuardCapacity::after_failure( $now );
 	}
 
 	/**
-	 * 計數一個鍵，到門檻就建立鎖定（只有建立了的那個請求寫鎖定紀錄）。
+	 * 計數到門檻就建立鎖定（只有建立了的那個請求寫鎖定紀錄、觸發通知）。全站的 via:overflow 只計數、不鎖（lockable＝false）。
+	 * 共用桶與 overflow 分桶不逐次加長（escalate＝false）。
 	 *
-	 * @param array{key:string,ip:string,shared:bool} $target
-	 * @return null|int 加完的次數；查詢失敗回 null。
+	 * @param array{key:string,count:int,mult:int,shared:bool,lockable:bool,escalate:bool,overflow:string} $target
 	 */
-	private static function count_and_lock( array $target, int $mult, bool $escalate, int $now, string $source, string $username, string $code ): ?int {
-		$result = YSLoginGuardStore::count_failure( (string) $target['key'], (string) $target['ip'], $source, $now, YSLoginGuardSettings::window_seconds() );
-		if ( null === $result ) {
-			return null;
+	private static function maybe_lock( array $target, string $ip, int $now, string $source, string $username ): void {
+		if ( empty( $target['lockable'] ) ) {
+			return;
 		}
-		$threshold = YSLoginGuardSettings::max_failures() * max( 1, $mult );
-		if ( $result['count'] >= $threshold ) {
-			$until = YSLoginGuardStore::lock(
-				(string) $target['key'],
-				$now,
-				$threshold,
-				YSLoginGuardSettings::lockout_seconds(),
-				$escalate && YSLoginGuardSettings::escalate(),
-				YSLoginGuardSettings::escalate_after(),
-				YSLoginGuardSettings::escalate_period_seconds(),
-				YSLoginGuardSettings::escalated_lockout_seconds()
-			);
-			if ( null !== $until ) {
-				self::$lock = null;
-				YSLoginGuardStore::log_event(
-					YSLoginGuardStore::EVENT_LOCKOUT,
-					[
-						'ip'       => (string) $target['ip'],
-						'ip_key'   => (string) $target['key'],
-						'username' => $username,
-						'source'   => $source,
-						'code'     => (string) ( $until - $now ),
-					],
-					$now
-				);
-				/**
-				 * 建立了一次鎖定（v1.6.0，通知用）。同一次鎖定只有一個請求會觸發。
-				 *
-				 * @since 1.6.0
-				 *
-				 * @param array{key:string,ip:string,until:int,source:string,shared:bool} $lock
-				 */
-				do_action(
-					'ys_admin_menu_login_guard_locked',
-					[
-						'key'    => (string) $target['key'],
-						'ip'     => (string) $target['ip'],
-						'until'  => $until,
-						'source' => $source,
-						'shared' => ! empty( $target['shared'] ),
-					]
-				);
-			}
+		$threshold = YSLoginGuardSettings::max_failures() * max( 1, (int) $target['mult'] );
+		if ( (int) $target['count'] < $threshold ) {
+			return;
 		}
-		return $result['count'];
+		$until = YSLoginGuardStore::lock(
+			(string) $target['key'],
+			$now,
+			$threshold,
+			YSLoginGuardSettings::lockout_seconds(),
+			! empty( $target['escalate'] ) && YSLoginGuardSettings::escalate(),
+			YSLoginGuardSettings::escalate_after(),
+			YSLoginGuardSettings::escalate_period_seconds(),
+			YSLoginGuardSettings::escalated_lockout_seconds()
+		);
+		if ( null === $until ) {
+			return;
+		}
+		self::$lock = null;
+		YSLoginGuardStore::log_event(
+			YSLoginGuardStore::EVENT_LOCKOUT,
+			[
+				'ip'       => $ip,
+				'ip_key'   => (string) $target['key'],
+				'username' => $username,
+				'source'   => $source,
+				'code'     => (string) ( $until - $now ),
+			],
+			$now
+		);
+		/**
+		 * 建立了一次鎖定（v1.6.0，通知用）。同一次鎖定只有一個請求會觸發。
+		 *
+		 * @since 1.6.0
+		 *
+		 * @param array{key:string,ip:string,until:int,source:string,shared:bool} $lock
+		 */
+		do_action(
+			'ys_admin_menu_login_guard_locked',
+			[
+				'key'    => (string) $target['key'],
+				'ip'     => $ip,
+				'until'  => $until,
+				'source' => $source,
+				'shared' => ! empty( $target['shared'] ),
+			]
+		);
 	}
 
 	/** 健康統計：記到共用桶、外站 Worker、從標頭取到內部或 CDN 位址（只在發生時寫，§4.7.2）。 */
@@ -458,6 +477,7 @@ final class YSLoginGuard {
 
 	/**
 	 * 登入成功：只原諒這個帳號自己在這次的鍵上、同一個視窗裡的失敗（§4.4.2）。XML-RPC 與 REST 的成功不觸發 wp_login。
+	 * 計數表滿了的時候失敗會記到自己網段的 overflow 桶（§4.7.3），那裡的也一樣只扣這個帳號自己的。
 	 *
 	 * @param mixed $user_login
 	 * @param mixed $user
@@ -470,8 +490,15 @@ final class YSLoginGuard {
 		if ( null === $d ) {
 			return;
 		}
-		$target = self::count_target( $d );
-		YSLoginGuardStore::acct_forgive( (string) $target['key'], YSLoginGuardStore::acct_hash( (int) $user->ID ), time() );
+		$keys = [ (string) $d['key'] ];
+		if ( empty( $d['shared'] ) ) {
+			$keys[] = YSLoginGuardCapacity::overflow_key( (string) $d['ip'] );
+		}
+		$acct = YSLoginGuardStore::acct_hash( (int) $user->ID );
+		$now  = time();
+		foreach ( array_filter( array_unique( $keys ) ) as $key ) {
+			YSLoginGuardStore::acct_forgive( $key, $acct, $now );
+		}
 	}
 
 	/* ─────────────────────────── REST（19／80） ─────────────────────────── */

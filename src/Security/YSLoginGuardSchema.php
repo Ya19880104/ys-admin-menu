@@ -2,14 +2,13 @@
 /**
  * 登入次數限制的資料表（v1.6.0，設計 §4.7.2、§4.7.4）：三張表的定義、唯一的建表入口 ensure()、刪表。
  *
- * - 計數表 {prefix}ys_admin_menu_login_guard：主鍵是 ip_key（IP 鍵、共用桶、/48 彙總、~ 開頭的保留列）。
+ * - 計數表 {prefix}ys_admin_menu_login_guard：主鍵是 ip_key（IP 鍵、共用桶、/48 彙總、overflow 分桶、~ 開頭的保留列）。
+ *   net48 欄只有 IPv6 的 IP 鍵有值（它所在的 /48），有索引，數同一個 /48 有幾列用（§4.7.3，每個 /48 最多 256 列）。
  * - 「鍵＋帳號」小表 {prefix}ys_admin_menu_login_guard_acct：只原諒同一個帳號自己的失敗（§4.4.2）。
  * - 紀錄表 {prefix}ys_admin_menu_login_log：只有插入；origin 欄給被拒的跨站登入用。
  *
  * ensure() 只在有權限的地方呼叫（後台存設定、外掛啟用、admin_init 有 manage_options、WP-CLI），前台、wp-login.php、
  * REST、XML-RPC、cron、未登入的 admin-ajax 一律不建表。表的版本不對時整個功能不作用（記 health），照樣登得進去。
- *
- * 計數表的列數上限、依網段的 overflow 與立刻清理的互斥（設計 r5 審查中）在另外一顆提交。
  *
  * @package YangSheep\AdminMenu\Security
  * @since   1.6.0
@@ -21,8 +20,8 @@ defined( 'ABSPATH' ) || exit;
 
 final class YSLoginGuardSchema {
 
-	/** 資料表版本。表的結構改了就加一。 */
-	public const DB_VERSION = '1';
+	/** 資料表版本。表的結構改了就加一（2：計數表加 net48 欄與索引、四個記上限用的保留列）。 */
+	public const DB_VERSION = '2';
 
 	/** 建表失敗後多久內不再重試（秒，審查 P2-12）。 */
 	public const RETRY_AFTER = 600;
@@ -35,8 +34,14 @@ final class YSLoginGuardSchema {
 	 * - ~stat24：健康統計。window_start＝這一輪 24 小時的起點，fail_count＝失敗總數（每分鐘彙總一次），
 	 *   total_failures＝記到共用桶（via:proxy、via:cloudflare、via:internal、via:unknown）的次數，
 	 *   blocked_count＝從標頭取到內部或 CDN 位址的次數，lockout_count＝記到 via:cf-worker 的次數。
+	 * - ~rows：計數表的列數（IP 鍵與 agg48:，不含保留列、共用桶與 overflow 分桶）。fail_count＝列數，
+	 *   total_failures＝上次清理後新增的列數，blocked_count＝上次清理後記到 overflow 的次數（§4.7.3）。
+	 * - ~rows_ovf：overflow 分桶（via:overflow: 開頭）的列數，放在 fail_count。
+	 * - ~rows_acct：「鍵＋帳號」小表的列數，放在 fail_count。
+	 * - ~cleanup：立刻清理的互斥租約（GET_LOCK 不能用時才用）。window_start＝租約開始的時間（0＝沒有人拿），
+	 *   updated_at＝上一次清理做完的時間。
 	 */
-	public const RESERVED_ROWS = [ '~log_budget', '~log_budget_xsite', '~stat24' ];
+	public const RESERVED_ROWS = [ '~log_budget', '~log_budget_xsite', '~stat24', '~rows', '~rows_ovf', '~rows_acct', '~cleanup' ];
 
 	public static function counter_table(): string {
 		global $wpdb;
@@ -78,6 +83,7 @@ final class YSLoginGuardSchema {
 		return [
 			"CREATE TABLE {$counter} (
   ip_key varchar(64) NOT NULL,
+  net48 varchar(20) DEFAULT NULL,
   last_ip varchar(45) NOT NULL DEFAULT '',
   fail_count int(10) unsigned NOT NULL DEFAULT 0,
   window_start int(10) unsigned NOT NULL DEFAULT 0,
@@ -94,6 +100,7 @@ final class YSLoginGuardSchema {
   created_at int(10) unsigned NOT NULL DEFAULT 0,
   updated_at int(10) unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY  (ip_key),
+  KEY net48 (net48),
   KEY locked_until (locked_until),
   KEY updated_at (updated_at)
 ) {$collate};",
