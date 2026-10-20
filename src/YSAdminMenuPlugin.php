@@ -9,6 +9,7 @@
  *   4. 後台設定頁 YSMenuPage（頂層選單 + 子頁）+ 白牌 admin-post handler
  *   5. v1.4.0 自訂登入頁 YSLoginPage、Cloudflare Turnstile 登入防護 YSTurnstile（wp-login.php）
  *   6. v1.5.0 YS CART 選單搬家配套 YSMenuMovesMigrator（admin_menu@9000）＋ WP-CLI `wp ys-admin-menu moves`
+ *   7. v1.6.0 登入次數限制與訪客 IP 偵測的 WP-CLI：`wp ys-admin-menu login-guard`、`wp ys-admin-menu ip`
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -21,6 +22,8 @@ use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
 use YangSheep\AdminMenu\Cli\YSMenuMovesCommand;
+use YangSheep\AdminMenu\Cli\YSLoginGuardCommand;
+use YangSheep\AdminMenu\Cli\YSClientIpCommand;
 use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 use YangSheep\AdminMenu\Rest\YSRouteRegistrar;
 use YangSheep\AdminMenu\Admin\YSMenuPage;
@@ -63,6 +66,9 @@ final class YSAdminMenuPlugin {
 		YSMenuMovesMigrator::register();
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( '\WP_CLI' ) ) {
 			\WP_CLI::add_command( 'ys-admin-menu moves', YSMenuMovesCommand::class );
+			// v1.6.0：登入次數限制（狀態、解鎖、白名單、開關、清理、紀錄、刪表）與訪客 IP 偵測的試算（都只在主機上執行）。
+			\WP_CLI::add_command( 'ys-admin-menu login-guard', YSLoginGuardCommand::class );
+			\WP_CLI::add_command( 'ys-admin-menu ip', YSClientIpCommand::class );
 		}
 		// 輸出側欄前的最後整理：拿掉已提升子選單在原父層的那一列、沒有內容的分組標籤。
 		add_filter( 'parent_file', [ YSMenuRouter::class, 'prepare_menu_for_render' ], 9 );
