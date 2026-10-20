@@ -113,6 +113,9 @@ class YSWhiteLabelAdmin {
 
 		// v1.4.0：白牌設定頁的分頁、媒體庫按鈕、Turnstile 測試。
 		add_action( 'admin_enqueue_scripts', [ self::class, 'enqueue_settings_assets' ] );
+
+		// v1.6.0：登入次數限制「鎖定與紀錄」的動作（各自的 nonce）與全後台的健康提醒。
+		YSLoginSecurityAdmin::register();
 	}
 
 	/* ─────────────────────────── v1.4.0 選單上方 LOGO 區塊 ─────────────────────────── */
@@ -367,6 +370,10 @@ class YSWhiteLabelAdmin {
 		// v1.6.0：「登入防護」分頁的「登入入口」與「進階：訪客 IP」。
 		$entrance_view  = YSLoginSecurityAdmin::entrance_view();
 		$ip_view        = YSLoginSecurityAdmin::ip_view();
+		// v1.6.0：登入次數限制卡片、鎖定與紀錄（只讀 lg_ip、lg_page；動作做完的代碼過白名單）。
+		$guard_view     = YSLoginSecurityAdmin::guard_view();
+		$records_view   = YSLoginSecurityAdmin::records_view( wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定篩選與頁數
+		$lg_done        = isset( $_GET['ys_am_lg_done'] ) && is_string( $_GET['ys_am_lg_done'] ) && in_array( $_GET['ys_am_lg_done'], YSLoginSecurityAdmin::DONE_CODES, true ) ? (string) $_GET['ys_am_lg_done'] : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- 白名單比對
 		$field_errors   = self::read_field_errors();
 		$active_tab     = self::read_tab( $_GET['tab'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定先顯示哪個分頁
 
@@ -447,6 +454,8 @@ class YSWhiteLabelAdmin {
 		YSLoginSecurityAdmin::save_entrance_settings( $post );
 		// v1.6.0：訪客 IP 偵測。不合法的欄位不存、保留原本的值，錯誤代碼一起帶回設定頁。
 		$errors = array_merge( $errors, YSLoginSecurityAdmin::save_ip_settings( $post ) );
+		// v1.6.0：登入次數限制（卡片有送出才存；觀察期只在關到開時開始；總開關打開時建表）。
+		$errors = array_merge( $errors, YSLoginSecurityAdmin::save_guard_settings( $post ) );
 
 		$args = [
 			'page'           => YSMenuPage::SLUG_SETTINGS,

@@ -68,6 +68,7 @@ final class YSLoginGuard {
 		YSClientIp::reset();
 		YSLoginGuardHealth::reset();
 		YSLoginGuardCapacity::reset();
+		YSLoginGuardNotifier::reset();
 		if ( ! YSLoginGuardSettings::active() ) {
 			return;
 		}
@@ -94,6 +95,7 @@ final class YSLoginGuard {
 		add_action( self::CRON_HOOK, [ self::class, 'cron_cleanup' ] );
 		add_action( 'init', [ self::class, 'schedule_cleanup' ] );
 		add_action( 'admin_init', [ self::class, 'maybe_ensure' ] );
+		YSLoginGuardNotifier::register();
 	}
 
 	/** 外掛啟用時：總開關是開的才建表（§4.7.4）。 */
@@ -442,7 +444,7 @@ final class YSLoginGuard {
 		 *
 		 * @since 1.6.0
 		 *
-		 * @param array{key:string,ip:string,until:int,source:string,shared:bool} $lock
+		 * @param array{key:string,ip:string,until:int,source:string,shared:bool,count:int} $lock count：鎖定時的失敗次數。
 		 */
 		do_action(
 			'ys_admin_menu_login_guard_locked',
@@ -452,6 +454,7 @@ final class YSLoginGuard {
 				'until'  => $until,
 				'source' => $source,
 				'shared' => ! empty( $target['shared'] ),
+				'count'  => (int) $target['count'],
 			]
 		);
 	}

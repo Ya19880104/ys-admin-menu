@@ -732,6 +732,154 @@ final class YSLoginGuardStore {
 		return $total;
 	}
 
+	/* ─────────────────────────── 後台與 WP-CLI（§4.8、§4.10） ─────────────────────────── */
+
+	/** 鍵的格式（後台與 WP-CLI 的目標先驗證再查）：IP 鍵、IPv6 網段、agg48:、via: 開頭的共用桶與 overflow 分桶。保留列不算。 */
+	public static function is_valid_key( string $key ): bool {
+		if ( '' === $key || strlen( $key ) > 64 || '~' === $key[0] ) {
+			return false;
+		}
+		return 1 === preg_match( '/^(?:agg48:|via:)?[0-9a-z.:\/-]+$/D', $key ); // D：$ 不吃結尾的換行
+	}
+
+	/**
+	 * 計數表的列（不含保留列）：只要鎖定中的，或全部；可以只看某一個鍵或某一個 IP（呼叫的人先驗證格式）。
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function list_rows( int $now, bool $locked_only, string $filter = '', int $limit = 200 ): array {
+		global $wpdb;
+		$table = YSLoginGuardSchema::counter_table();
+		$where = [ 'ip_key NOT LIKE %s' ];
+		$args  = [ $wpdb->esc_like( '~' ) . '%' ];
+		if ( $locked_only ) {
+			$where[] = 'locked_until > %d';
+			$args[]  = $now;
+		}
+		if ( '' !== $filter ) {
+			$where[] = '( ip_key = %s OR last_ip = %s )';
+			$args[]  = $filter;
+			$args[]  = $filter;
+		}
+		$args[] = max( 1, min( 1000, $limit ) );
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT ip_key, last_ip, fail_count, window_start, locked_until, lockout_count, blocked_count, total_failures, last_username, last_source, updated_at FROM {$table} WHERE " . implode( ' AND ', $where ) . ' ORDER BY locked_until DESC, updated_at DESC LIMIT %d', $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- 表名與條件是系統產生的
+		return is_array( $rows ) ? $rows : [];
+	}
+
+	/** 「鍵＋帳號」小表裡這個鍵有幾個不同的（存在的）帳號失敗過（鎖定列表與通知用）。 */
+	public static function acct_count( string $key ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . YSLoginGuardSchema::acct_table() . ' WHERE ip_key = %s', $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+	}
+
+	/**
+	 * 解除鎖定（後台、WP-CLI）：鎖定、這個視窗的次數與逐次加長的計數一起清掉（管理員判斷這是正常的使用者）；列留著（§4.7.3）。
+	 *
+	 * @return int 影響幾列（0＝本來就沒有這一列）。
+	 */
+	public static function unlock( string $key ): int {
+		global $wpdb;
+		if ( ! self::is_valid_key( $key ) ) {
+			return 0;
+		}
+		$result = $wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . ' SET locked_until = 0, fail_count = 0, window_start = 0, lockout_count = 0, lockout_period_start = 0 WHERE ip_key = %s', $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return false === $result ? 0 : (int) $result;
+	}
+
+	/** 全部解鎖（後台、WP-CLI）。保留列不動。 */
+	public static function unlock_all( int $now ): int {
+		global $wpdb;
+		$result = $wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . ' SET locked_until = 0, fail_count = 0, window_start = 0, lockout_count = 0, lockout_period_start = 0 WHERE locked_until > %d AND ip_key NOT LIKE %s', $now, $wpdb->esc_like( '~' ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return false === $result ? 0 : (int) $result;
+	}
+
+	/**
+	 * 清空紀錄（後台、WP-CLI）：紀錄表（含被拒的跨站來源）與「鍵＋帳號」小表；計數與鎖定不動；~rows_acct 設成 0（§4.8）。
+	 */
+	public static function clear_records( int $now ): void {
+		global $wpdb;
+		$wpdb->query( 'DELETE FROM ' . YSLoginGuardSchema::log_table() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- 表名是系統產生的
+		$wpdb->query( 'DELETE FROM ' . YSLoginGuardSchema::acct_table() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- 表名是系統產生的
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . " SET fail_count = 0, updated_at = %d WHERE ip_key = '~rows_acct'", $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+	}
+
+	/**
+	 * 最近的紀錄（後台、WP-CLI），新到舊；可以只看某一個 IP 或鍵（呼叫的人先驗證格式）。
+	 *
+	 * @return array{rows:array<int, array<string, mixed>>,total:int}
+	 */
+	public static function recent_logs( string $filter, int $since, int $page, int $per_page = 50 ): array {
+		global $wpdb;
+		$table = YSLoginGuardSchema::log_table();
+		$where = 'created_at >= %d';
+		$args  = [ $since ];
+		if ( '' !== $filter ) {
+			$where .= ' AND ( ip = %s OR ip_key = %s )';
+			$args[] = $filter;
+			$args[] = $filter;
+		}
+		$total    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- 表名與條件是系統產生的
+		$per_page = max( 1, min( 500, $per_page ) );
+		$offset   = max( 0, ( max( 1, $page ) - 1 ) * $per_page );
+		$rows     = $wpdb->get_results( $wpdb->prepare( "SELECT id, created_at, event, ip, ip_key, username, source, code, origin FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- 表名與條件是系統產生的
+		return [ 'rows' => is_array( $rows ) ? $rows : [], 'total' => $total ];
+	}
+
+	/**
+	 * 被拒的跨站登入來源（後台；觀察期內本來會被拒的也算），次數多的在前（§4.13.1）。
+	 *
+	 * @param int $min_count 只要次數大於這個數的（提醒用）；0＝都要。
+	 * @return array<int, array{origin:string,entries:string,count:int,observed:int,last:int}>
+	 */
+	public static function xsite_sources( int $since, int $limit = 20, int $min_count = 0 ): array {
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT origin, GROUP_CONCAT( DISTINCT code ORDER BY code SEPARATOR %s ) AS entries, COUNT(*) AS n, SUM( source = %s ) AS observed, MAX( created_at ) AS last_at FROM ' . YSLoginGuardSchema::log_table() . ' WHERE event = %s AND created_at >= %d GROUP BY origin HAVING COUNT(*) > %d ORDER BY n DESC, last_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+				',',
+				'observe',
+				self::EVENT_XSITE,
+				$since,
+				max( 0, $min_count ),
+				max( 1, min( 100, $limit ) )
+			),
+			ARRAY_A
+		);
+		$out = [];
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$out[] = [
+				'origin'   => (string) $row['origin'],
+				'entries'  => (string) $row['entries'],
+				'count'    => (int) $row['n'],
+				'observed' => (int) $row['observed'],
+				'last'     => (int) $row['last_at'],
+			];
+		}
+		return $out;
+	}
+
+	/**
+	 * 這個鍵某個時間之後的失敗紀錄裡出現過的帳號名稱（通知用；紀錄是取樣的，每個鍵每分鐘一筆）。
+	 *
+	 * @return string[] 已清理過的帳號名稱。
+	 */
+	public static function log_usernames( string $key, int $since, int $limit = 50 ): array {
+		global $wpdb;
+		$names = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT username FROM ' . YSLoginGuardSchema::log_table() . " WHERE event = 'fail' AND ip_key = %s AND created_at >= %d AND username <> '' LIMIT %d", $key, $since, max( 1, min( 200, $limit ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return array_values( array_unique( array_map( static fn( $n ) => self::sanitize_username( (string) $n ), is_array( $names ) ? $names : [] ) ) );
+	}
+
+	/**
+	 * 通知的節流：同一個鍵 24 小時內一封（有條件的 UPDATE，並發時只有一個請求拿到）。
+	 *
+	 * @return bool 這個請求可以寄。
+	 */
+	public static function claim_notify( string $key, int $now, int $every ): bool {
+		global $wpdb;
+		$result = $wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . ' SET last_notified_at = %d WHERE ip_key = %s AND last_notified_at <= %d', $now, $key, $now - $every ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+		return false !== $result && 1 === (int) $wpdb->rows_affected;
+	}
+
 	/* ─────────────────────────── 工具 ─────────────────────────── */
 
 	/**

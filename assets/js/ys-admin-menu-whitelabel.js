@@ -36,6 +36,10 @@
 			if ( tabInput ) {
 				tabInput.value = key;
 			}
+			// v1.6.0：主表單外面、跟著某個分頁顯示的區塊（例如「鎖定與紀錄」）。
+			Array.prototype.slice.call( document.querySelectorAll( '[data-ys-am-panel-extra]' ) ).forEach( function ( extra ) {
+				extra.hidden = extra.getAttribute( 'data-ys-am-panel-extra' ) !== key;
+			} );
 			try {
 				var url = new URL( window.location.href );
 				url.searchParams.set( 'tab', key );

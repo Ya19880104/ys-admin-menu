@@ -390,6 +390,21 @@ final class YSLoginGuardCapacity {
 	}
 
 	/**
+	 * 後台打開設定頁時順手清理（§4.7.3 第 2 項）：距上次清理超過一小時才做。功能關掉之後也照做（表還在的話），
+	 * 出錯不影響頁面（記 health）。
+	 */
+	public static function cleanup_if_due( int $now ): void {
+		if ( ! YSLoginGuardSchema::is_ready() || $now - (int) get_option( YSLoginGuardSettings::OPTION_LAST_CLEANUP, 0 ) < YSLoginGuardStore::CLEANUP_INTERVAL ) {
+			return;
+		}
+		try {
+			self::run_cleanup( $now, 'due' );
+		} catch ( \Throwable $e ) {
+			YSLoginGuardHealth::record( 'cleanup_failed', [ 'why' => 'admin' ] );
+		}
+	}
+
+	/**
 	 * 清理，同一時間只有一個請求在做（§4.7.3）：GET_LOCK；回 NULL 或查詢錯誤時改用 ~cleanup 的 30 秒租約；在 finally 裡釋放。
 	 * 別的請求 1 秒內剛清完時不重做（被灌爆時不讓每個請求都清），保留列的問題與手動執行例外。
 	 *

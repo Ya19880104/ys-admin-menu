@@ -8,13 +8,16 @@
  *   1. 後台品牌：後台 LOGO（頂層選單圖示＋選單上方 LOGO 區塊）、Footer 文字、後台頁尾、背景色、資料清除
  *   2. Admin Bar：隱藏 WordPress 標誌、各節點後台／前台隱藏、前台 Admin Bar 載入方式與角色
  *   3. 登入頁：自訂 wp-login.php 的開關與文字
- *   4. 登入防護：Cloudflare Turnstile；v1.6.0 加「登入入口」（兩個獨立開關，放在最上面）與「進階：訪客 IP」（預設收合）
+ *   4. 登入防護：Cloudflare Turnstile；v1.6.0 加「登入次數限制」（login-guard-card.php，放在最上面）、「登入入口」（兩個獨立開關）、
+ *      「進階：訪客 IP」（預設收合），以及主表單之外的「鎖定與紀錄」（login-guard-records.php）
  *
  * 變數（render_settings 提供）：
  *   - $logo_url, $footer_text, $hide_footer, $hide_wp_logo, $admin_bg_color, $purge_on_uninstall, $notice
  *   - v1.4.0：$show_menu_logo, $menu_logo_text, $adminbar, $login_page, $turnstile, $field_errors, $active_tab
  *   - v1.6.0：$entrance_view（登入防護分頁的「登入入口」，YSLoginSecurityAdmin::entrance_view()）、
- *             $ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）
+ *             $ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）、
+ *             $guard_view（登入次數限制，YSLoginSecurityAdmin::guard_view()）、$records_view（鎖定與紀錄，records_view()）、
+ *             $lg_done（「鎖定與紀錄」動作做完的代碼）
  *
  * @package YangSheep\Ecommerce\Templates
  */
@@ -33,6 +36,9 @@ defined( 'ABSPATH' ) || exit;
 /** @var string $active_tab */
 /** @var array  $entrance_view */
 /** @var array  $ip_view */
+/** @var array  $guard_view */
+/** @var array  $records_view */
+/** @var string $lg_done */
 
 $has_logo        = ( '' !== $logo_url );
 $settings_action = admin_url( 'admin-post.php' );
@@ -548,6 +554,9 @@ $log_labels = [
 		<?php /* ═══════════════════════ 分頁 4：登入防護（Turnstile） ═══════════════════════ */ ?>
 		<section class="ys-am-wl-panel" id="ys-am-wl-panel-turnstile" role="tabpanel" aria-labelledby="ys-am-wl-tab-turnstile" data-panel="turnstile">
 
+			<?php /* v1.6.0：登入次數限制（總開關預設關）。 */ ?>
+			<?php include __DIR__ . '/login-guard-card.php'; ?>
+
 			<?php /* v1.6.0：登入入口的兩個獨立開關（跟其他登入防護設定無關，可以單獨使用）。 */ ?>
 			<div class="ysca-wl-card" id="ys-am-entrance-card">
 				<div class="ysca-wl-card__header">
@@ -923,6 +932,14 @@ $log_labels = [
 						</span>
 						<span class="ys-am-toggle-field__text"><strong>Turnstile 也使用偵測到的 IP</strong>不勾＝照舊只把 REMOTE_ADDR 送給 Cloudflare 驗證。網站在代理後面、而且上面的偵測方式已經設好時再勾。</span>
 					</label>
+
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="lg_lock_private" value="yes" <?php checked( ! empty( $guard_view['lock_private'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>內網位址逐一計數</strong>只在網站只給內網用、前面沒有代理時打開。不勾時，從內部網路位址直接連進來的登入失敗併成一桶計算（門檻 5 倍）。</span>
+					</label>
 				</div>
 			</details>
 		</section>
@@ -931,6 +948,9 @@ $log_labels = [
 			<button type="submit" class="ysca-wl-btn ysca-wl-btn--primary">儲存白牌設定</button>
 		</div>
 	</form>
+
+	<?php /* v1.6.0：鎖定與紀錄（主表單之外，每個動作有自己的表單與 nonce；跟著「登入防護」分頁顯示）。 */ ?>
+	<?php include __DIR__ . '/login-guard-records.php'; ?>
 </div>
 
 <script>

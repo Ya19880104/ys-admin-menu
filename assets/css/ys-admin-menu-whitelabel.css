@@ -850,3 +850,58 @@ body.ysca-wl-active .ys-am-wl-ip-preview {
         white-space: normal;
     }
 }
+
+/* ───────── v1.6.0 登入次數限制與「鎖定與紀錄」 ───────── */
+body.ysca-wl-active .ys-am-lg-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+body.ysca-wl-active .ysca-wl-input--sm {
+    width: 5.5em;
+    min-width: 0;
+}
+body.ysca-wl-active .ys-am-lg-observe {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+body.ysca-wl-active .ys-am-lg-auto {
+    margin: 4px 0 0 1.2em;
+    list-style: disc;
+}
+body.ysca-wl-active .ys-am-lg-limits {
+    margin-top: 12px;
+}
+body.ysca-wl-active .ys-am-lg-limits > summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+body.ysca-wl-active .ys-am-lg-records {
+    margin-top: 24px;
+}
+body.ysca-wl-active .ys-am-lg-subtitle {
+    margin: 20px 0 8px;
+    font-size: 14px;
+}
+body.ysca-wl-active .ys-am-lg-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+body.ysca-wl-active .ys-am-lg-filter .ysca-wl-input {
+    width: 18em;
+    max-width: 100%;
+}
+body.ysca-wl-active .ys-am-lg-table td {
+    word-break: break-word;
+}
+body.ysca-wl-active .ys-am-lg-pages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}

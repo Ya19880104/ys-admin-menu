@@ -223,6 +223,40 @@ final class YSLoginGuardSettings {
 		return 86400 * self::int( 'retention_days' );
 	}
 
+	/** 鎖定時寄信通知（預設關，§4.9）。 */
+	public static function notify(): bool {
+		return 'yes' === get_option( self::OPTION_NOTIFY, 'no' );
+	}
+
+	/** 通知寄到哪裡：設定的信箱（要是合法的 email），留空或不合法時寄給網站管理員信箱。 */
+	public static function notify_email(): string {
+		$raw = get_option( self::OPTION_NOTIFY_EMAIL, '' );
+		$raw = is_string( $raw ) ? trim( $raw ) : '';
+		if ( '' !== $raw && false !== is_email( $raw ) ) {
+			return $raw;
+		}
+		$admin = get_option( 'admin_email', '' );
+		return is_string( $admin ) ? $admin : '';
+	}
+
+	/**
+	 * 允許跨站登入的來源一行的檢查（存檔、「允許這個來源」、WP-CLI 共用）：正規化後要是 https://主機[:埠]；
+	 * 本機開發可以用 http://localhost、http://127.0.0.1、http://[::1]（§5.2）。
+	 *
+	 * @return string 正規化後的來源；不合法回空字串。
+	 */
+	public static function valid_origin( string $line ): string {
+		$origin = self::normalize_origin( $line );
+		if ( '' === $origin ) {
+			return '';
+		}
+		if ( 0 === strpos( $origin, 'https://' ) ) {
+			return $origin;
+		}
+		$host = (string) wp_parse_url( $origin, PHP_URL_HOST );
+		return in_array( strtolower( trim( $host, '[]' ) ), [ 'localhost', '127.0.0.1', '::1' ], true ) ? $origin : '';
+	}
+
 	/**
 	 * 來源的正規化（跟 YS CART 的 normalize_origin() 一樣）：去掉結尾的 /、scheme 與主機轉小寫、
 	 * 標準埠省略，只留 scheme://主機[:埠]。只收 http 與 https；解析不出 scheme 或主機回空字串。
