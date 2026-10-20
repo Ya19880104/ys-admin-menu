@@ -10,12 +10,13 @@
  *
  * 後端：
  *   - 登入：掛 authenticate，priority 5，早於核心 priority 20 的帳密檢查。
- *     驗證沒過時回 WP_Error，並把這一次請求的核心帳密檢查拿掉、最後（PHP_INT_MAX）再強制回同一個錯誤，
- *     等整條 authenticate 跑完、真正的 wp_login_failed 才還原（還在鏈中間時，其他外掛自己觸發的
- *     wp_login_failed 或巢狀 wp_authenticate() 不會讓它提早還原）。
+ *     驗證沒過時回 WP_Error，並關上 YSAuthGate（v1.6.0 從這裡搬出去的共用閘門）：這一次請求的核心帳密檢查拿掉、
+ *     最後（PHP_INT_MAX）再強制回同一個錯誤，等整條 authenticate 跑完、真正的 wp_login_failed 才還原
+ *     （還在鏈中間時，其他外掛自己觸發的 wp_login_failed 或巢狀 wp_authenticate() 不會讓它提早還原）。
  *     原因：核心 priority 20 的 wp_authenticate_username_password 會忽略前面傳來的 WP_Error，
  *     自己再查一次帳號與密碼，只回 WP_Error 根本擋不住。拿掉之後也不會去算密碼雜湊，
  *     回應內容與時間都不會因為帳號存不存在而不同（不形成帳號列舉的管道）。
+ *     閘門已經關著時（同一個請求先被擋過）不再向 Cloudflare 驗證，回閘門記的錯誤。
  *   - 註冊（registration_errors）、忘記密碼（lostpassword_errors）：驗證沒過時只回本外掛這一個錯誤，
  *     不帶「帳號已存在」「沒有這個帳號」之類的訊息。
  *   - siteverify 一定要跑、結果一定要判：Cloudflare 回 HTTP 200 且 success === true 才算通過。
@@ -106,15 +107,6 @@ final class YSTurnstile {
 	/** 驗證成功時，多久才更新一次「最後成功時間」（秒；避免每次登入都寫資料庫）。 */
 	private const HEALTH_OK_INTERVAL = 300;
 
-	/** 核心 priority 20 的帳密檢查（驗證沒過時這一次請求暫時拿掉）。 */
-	private const CORE_PASSWORD_FILTERS = [ 'wp_authenticate_username_password', 'wp_authenticate_email_password' ];
-
-	/** 這一次登入請求的驗證失敗（PHP_INT_MAX 的 enforce_login_failure 會回傳它）。 */
-	private static ?\WP_Error $login_failure = null;
-
-	/** @var string[] 暫時拿掉的核心 filter，wp_login_failed 時放回。 */
-	private static array $removed_filters = [];
-
 	/**
 	 * 這一次請求的驗證結果（null＝還沒驗）。每個請求一個，不分表單。
 	 *
@@ -175,23 +167,14 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 每個請求開始時清空本類別的請求內狀態（login_init 每個請求只觸發一次）。
+	 * 每個請求開始時清空請求內狀態（login_init 每個請求只觸發一次）。
 	 *
 	 * 一般 PHP 每個請求本來就是新的行程，這裡什麼都不會做；常駐 worker 裡 static 與 hook 會跨請求保留，
-	 * 所以清掉前一個請求的驗證結果與失敗狀態。前一個請求若留下被暫停的核心帳密檢查（例如沒有觸發
-	 * wp_login_failed 就結束），先把它放回去，再清空紀錄。
+	 * 所以清掉前一個請求的驗證結果，閘門也重設：前一個請求若留下被暫停的核心帳密檢查（例如沒有觸發
+	 * wp_login_failed 就結束），先把它放回去，再清空（YSAuthGate::reset）。
 	 */
 	private static function reset_request_state(): void {
-		foreach ( self::$removed_filters as $callback ) {
-			if ( false === has_filter( 'authenticate', $callback ) ) {
-				add_filter( 'authenticate', $callback, 20, 3 );
-			}
-		}
-		remove_filter( 'authenticate', [ self::class, 'enforce_login_failure' ], PHP_INT_MAX );
-		remove_action( 'wp_login_failed', [ self::class, 'restore_password_check' ], 0 );
-
-		self::$removed_filters = [];
-		self::$login_failure   = null;
+		YSAuthGate::reset();
 		self::$request_verdict = null;
 	}
 
@@ -503,13 +486,20 @@ final class YSTurnstile {
 			return $user;
 		}
 
+		// 閘門已經關著（這個請求先被擋過）：不再向 Cloudflare 驗證，回閘門記的錯誤。
+		$closed = YSAuthGate::error();
+		if ( null !== $closed ) {
+			return $closed;
+		}
+
 		// 同一個請求只驗一次：其他外掛巢狀呼叫 wp_authenticate() 時沿用同一個結果。
 		if ( self::request_verdict( 'login' ) ) {
 			return $user;
 		}
 
+		// 驗證沒過：這一次請求不再跑核心的帳密檢查，最後一律回同一個錯誤。
 		$error = self::failure_error();
-		self::stop_password_check( $error );
+		YSAuthGate::close( $error, YSAuthGate::CORE_PASSWORD_FILTERS );
 		return $error;
 	}
 
@@ -548,54 +538,6 @@ final class YSTurnstile {
 		$has_user = is_string( $username ) && '' !== trim( $username );
 		$has_pass = is_string( $password ) && '' !== $password;
 		return $has_user || $has_pass;
-	}
-
-	/**
-	 * 驗證沒過：這一次請求不再跑核心的帳密檢查，最後一律回同一個錯誤。
-	 */
-	private static function stop_password_check( \WP_Error $error ): void {
-		self::$login_failure = $error;
-
-		foreach ( self::CORE_PASSWORD_FILTERS as $callback ) {
-			if ( 20 === has_filter( 'authenticate', $callback ) ) {
-				remove_filter( 'authenticate', $callback, 20 );
-				self::$removed_filters[] = $callback;
-			}
-		}
-
-		add_filter( 'authenticate', [ self::class, 'enforce_login_failure' ], PHP_INT_MAX );
-		add_action( 'wp_login_failed', [ self::class, 'restore_password_check' ], 0 );
-	}
-
-	/**
-	 * authenticate 的最後一關：本次請求 Turnstile 沒過，就算中間有外掛回了 WP_User 也一律擋下。
-	 *
-	 * @param null|\WP_User|\WP_Error $user
-	 * @return null|\WP_User|\WP_Error
-	 */
-	public static function enforce_login_failure( $user ) {
-		return self::$login_failure instanceof \WP_Error ? self::$login_failure : $user;
-	}
-
-	/**
-	 * wp_login_failed（authenticate 跑完之後）：把暫時拿掉的核心 filter 放回去。
-	 *
-	 * 還在 authenticate 鏈中間就不還原：其他外掛自己觸發 wp_login_failed、或巢狀呼叫 wp_authenticate()
-	 * （巢狀那次結束時也會觸發 wp_login_failed）時，若在這裡還原，外層鏈接下來的核心 priority 20
-	 * 又會查一次密碼、PHP_INT_MAX 的強制關卡也不見了，不帶 token 加正確密碼就能登入。
-	 * 這時保持原狀，等整條 authenticate 跑完、真正的 wp_login_failed 再還原。
-	 */
-	public static function restore_password_check(): void {
-		if ( doing_filter( 'authenticate' ) ) {
-			return;
-		}
-		remove_action( 'wp_login_failed', [ self::class, 'restore_password_check' ], 0 );
-		remove_filter( 'authenticate', [ self::class, 'enforce_login_failure' ], PHP_INT_MAX );
-		foreach ( self::$removed_filters as $callback ) {
-			add_filter( 'authenticate', $callback, 20, 3 );
-		}
-		self::$removed_filters = [];
-		self::$login_failure   = null;
 	}
 
 	/**
