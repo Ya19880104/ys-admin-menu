@@ -9,6 +9,7 @@
  *     錯誤訊息、密碼處理全部維持 WordPress 原樣；其他外掛掛在表單上的欄位照常出現。
  *   - 品牌區（左上 LOGO 或字標＋品牌名稱＋標語）用 login_header 輸出，卡片標題用 login_message 輸出，
  *     頁尾文字用 login_footer 輸出；「返回首頁」用 login_site_html_link。
+ *   - v1.5.2：卡片上方不放品牌名稱（左側大標、手機上卡片上方那一行已經有），卡片從標題開始。
  *   - 忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。
  *   - WordPress 的語言切換預設不顯示（login_display_language_dropdown），白牌設定可以打開。
  *   - 登入網址被其他外掛改掉（例如 WPS Hide Login）時照樣套用：它們在新網址載入的還是 wp-login.php。
@@ -30,7 +31,7 @@ final class YSLoginPage {
 	/** wp_options key — 總開關（yes／no，預設 no）。 */
 	public const OPTION_ENABLED = 'ys_admin_menu_login_enabled';
 
-	/** wp_options key — 品牌名稱（左側大標與卡片上方小字；空白＝網站標題）。 */
+	/** wp_options key — 品牌名稱（左側大標；手機上在卡片上方那一行；空白＝網站標題）。 */
 	public const OPTION_BRAND = 'ys_admin_menu_login_brand';
 
 	/** wp_options key — 卡片標題（空白＝「登入」）。 */
@@ -323,7 +324,7 @@ final class YSLoginPage {
 	}
 
 	/**
-	 * login_message：卡片上方的品牌小字、標題、副標（副標只在登入畫面顯示）。
+	 * login_message：卡片的標題與副標（副標只在登入畫面顯示）。
 	 *
 	 * @param string $message 核心或其他外掛的訊息。
 	 * @return string
@@ -347,7 +348,6 @@ final class YSLoginPage {
 		$subtitle = 'login' === $action ? self::get_subtitle() : '';
 
 		$head  = '<div class="ys-am-login-head">';
-		$head .= '<p class="ys-am-login-head__brand">' . esc_html( self::get_brand() ) . '</p>';
 		$head .= '<p class="ys-am-login-head__title">' . esc_html( $title ) . '</p>';
 		if ( '' !== $subtitle ) {
 			$head .= '<p class="ys-am-login-head__sub">' . esc_html( $subtitle ) . '</p>';

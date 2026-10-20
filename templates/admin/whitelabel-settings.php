@@ -371,7 +371,7 @@ $log_labels = [
 							<input type="text" id="ys-am-login-brand" name="login_brand" maxlength="120" class="ysca-wl-input"
 								value="<?php echo esc_attr( (string) ( $login_page['brand'] ?? '' ) ); ?>"
 								placeholder="<?php echo esc_attr( (string) ( $login_page['brand_default'] ?? '' ) ); ?>">
-							<p class="ysca-wl-field__hint">左側的大標，也是卡片上方的小字。留空用網站標題。</p>
+							<p class="ysca-wl-field__hint">左側的大標，手機上在卡片上方那一行。留空用網站標題。</p>
 						</div>
 						<div class="ysca-wl-field">
 							<label for="ys-am-login-tagline" class="ysca-wl-field__label">標語</label>

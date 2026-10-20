@@ -26,7 +26,7 @@ body.ys-am-login.login {
 	--ys-login-on-dark-soft: #e6ecf1;
 	--ys-login-on-dark-muted: #94a3b8;
 	--ys-login-focus-on-dark: #5cbcee;
-	/* 白卡（對白底：標題 17.1:1、欄位名稱 8.18:1、說明 5.67:1、品牌小字 5.07:1、欄位框線 3.15:1、焦點框 3.90:1）。 */
+	/* 白卡（對白底：標題 17.1:1、欄位名稱 8.18:1、說明 5.67:1、表單裡的連結 5.07:1、欄位框線 3.15:1、焦點框 3.90:1）。 */
 	--ys-login-card: #ffffff;
 	--ys-login-card-border: #e6ecf1;
 	--ys-login-card-shadow: 0 25px 50px -12px rgba(11, 20, 32, 0.6);
@@ -217,7 +217,7 @@ body.ys-am-login #login > .ys-am-login-head ~ :is(.notice, .message, .success) {
 	z-index: 1;
 }
 
-/* 第一段：卡片標題（品牌小字、標題、說明）。 */
+/* 第一段：卡片標題（標題、說明）。 */
 body.ys-am-login #login > .ys-am-login-head {
 	margin: 0;
 	padding: 32px 32px 28px;
@@ -229,15 +229,7 @@ body.ys-am-login .ys-am-login-head p {
 	margin: 0;
 }
 
-body.ys-am-login .ys-am-login-head p.ys-am-login-head__brand {
-	color: var(--ys-login-accent-text);
-	font-size: 14px;
-	font-weight: 500;
-	line-height: 20px;
-}
-
 body.ys-am-login .ys-am-login-head p.ys-am-login-head__title {
-	margin-top: 4px;
 	color: var(--ys-login-heading);
 	font-size: 24px;
 	font-weight: 700;
