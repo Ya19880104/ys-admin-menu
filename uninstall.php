@@ -6,7 +6,7 @@
  * 「刪除外掛時一併清除所有設定」（option `ys_admin_menu_purge_on_uninstall` = 'yes'）
  * 時，才會移除本外掛的所有 wp_options。
  *
- * 注意：本外掛的選單設定與樣式設定皆儲存於 wp_options，自己沒有資料表。
+ * 注意：本外掛的選單設定與樣式設定皆儲存於 wp_options；v1.6.0 的登入次數限制另有三張資料表（見下面，一律刪）。
  * v1.3.0 的「複製到主選單」（top_copies）與複製項的排序、名稱、圖示（wp_native.items[]）都存在
  * ys_admin_menu_config 裡，刪掉這個 option 就一起清除，沒有另外的 option 或暫存資料。
  * v1.5.0 的 YS CART 選單搬家另有五種 option：遷移標記 ys_admin_menu_moves_applied、遷移紀錄
@@ -31,6 +31,29 @@ if ( is_multisite() ) {
 	}
 } else {
 	delete_option( 'ys_admin_menu_turnstile_secret_key' );
+}
+
+// v1.6.0：登入次數限制的三張資料表（計數、「鍵＋帳號」、紀錄）、內部用的鍵與每天的清理排程，不論有沒有勾
+// 「刪除外掛時一併清除所有設定」都刪——表裡有 IP 與嘗試的帳號名稱，不該留在已移除外掛的資料庫裡。多站網路逐站刪。
+// 這裡不載入外掛的類別（解除安裝時主檔不會載入），表名與鍵名直接寫。
+$ys_admin_menu_drop_login_guard = static function () {
+	global $wpdb;
+	foreach ( array( 'ys_admin_menu_login_guard', 'ys_admin_menu_login_guard_acct', 'ys_admin_menu_login_log' ) as $ys_admin_menu_table ) {
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . $ys_admin_menu_table ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared -- 表名是固定的
+	}
+	foreach ( array( 'ys_admin_menu_login_guard_db_version', 'ys_admin_menu_login_guard_last_cleanup', 'ys_admin_menu_login_guard_health', 'ys_admin_menu_login_guard_notify_state', 'ys_admin_menu_login_guard_cross_site_since' ) as $ys_admin_menu_internal ) {
+		delete_option( $ys_admin_menu_internal );
+	}
+	wp_clear_scheduled_hook( 'ys_admin_menu_login_guard_cleanup' );
+};
+if ( is_multisite() ) {
+	foreach ( get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) as $ys_admin_menu_site_id ) {
+		switch_to_blog( (int) $ys_admin_menu_site_id );
+		$ys_admin_menu_drop_login_guard();
+		restore_current_blog();
+	}
+} else {
+	$ys_admin_menu_drop_login_guard();
 }
 
 // v1.5.0：YS CART 選單搬家的遷移標記、遷移紀錄、遷移鎖、遷移前備份（ys_admin_menu_config_pre_moves_<版本>），以及啟用時
@@ -105,6 +128,24 @@ $ys_admin_menu_options = [
 	// v1.6.0：登入入口的兩個獨立開關（關閉 XML-RPC 登入、停用應用程式密碼）。
 	'ys_admin_menu_disable_xmlrpc_login',
 	'ys_admin_menu_disable_app_passwords',
+	// v1.6.0：登入次數限制的設定（資料表與內部用的鍵在上面一律刪）。
+	'ys_admin_menu_login_guard_enabled',
+	'ys_admin_menu_login_guard_max_failures',
+	'ys_admin_menu_login_guard_window',
+	'ys_admin_menu_login_guard_lockout',
+	'ys_admin_menu_login_guard_escalate',
+	'ys_admin_menu_login_guard_escalate_after',
+	'ys_admin_menu_login_guard_escalate_period',
+	'ys_admin_menu_login_guard_escalated_lockout',
+	'ys_admin_menu_login_guard_ipv6_aggregate',
+	'ys_admin_menu_login_guard_lock_private',
+	'ys_admin_menu_login_guard_cross_site_reject',
+	'ys_admin_menu_login_guard_cross_site_origins',
+	'ys_admin_menu_login_guard_allowlist',
+	'ys_admin_menu_login_guard_message',
+	'ys_admin_menu_login_guard_notify',
+	'ys_admin_menu_login_guard_notify_email',
+	'ys_admin_menu_login_guard_retention_days',
 	'ys_admin_menu_turnstile_enabled',
 	'ys_admin_menu_turnstile_site_key',
 	'ys_admin_menu_turnstile_secret_key',
