@@ -96,6 +96,12 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_login_background',
 	'ys_admin_menu_login_background_color',
 	'ys_admin_menu_login_wordmark',
+	// v1.6.0：訪客 IP 偵測（偵測方式、自訂標頭、信任的代理、信任 Cloudflare、Turnstile 也使用偵測到的 IP）。
+	'ys_admin_menu_ip_source',
+	'ys_admin_menu_ip_custom_header',
+	'ys_admin_menu_ip_trusted_proxies',
+	'ys_admin_menu_ip_trust_cloudflare',
+	'ys_admin_menu_ip_turnstile_use',
 	'ys_admin_menu_turnstile_enabled',
 	'ys_admin_menu_turnstile_site_key',
 	'ys_admin_menu_turnstile_secret_key',

@@ -1,5 +1,5 @@
 /**
- * YS Admin Menu — 白牌設定頁（v1.4.0）：分頁、媒體庫按鈕、Turnstile「測試設定」。
+ * YS Admin Menu — 白牌設定頁（v1.4.0）：分頁、媒體庫按鈕、Turnstile「測試設定」；v1.6.0「進階：訪客 IP」的預覽與「信任這個代理」。
  *
  * 漸進增強：沒有這支腳本時，四個分頁的內容依序全部顯示，表單照常可以儲存。
  * 整頁是同一個表單，切換分頁不會遺失其他分頁填到一半的內容；儲存後回到同一個分頁。
@@ -191,4 +191,57 @@
 			} );
 		} );
 	}
+
+	/* ───────── v1.6.0「進階：訪客 IP」：存了之後會是哪個 IP（預覽）、信任這個代理 ───────── */
+
+	// 每個選項在「信任 Cloudflare」開或關時會得到什麼，伺服器已經用這次請求算好、放在選項上；這裡只挑出來顯示。
+	// 信任的代理清單改了之後，要先儲存，預覽才會跟著變。
+	var ipPreview = document.getElementById( 'ys-am-ip-preview' );
+	var ipTrustCf = document.getElementById( 'ys-am-ip-trust-cf' );
+	var ipRadios  = Array.prototype.slice.call( document.querySelectorAll( 'input[name="ip_source"]' ) );
+
+	var showIpPreview = function () {
+		if ( ! ipPreview ) {
+			return;
+		}
+		var picked = ipRadios.filter( function ( radio ) {
+			return radio.checked;
+		} )[ 0 ];
+		if ( ! picked ) {
+			ipPreview.textContent = '';
+			return;
+		}
+		var trust = ipTrustCf && ipTrustCf.checked;
+		var text  = picked.getAttribute( trust ? 'data-ys-am-ip-preview-yes' : 'data-ys-am-ip-preview-no' ) || '';
+		ipPreview.textContent = text ? ( i18n.ipPreview || '' ) + text : '';
+	};
+
+	ipRadios.forEach( function ( radio ) {
+		radio.addEventListener( 'change', showIpPreview );
+	} );
+	if ( ipTrustCf ) {
+		ipTrustCf.addEventListener( 'change', showIpPreview );
+	}
+	showIpPreview();
+
+	document.addEventListener( 'click', function ( event ) {
+		var button = event.target && event.target.closest ? event.target.closest( '[data-ys-am-ip-trust]' ) : null;
+		if ( ! button ) {
+			return;
+		}
+		event.preventDefault();
+		var field = document.getElementById( 'ys-am-ip-trusted' );
+		var ip    = button.getAttribute( 'data-ys-am-ip-trust' ) || '';
+		if ( ! field || ! ip ) {
+			return;
+		}
+		var lines = field.value.split( /\r\n|\r|\n/ ).map( function ( line ) {
+			return line.trim();
+		} );
+		if ( -1 === lines.indexOf( ip ) ) {
+			field.value = field.value.replace( /\s+$/, '' ) + ( field.value.trim() ? '\n' : '' ) + ip;
+		}
+		button.disabled = true;
+		button.textContent = i18n.ipTrusted || button.textContent;
+	} );
 }() );

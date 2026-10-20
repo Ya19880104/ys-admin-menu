@@ -217,6 +217,9 @@ class YSWhiteLabelAdmin {
 					'needToken'    => __( '請先完成上方的 Turnstile 驗證。', 'ys-admin-menu' ),
 					'requestError' => __( '測試請求失敗，請重新整理頁面後再試。', 'ys-admin-menu' ),
 					'widgetError'  => __( 'Turnstile widget 載入失敗：多半是 Site Key 不正確，或這個網域沒有加進 Cloudflare 這個 widget 的網域清單。', 'ys-admin-menu' ),
+					// v1.6.0：進階：訪客 IP。
+					'ipPreview'    => __( '存了之後，你這次的請求會是：', 'ys-admin-menu' ),
+					'ipTrusted'    => __( '已加進清單，記得儲存', 'ys-admin-menu' ),
 				],
 			]
 		);
@@ -361,6 +364,8 @@ class YSWhiteLabelAdmin {
 		$adminbar       = YSAdminBarFilter::settings_view();
 		$login_page     = YSLoginPage::settings_view();
 		$turnstile      = YSTurnstile::settings_view();
+		// v1.6.0：「登入防護」分頁的「進階：訪客 IP」。
+		$ip_view        = YSLoginSecurityAdmin::ip_view();
 		$field_errors   = self::read_field_errors();
 		$active_tab     = self::read_tab( $_GET['tab'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定先顯示哪個分頁
 
@@ -437,6 +442,8 @@ class YSWhiteLabelAdmin {
 		YSAdminBarFilter::save_settings( $post );
 		YSLoginPage::save_settings( $post );
 		$errors = YSTurnstile::save_settings( $post );
+		// v1.6.0：訪客 IP 偵測。不合法的欄位不存、保留原本的值，錯誤代碼一起帶回設定頁。
+		$errors = array_merge( $errors, YSLoginSecurityAdmin::save_ip_settings( $post ) );
 
 		$args = [
 			'page'           => YSMenuPage::SLUG_SETTINGS,
@@ -468,7 +475,9 @@ class YSWhiteLabelAdmin {
 	 */
 	private static function read_field_errors(): array {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要顯示提示
-		$raw = isset( $_GET['ys_am_wl_err'] ) && is_string( $_GET['ys_am_wl_err'] ) ? sanitize_text_field( wp_unslash( $_GET['ys_am_wl_err'] ) ) : '';
-		return array_values( array_intersect( [ 'site_key_format', 'secret_format' ], explode( ',', $raw ) ) );
+		$raw   = isset( $_GET['ys_am_wl_err'] ) && is_string( $_GET['ys_am_wl_err'] ) ? sanitize_text_field( wp_unslash( $_GET['ys_am_wl_err'] ) ) : '';
+		$codes = explode( ',', $raw );
+		// v1.6.0：訪客 IP 的代碼（含行號）另外過白名單。
+		return array_values( array_merge( array_intersect( [ 'site_key_format', 'secret_format' ], $codes ), YSLoginSecurityAdmin::filter_codes( $codes ) ) );
 	}
 }

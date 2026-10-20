@@ -8,11 +8,12 @@
  *   1. 後台品牌：後台 LOGO（頂層選單圖示＋選單上方 LOGO 區塊）、Footer 文字、後台頁尾、背景色、資料清除
  *   2. Admin Bar：隱藏 WordPress 標誌、各節點後台／前台隱藏、前台 Admin Bar 載入方式與角色
  *   3. 登入頁：自訂 wp-login.php 的開關與文字
- *   4. 登入防護：Cloudflare Turnstile
+ *   4. 登入防護：Cloudflare Turnstile；v1.6.0 加「進階：訪客 IP」（預設收合）
  *
  * 變數（render_settings 提供）：
  *   - $logo_url, $footer_text, $hide_footer, $hide_wp_logo, $admin_bg_color, $purge_on_uninstall, $notice
  *   - v1.4.0：$show_menu_logo, $menu_logo_text, $adminbar, $login_page, $turnstile, $field_errors, $active_tab
+ *   - v1.6.0：$ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）
  *
  * @package YangSheep\Ecommerce\Templates
  */
@@ -29,6 +30,7 @@ defined( 'ABSPATH' ) || exit;
 /** @var array  $turnstile */
 /** @var array  $field_errors */
 /** @var string $active_tab */
+/** @var array  $ip_view */
 
 $has_logo        = ( '' !== $logo_url );
 $settings_action = admin_url( 'admin-post.php' );
@@ -80,6 +82,44 @@ $log_labels = [
 	<?php if ( in_array( 'secret_format', $field_errors, true ) ) : ?>
 		<div class="ysca-wl-notice ysca-wl-notice--error">
 			<p>Turnstile Secret Key 格式不正確（只能有英文、數字、底線、連字號，10～100 個字），這個欄位沒有儲存，仍沿用原本的值。</p>
+		</div>
+	<?php endif; ?>
+	<?php
+	// v1.6.0：「進階：訪客 IP」存檔時擋下的欄位（行號只收數字）。
+	$ip_lines = [ 'invalid' => [], 'wide' => [], 'warn' => [] ];
+	foreach ( $field_errors as $code ) {
+		if ( 1 === preg_match( '/^ip_trusted_(invalid|wide|warn)_(\d+)$/', (string) $code, $m ) ) {
+			$ip_lines[ $m[1] ][] = (int) $m[2];
+		}
+	}
+	?>
+	<?php if ( [] !== $ip_lines['invalid'] || [] !== $ip_lines['wide'] || in_array( 'ip_trusted_too_many', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>「信任的代理」沒有儲存，仍沿用原本的清單：
+				<?php if ( [] !== $ip_lines['invalid'] ) : ?>第 <?php echo esc_html( implode( '、', $ip_lines['invalid'] ) ); ?> 行不是合法的 IP 或 CIDR。<?php endif; ?>
+				<?php if ( [] !== $ip_lines['wide'] ) : ?>第 <?php echo esc_html( implode( '、', $ip_lines['wide'] ) ); ?> 行的網段太寬（IPv4 至少要 /8、IPv6 至少要 /32）。<?php endif; ?>
+				<?php if ( in_array( 'ip_trusted_too_many', $field_errors, true ) ) : ?>超過 200 行。<?php endif; ?>
+			</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( [] !== $ip_lines['warn'] ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--warning">
+			<p>「信任的代理」已儲存，但第 <?php echo esc_html( implode( '、', $ip_lines['warn'] ) ); ?> 行是寬於 /16 的公開網段：網段裡任何一台主機都能帶標頭指定訪客 IP。確定那整段都是你們的代理再留著。</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( in_array( 'ip_custom_header', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>自訂標頭的名稱不能用（只能有英文、數字、連字號，最多 64 個字；不能用 Host、Cookie、Authorization、Proxy-Authorization、Forwarded 與 Content- 開頭的標頭），這個欄位沒有儲存。</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( in_array( 'ip_cf_needs_trust', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>偵測方式選了 Cloudflare，但沒有勾「信任 Cloudflare 的 IP 範圍」，偵測方式沒有儲存。請先確認下面的條件、勾選信任，再選 Cloudflare。</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( in_array( 'ip_custom_needs_header', $field_errors, true ) ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error">
+			<p>偵測方式選了「自訂標頭」，但沒有填合法的標頭名稱，偵測方式沒有儲存。</p>
 		</div>
 	<?php endif; ?>
 
@@ -679,6 +719,183 @@ $log_labels = [
 					<?php endif; ?>
 				</div>
 			</div>
+
+			<?php
+			// v1.6.0：進階：訪客 IP（預設收合；設定不是預設值、有提醒或存檔錯誤時展開）。
+			$ip_diag     = (array) ( $ip_view['diagnose'] ?? [] );
+			$ip_settings = (array) ( $ip_diag['settings'] ?? [] );
+			$ip_values   = (array) ( $ip_diag['values'] ?? [] );
+			$ip_results  = (array) ( $ip_diag['results'] ?? [] );
+			$ip_hints    = (array) ( $ip_diag['hints'] ?? [] );
+			$ip_current  = (array) ( $ip_diag['current'] ?? [] );
+			$ip_source   = (string) ( $ip_settings['source'] ?? 'auto' );
+			$ip_trust_cf = ! empty( $ip_settings['trust_cloudflare'] );
+			$ip_custom   = (string) ( $ip_settings['custom_header'] ?? '' );
+			$ip_remote   = (string) ( $ip_diag['remote'] ?? '' );
+			$ip_errors   = array_filter( $field_errors, static fn( $c ) => 0 === strpos( (string) $c, 'ip_' ) );
+			$ip_open     = [] !== $ip_errors || [] !== array_diff( $ip_hints, [ 'custom_header_warning' ] ) || 'auto' !== $ip_source || $ip_trust_cf || ! empty( $ip_view['turnstile_use'] );
+
+			$ip_sources = [
+				'auto'             => [ '自動', '用 REMOTE_ADDR。打開「信任 Cloudflare」時，從 Cloudflare 範圍來的請求改用 CF-Connecting-IP。不會讀其他標頭：站在其他代理後面時，請選對應的選項並信任那個代理。' ],
+				'remote_addr'      => [ '只用 REMOTE_ADDR', '網站前面沒有代理、CDN、負載平衡器時最安全。有的話，所有訪客看起來會是同一個 IP。' ],
+				'cf_connecting_ip' => [ 'Cloudflare（CF-Connecting-IP）', '要先打開下面的「信任 Cloudflare」。REMOTE_ADDR 在 Cloudflare 範圍時才採用。' ],
+				'x_forwarded_for'  => [ 'X-Forwarded-For', 'REMOTE_ADDR 要在「信任的代理」清單裡；從右往左讀，跳過信任的代理。' ],
+				'x_real_ip'        => [ 'X-Real-IP', 'REMOTE_ADDR 要在「信任的代理」清單裡；只收一個位址。' ],
+				'custom'           => [ '自訂標頭', 'REMOTE_ADDR 要在「信任的代理」清單裡；照 X-Forwarded-For 的規則解析。只有前面的代理一定會改寫這個標頭時才安全。' ],
+			];
+			$ip_reason_text = [
+				'invalid_remote'   => 'REMOTE_ADDR 不是合法的位址',
+				'header'           => '從標頭取得',
+				'remote'           => '用 REMOTE_ADDR',
+				'foreign_worker'   => '用 REMOTE_ADDR：這是別的網站的 Cloudflare Worker 送來的',
+				'header_missing'   => '用 REMOTE_ADDR：沒有這個標頭，或標頭的值不合法',
+				'cf_not_trusted'   => '用 REMOTE_ADDR：沒有打開「信任 Cloudflare」',
+				'not_cloudflare'   => '用 REMOTE_ADDR：REMOTE_ADDR 不是 Cloudflare 的位址',
+				'no_custom_header' => '用 REMOTE_ADDR：還沒填自訂標頭的名稱',
+				'not_trusted'      => '用 REMOTE_ADDR：REMOTE_ADDR 不在「信任的代理」清單裡，標頭沒有採用',
+				'chain_stopped'    => '用 REMOTE_ADDR：標頭裡有不合法的段落，讀到那裡就停下',
+			];
+			$ip_explain = static function ( array $r ) use ( $ip_reason_text ): string {
+				$ip     = '' !== (string) ( $r['ip'] ?? '' ) ? (string) $r['ip'] : '（沒有）';
+				$reason = (string) ( $ip_reason_text[ (string) ( $r['reason'] ?? '' ) ] ?? '' );
+				if ( 'chain_stopped' === ( $r['reason'] ?? '' ) && (int) ( $r['bad_segment'] ?? 0 ) > 0 ) {
+					$reason .= '（從右邊數第 ' . (int) $r['bad_segment'] . ' 段）';
+				} elseif ( 'header' === ( $r['reason'] ?? '' ) && 1 === preg_match( '/:(\d+)$/', (string) ( $r['source'] ?? '' ), $sm ) ) {
+					$reason .= '（從右邊數第 ' . (int) $sm[1] . ' 個）';
+				}
+				return $ip . ( '' !== $reason ? '（' . $reason . '）' : '' );
+			};
+			$ip_value_text = static function ( string $v ): string {
+				if ( '' === $v ) {
+					return '沒有';
+				}
+				return function_exists( 'mb_strimwidth' ) ? mb_strimwidth( $v, 0, 200, '…' ) : substr( $v, 0, 200 );
+			};
+			$ip_flag = $ip_trust_cf ? 'yes' : 'no';
+			?>
+			<details class="ysca-wl-card ys-am-wl-details" id="ys-am-ip-card"<?php echo $ip_open ? ' open' : ''; ?>>
+				<summary class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">進階：訪客 IP</h3>
+				</summary>
+				<div class="ysca-wl-card__body">
+					<p class="ysca-wl-field__hint">判斷訪客的 IP 用。網站前面沒有代理或 CDN 時，用「自動」就好；在 Cloudflare、負載平衡器或其他代理後面時，要選對應的方式並信任那個代理，不然所有訪客看起來會是同一個 IP。訪客自己帶的標頭不會被採用。</p>
+					<p class="ys-am-wl-ip-now">
+						用目前的設定，偵測到你的 IP 是
+						<strong><code><?php echo esc_html( '' !== (string) ( $ip_current['ip'] ?? '' ) ? (string) $ip_current['ip'] : '（沒有）' ); ?></code></strong>。
+						<?php if ( 'filter' === ( $ip_current['source'] ?? '' ) ) : ?>
+							（有外掛用 <code>ys_admin_menu_client_ip</code> filter 改過）
+						<?php endif; ?>
+					</p>
+
+					<div class="ys-am-wl-table-wrap">
+						<table class="ysca-wl-table ys-am-wl-ip-table">
+							<thead>
+								<tr>
+									<th scope="col">選項</th>
+									<th scope="col">這次請求讀到的值</th>
+									<th scope="col">選這個選項會得到</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $ip_sources as $ip_key => $ip_label ) : ?>
+									<?php
+									$ip_row_values = [];
+									if ( in_array( $ip_key, [ 'auto', 'remote_addr' ], true ) ) {
+										$ip_row_values[] = 'REMOTE_ADDR：' . $ip_value_text( (string) ( $ip_values['remote_addr'] ?? '' ) );
+									}
+									if ( in_array( $ip_key, [ 'auto', 'cf_connecting_ip' ], true ) ) {
+										$ip_row_values[] = 'CF-Connecting-IP：' . $ip_value_text( (string) ( $ip_values['cf_connecting_ip'] ?? '' ) );
+										$ip_row_values[] = 'CF-Worker：' . $ip_value_text( (string) ( $ip_values['cf_worker'] ?? '' ) );
+										$ip_row_values[] = 'CF-Ray：' . $ip_value_text( (string) ( $ip_values['cf_ray'] ?? '' ) );
+									}
+									if ( 'x_forwarded_for' === $ip_key ) {
+										$ip_row_values[] = $ip_value_text( (string) ( $ip_values['x_forwarded_for'] ?? '' ) );
+									}
+									if ( 'x_real_ip' === $ip_key ) {
+										$ip_row_values[] = $ip_value_text( (string) ( $ip_values['x_real_ip'] ?? '' ) );
+									}
+									if ( 'custom' === $ip_key ) {
+										$ip_row_values[] = '' !== $ip_custom ? $ip_custom . '：' . $ip_value_text( (string) ( $ip_values['custom'] ?? '' ) ) : '還沒填標頭名稱';
+									}
+									?>
+									<tr<?php echo $ip_key === $ip_source ? ' class="is-current"' : ''; ?>>
+										<th scope="row"><?php echo esc_html( $ip_label[0] ); ?><?php echo $ip_key === $ip_source ? '（目前）' : ''; ?></th>
+										<td>
+											<?php foreach ( $ip_row_values as $ip_line ) : ?>
+												<code class="ys-am-wl-ip-value"><?php echo esc_html( $ip_line ); ?></code>
+											<?php endforeach; ?>
+										</td>
+										<td><?php echo esc_html( $ip_explain( (array) ( $ip_results[ $ip_key ][ $ip_flag ] ?? [] ) ) ); ?></td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+					<p class="ysca-wl-field__hint">這張表只反映你自己這一次的請求。值超過 200 個字只顯示前面。</p>
+
+					<?php foreach ( $ip_hints as $ip_hint ) : ?>
+						<?php if ( 'internal_with_proxy_headers' === $ip_hint ) : ?>
+							<div class="ysca-wl-notice ysca-wl-notice--info"><p>REMOTE_ADDR（<?php echo esc_html( $ip_remote ); ?>）是內部位址，又帶有代理的標頭，網站可能在代理後面。請選對應的偵測方式，並把那台代理加進「信任的代理」。</p></div>
+						<?php elseif ( 'cloudflare_without_trust' === $ip_hint ) : ?>
+							<div class="ysca-wl-notice ysca-wl-notice--info"><p>REMOTE_ADDR（<?php echo esc_html( $ip_remote ); ?>）是 Cloudflare 的位址：網站放在 Cloudflare 後面，但還沒打開「信任 Cloudflare」，所有訪客看起來會是 Cloudflare 的 IP。打開前請看下面的說明。</p></div>
+						<?php elseif ( 'header_mode_untrusted_remote' === $ip_hint ) : ?>
+							<div class="ysca-wl-notice ysca-wl-notice--info"><p>選了用標頭判斷，但 REMOTE_ADDR（<?php echo esc_html( $ip_remote ); ?>）不在「信任的代理」清單裡，所以標頭沒有採用。</p></div>
+						<?php elseif ( 'chain_invalid_segment' === $ip_hint ) : ?>
+							<div class="ysca-wl-notice ysca-wl-notice--info"><p>標頭裡有不合法的段落（從右邊數第 <?php echo esc_html( (string) (int) ( $ip_current['bad_segment'] ?? 0 ) ); ?> 段），讀到那裡就停下，用 REMOTE_ADDR。前面的代理可能沒有清掉訪客自己帶的標頭。</p></div>
+						<?php elseif ( 'cf_ray_not_in_list' === $ip_hint ) : ?>
+							<div class="ysca-wl-notice ysca-wl-notice--info"><p>請求帶有 CF-Ray，但 REMOTE_ADDR 不在內建的 Cloudflare 範圍裡：可能是前面還有別的代理，或內建清單（<?php echo esc_html( (string) ( $ip_diag['cloudflare_checked'] ?? '' ) ); ?> 核對）過期了。信任關係不會因此改變。</p></div>
+						<?php endif; ?>
+					<?php endforeach; ?>
+
+					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
+						<legend class="ysca-wl-field__label">偵測方式</legend>
+						<?php foreach ( $ip_sources as $ip_key => $ip_label ) : ?>
+							<label class="ys-am-wl-radio">
+								<input type="radio" name="ip_source" value="<?php echo esc_attr( $ip_key ); ?>" <?php checked( $ip_key, $ip_source ); ?>
+									data-ys-am-ip-preview-no="<?php echo esc_attr( $ip_explain( (array) ( $ip_results[ $ip_key ]['no'] ?? [] ) ) ); ?>"
+									data-ys-am-ip-preview-yes="<?php echo esc_attr( $ip_explain( (array) ( $ip_results[ $ip_key ]['yes'] ?? [] ) ) ); ?>">
+								<span><strong><?php echo esc_html( $ip_label[0] ); ?>：</strong><?php echo esc_html( $ip_label[1] ); ?></span>
+							</label>
+						<?php endforeach; ?>
+						<div class="ysca-wl-field ys-am-wl-subfield">
+							<label for="ys-am-ip-custom-header" class="ysca-wl-field__label">自訂標頭的名稱</label>
+							<input type="text" id="ys-am-ip-custom-header" name="ip_custom_header" class="ysca-wl-input" maxlength="64"
+								value="<?php echo esc_attr( $ip_custom ); ?>" placeholder="True-Client-IP" spellcheck="false" autocomplete="off">
+							<p class="ysca-wl-field__hint">這個標頭訪客自己也能帶。只有前面的代理一定會改寫它時才安全。例如 True-Client-IP 在非 Enterprise 的 Cloudflare 上，沒開對應的 Managed Transform 就會被偽造。</p>
+						</div>
+						<p class="ysca-wl-field__hint ys-am-wl-ip-preview" id="ys-am-ip-preview" role="status" aria-live="polite"></p>
+					</fieldset>
+
+					<div class="ysca-wl-field" style="margin-top:18px;">
+						<label for="ys-am-ip-trusted" class="ysca-wl-field__label">信任的代理</label>
+						<textarea id="ys-am-ip-trusted" name="ip_trusted_proxies" rows="4" class="ysca-wl-textarea" spellcheck="false"
+							placeholder="10.0.0.2&#10;10.0.0.0/24&#10;2001:db8:1::/48"><?php echo esc_textarea( (string) ( $ip_view['trusted_raw'] ?? '' ) ); ?></textarea>
+						<p class="ysca-wl-field__hint">一行一個 IP 或 CIDR，最多 200 行。只有 REMOTE_ADDR 在這份清單裡，才會看標頭。私有位址不會自動被信任。</p>
+						<?php if ( in_array( 'internal_with_proxy_headers', $ip_hints, true ) && '' !== $ip_remote ) : ?>
+							<div class="ysca-wl-actions">
+								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-ip-trust="<?php echo esc_attr( $ip_remote ); ?>">信任這個代理（<?php echo esc_html( $ip_remote ); ?>）</button>
+							</div>
+						<?php endif; ?>
+						<p class="ysca-wl-field__hint">只有這個位址真的是反向代理、而且一定會改寫那個標頭時才信任。路由器的 NAT 出口不是代理：信任它又選了標頭模式，內網任何人都能自帶標頭偽造 IP。</p>
+					</div>
+
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="ip_trust_cloudflare" value="yes" id="ys-am-ip-trust-cf" <?php checked( $ip_trust_cf ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>信任 Cloudflare 的 IP 範圍</strong>（內建清單，<?php echo esc_html( (string) ( $ip_diag['cloudflare_checked'] ?? '' ) ); ?> 核對）放在 Cloudflare 後面的站建議打開。Authenticated Origin Pulls（自有憑證）或 Tunnel 最安全；沒有的話，別的網站的 Cloudflare Worker 送來的請求不會採用 CF-Connecting-IP，但 Cloudflare 沒有保證 Worker 拿不掉它的識別標頭。</span>
+					</label>
+
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="ip_turnstile_use" value="yes" <?php checked( ! empty( $ip_view['turnstile_use'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>Turnstile 也使用偵測到的 IP</strong>不勾＝照舊只把 REMOTE_ADDR 送給 Cloudflare 驗證。網站在代理後面、而且上面的偵測方式已經設好時再勾。</span>
+					</label>
+				</div>
+			</details>
 		</section>
 
 		<div class="ysca-wl-actions">

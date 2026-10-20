@@ -353,6 +353,13 @@ body.ysca-wl-active .ysca-wl-notice--error {
     color: #991b1b;
 }
 
+/* v1.6.0：存了但要注意的事（例如信任清單裡有很寬的公開網段）。 */
+body.ysca-wl-active .ysca-wl-notice--warning {
+    background: #fff7ed;
+    border-left-color: #f59e0b;
+    color: #7c2d12;
+}
+
 /* ─── Table ──────────────────────────────────────────────── */
 
 body.ysca-wl-active .ysca-wl-table {
@@ -773,6 +780,66 @@ body.ysca-wl-active .ys-am-wl-test-result.is-ok {
 
 body.ysca-wl-active .ys-am-wl-test-result.is-bad {
     color: #991b1b;
+}
+
+/* ─── v1.6.0：進階：訪客 IP（可收合的卡片、診斷表） ─── */
+
+body.ysca-wl-active .ys-am-wl-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    list-style: none;
+}
+
+body.ysca-wl-active .ys-am-wl-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+body.ysca-wl-active .ys-am-wl-details > summary::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    margin-left: 12px;
+    border-right: 2px solid #6b7280;
+    border-bottom: 2px solid #6b7280;
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+}
+
+body.ysca-wl-active .ys-am-wl-details[open] > summary::after {
+    transform: rotate(-135deg);
+}
+
+body.ysca-wl-active .ys-am-wl-details > summary:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+}
+
+body.ysca-wl-active .ys-am-wl-ip-now {
+    margin: 0 0 12px;
+    color: #111827;
+    font-size: 13px;
+}
+
+body.ysca-wl-active .ys-am-wl-ip-table th {
+    width: 200px;
+}
+
+body.ysca-wl-active .ys-am-wl-ip-table tr.is-current th,
+body.ysca-wl-active .ys-am-wl-ip-table tr.is-current td {
+    background: #eef2ff;
+}
+
+body.ysca-wl-active .ys-am-wl-ip-value {
+    display: block;
+    margin: 0 0 2px;
+    word-break: break-all;
+}
+
+body.ysca-wl-active .ys-am-wl-ip-preview {
+    color: #111827;
+    font-weight: 600;
 }
 
 @media (max-width: 782px) {

@@ -32,8 +32,9 @@
  *     Cloudflare 會擋重放。
  *   - 只管 wp-login.php 的 POST 送出（login_init 有跑過的請求）。社群登入／SSO 在 wp-login.php 的 GET 回呼、
  *     XML-RPC、REST、WooCommerce 等自己的登入表單不在範圍內。
- *   - 訪客 IP 只用 REMOTE_ADDR，不信任 X-Forwarded-For；站台在反向代理後面時可用
- *     ys_admin_menu_turnstile_remote_ip filter 自行提供。
+ *   - 訪客 IP 預設只用 REMOTE_ADDR，不信任 X-Forwarded-For；站台在反向代理後面時可用
+ *     ys_admin_menu_turnstile_remote_ip filter 自行提供。v1.6.0：勾了「Turnstile 也使用偵測到的 IP」才改用
+ *     「進階：訪客 IP」的偵測結果（YSClientIp）；只存其他分頁不會改變這裡。
  *   - 預期網域比對預設關閉；用 ys_admin_menu_turnstile_expected_hostnames filter 回傳網域清單才比對 hostname。
  *
  * Secret Key 不輸出到前端、不寫進記錄、不放進匯出檔。
@@ -44,6 +45,8 @@
  */
 
 namespace YangSheep\AdminMenu\Login;
+
+use YangSheep\AdminMenu\Security\YSClientIp;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -843,13 +846,18 @@ final class YSTurnstile {
 	}
 
 	/**
-	 * 送給 siteverify 的訪客 IP：只用 REMOTE_ADDR。
+	 * 送給 siteverify 的訪客 IP：預設只用 REMOTE_ADDR（跟 1.5.2 一樣）。
+	 * v1.6.0：勾了「Turnstile 也使用偵測到的 IP」（ys_admin_menu_ip_turnstile_use）才改用 YSClientIp 偵測到的位址。
 	 */
 	private static function remote_ip(): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) && is_string( $_SERVER['REMOTE_ADDR'] )
-			? trim( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- 下一行以 FILTER_VALIDATE_IP 驗證
-			: '';
-		$ip = false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+		if ( YSClientIp::turnstile_uses_detected_ip() ) {
+			$ip = YSClientIp::resolve()['ip'];
+		} else {
+			$ip = isset( $_SERVER['REMOTE_ADDR'] ) && is_string( $_SERVER['REMOTE_ADDR'] )
+				? trim( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- 下一行以 FILTER_VALIDATE_IP 驗證
+				: '';
+			$ip = false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+		}
 
 		/**
 		 * 送給 Cloudflare siteverify 的訪客 IP。
