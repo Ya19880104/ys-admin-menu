@@ -91,6 +91,11 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_login_back_link',
 	// v1.5.1：自訂登入頁的「顯示語言切換」。
 	'ys_admin_menu_login_language_switcher',
+	// v1.6.0：自訂登入頁的樣式（主色、背景、自訂背景色、左上字標）。
+	'ys_admin_menu_login_primary_color',
+	'ys_admin_menu_login_background',
+	'ys_admin_menu_login_background_color',
+	'ys_admin_menu_login_wordmark',
 	'ys_admin_menu_turnstile_enabled',
 	'ys_admin_menu_turnstile_site_key',
 	'ys_admin_menu_turnstile_secret_key',

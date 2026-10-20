@@ -13,6 +13,9 @@
  *   - 欄位與按鈕是膠囊形。
  *
  * 配色：深色一律是帶藍的深藍，不用黑色或灰黑。文字對比 ≥ 4.5:1；欄位框線、勾選框、焦點框對旁邊的底色 ≥ 3:1。
+ *
+ * v1.6.0：白牌設定可以改主色、背景（淺色／自訂顏色）。淺色背景的變數寫在下面的 body.ys-am-login--light；
+ * 主色與自訂背景色由 YSLoginStyle 算好，以內嵌樣式覆寫變數。都沒設定時不輸出內嵌樣式，跟 1.5.2 相同。
  */
 
 body.ys-am-login.login {
@@ -34,13 +37,18 @@ body.ys-am-login.login {
 	--ys-login-text: #495057;
 	--ys-login-muted: #5f6870;
 	--ys-login-accent-text: #0072bd;
+	--ys-login-accent-hover: #005f9e;
 	--ys-login-input-border: #8792a2;
 	--ys-login-input-border-hover: #5f6870;
 	--ys-login-surface: #f5f8fb;
 	--ys-login-focus: #0085db;
 	--ys-login-button: #0072bd;
 	--ys-login-button-hover: #005f9e;
+	--ys-login-button-text: #ffffff;
 	--ys-login-button-shadow: 0 2px 6px 0 rgba(37, 83, 185, 0.1);
+	/* 有背景圖時疊在圖上的那一層（v1.6.0 抽成變數，淺色與自訂背景會換）。 */
+	--ys-login-overlay-from: rgba(17, 28, 45, 0.9);
+	--ys-login-overlay-to: rgba(11, 20, 32, 0.94);
 	--ys-login-radius-card: 24px;
 	--ys-login-radius-pill: 9999px;
 	--wp-admin-theme-color: #0072bd;
@@ -92,11 +100,32 @@ body.ys-am-login--has-bg .ys-am-login-bg::after {
 	content: "";
 	position: absolute;
 	inset: 0;
-	background: linear-gradient(to bottom right, rgba(17, 28, 45, 0.9) 0%, rgba(17, 28, 45, 0.9) 50%, rgba(11, 20, 32, 0.94) 100%);
+	background: linear-gradient(to bottom right, var(--ys-login-overlay-from) 0%, var(--ys-login-overlay-from) 50%, var(--ys-login-overlay-to) 100%);
 }
 
 body.ys-am-login.ys-am-login--has-bg {
 	--ys-login-on-dark-muted: #aebcc3;
+}
+
+/*
+ * v1.6.0 淺色背景（白牌設定「登入頁 › 樣式 › 背景：淺色」）：底色、光暈、深底上的字改成淺底深字。
+ * 對比：大標 #111c2d、標語 #334155、淡色字 #5f6870 對漸層兩端與左下的青色光暈都 ≥ 4.5:1，焦點框對底色 ≥ 3:1。
+ * 選擇器比 --has-bg 那條具體，有背景圖時淡色字不會換成那條的亮色。圖上暗的地方透出來讓字不到 4.5:1 時，
+ * YSLoginStyle 以內嵌樣式把字調深；主色也由內嵌樣式覆寫。
+ */
+body.ys-am-login.login.ys-am-login--light {
+	--ys-login-bg-from: #f5f8fb;
+	--ys-login-bg-to: #e9eef3;
+	--ys-login-glow-blue: rgba(0, 133, 219, 0.12);
+	--ys-login-glow-cyan: rgba(70, 202, 235, 0.1);
+	--ys-login-on-dark: #111c2d;
+	--ys-login-on-dark-soft: #334155;
+	--ys-login-on-dark-muted: #5f6870;
+	--ys-login-focus-on-dark: #0072bd;
+	--ys-login-card-border: #dfe6ee;
+	--ys-login-card-shadow: 0 20px 40px -16px rgba(17, 28, 45, 0.16);
+	--ys-login-overlay-from: rgba(245, 248, 251, 0.92);
+	--ys-login-overlay-to: rgba(233, 238, 243, 0.94);
 }
 
 /* ── 品牌區（窄螢幕：卡片上方一行 LOGO＋品牌名稱） ── */
@@ -485,11 +514,11 @@ body.ys-am-login #login form input[type="checkbox"] {
 }
 
 body.ys-am-login #login form input[type="checkbox"]:checked {
-	border-color: var(--ys-login-button);
+	border-color: var(--ys-login-accent-text);
 }
 
 body.ys-am-login #login form input[type="checkbox"]:focus {
-	border-color: var(--ys-login-button);
+	border-color: var(--ys-login-accent-text);
 	box-shadow: 0 0 0 2px var(--ys-login-card), 0 0 0 4px var(--ys-login-focus);
 	outline: 2px solid transparent;
 }
@@ -522,7 +551,7 @@ body.ys-am-login #login form .button-primary {
 	border-radius: var(--ys-login-radius-pill);
 	background: var(--ys-login-button);
 	box-shadow: var(--ys-login-button-shadow);
-	color: var(--ys-login-on-dark);
+	color: var(--ys-login-button-text);
 	font-family: inherit;
 	font-size: 14px;
 	font-weight: 500;
@@ -534,7 +563,7 @@ body.ys-am-login #login form .button-primary {
 body.ys-am-login #login form .button-primary:hover {
 	border-color: var(--ys-login-button-hover);
 	background: var(--ys-login-button-hover);
-	color: var(--ys-login-on-dark);
+	color: var(--ys-login-button-text);
 }
 
 body.ys-am-login #login form .button-primary:focus {
@@ -559,15 +588,15 @@ body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw) {
 }
 
 body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw):hover {
-	border-color: var(--ys-login-button);
+	border-color: var(--ys-login-accent-text);
 	background: var(--ys-login-surface);
-	color: var(--ys-login-button);
+	color: var(--ys-login-accent-text);
 }
 
 body.ys-am-login #login form .button:not(.button-primary):not(.wp-hide-pw):focus {
-	border-color: var(--ys-login-button);
+	border-color: var(--ys-login-accent-text);
 	box-shadow: 0 0 0 2px var(--ys-login-card), 0 0 0 4px var(--ys-login-focus);
-	color: var(--ys-login-button);
+	color: var(--ys-login-accent-text);
 	outline: 2px solid transparent;
 }
 
@@ -652,7 +681,7 @@ body.ys-am-login #login form a {
 }
 
 body.ys-am-login #login form a:hover {
-	color: var(--ys-login-button-hover);
+	color: var(--ys-login-accent-hover);
 }
 
 body.ys-am-login #login form a:focus,

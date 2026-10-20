@@ -403,7 +403,7 @@ $log_labels = [
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-logo">從媒體庫選擇</button>
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-logo">清除</button>
 							</div>
-							<p class="ysca-wl-field__hint">留空沿用「後台品牌」分頁的後台 LOGO。只接受 http／https 網址。都沒有 LOGO 時，寬螢幕的左上角改放網站標題（字距拉開；和品牌名稱一樣就不重複放）。</p>
+							<p class="ysca-wl-field__hint">留空沿用「後台品牌」分頁的後台 LOGO。只接受 http／https 網址。都沒有 LOGO 時，寬螢幕的左上角改放下方「樣式」填的左上字標；字標也沒填，就放網站標題（字距拉開；和品牌名稱一樣就不重複放）。</p>
 						</div>
 						<div class="ysca-wl-field">
 							<label for="ys-am-login-bg" class="ysca-wl-field__label">背景圖</label>
@@ -414,7 +414,7 @@ $log_labels = [
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-media="ys-am-login-bg">從媒體庫選擇</button>
 								<button type="button" class="ysca-wl-btn ysca-wl-btn--ghost ysca-wl-btn--sm" data-ys-am-clear="ys-am-login-bg">清除</button>
 							</div>
-							<p class="ysca-wl-field__hint">留空用接近黑的深藍漸層（寬螢幕左邊兩團淡藍光暈）。圖片上會疊一層深藍，文字才看得清楚。</p>
+							<p class="ysca-wl-field__hint">留空用下方「樣式」選的背景（預設是接近黑的深藍漸層，寬螢幕左邊兩團淡藍光暈）。圖片上會疊一層跟背景同色系的顏色，文字才看得清楚。</p>
 						</div>
 					</div>
 
@@ -440,6 +440,65 @@ $log_labels = [
 						</span>
 						<span class="ys-am-toggle-field__text"><strong>顯示語言切換</strong>WordPress 放在登入頁最下方的語言選單。預設不顯示，登入頁用網站的語言；網站裝了其他語言、要讓人在登入前切換時再打開。</span>
 					</label>
+				</div>
+			</div>
+
+			<?php
+			// v1.6.0：主色、背景、左上字標。
+			$login_style  = (array) ( $login_page['style'] ?? [] );
+			$style_colors = (array) ( $login_style['colors'] ?? [] );
+			$style_notes  = (array) ( $login_style['notes'] ?? [] );
+			$style_bg     = (string) ( $login_style['background'] ?? '' );
+			?>
+			<div class="ysca-wl-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">樣式</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<p class="ysca-wl-field__hint">都不設定時，登入頁維持原本的樣子。</p>
+					<div class="ysca-wl-field" style="margin-top:18px;">
+						<label for="ys-am-login-primary" class="ysca-wl-field__label">主色</label>
+						<input type="text" id="ys-am-login-primary" name="login_primary_color"
+							value="<?php echo esc_attr( (string) ( $login_style['primary'] ?? '' ) ); ?>"
+							class="ys-am-color-field" data-default-color=""
+							placeholder="<?php echo esc_attr( (string) ( $login_style['primary_default'] ?? '#0072bd' ) ); ?>">
+						<p class="ysca-wl-field__hint">登入鈕、表單裡的連結與焦點框的顏色。留空用 CRM 藍（#0072BD）。對比不夠時會自動調整：按鈕文字改用深色、連結與焦點框調深。</p>
+						<?php if ( ! empty( $style_colors ) ) : ?>
+							<p class="ysca-wl-field__hint">
+								實際用色：按鈕 <?php echo esc_html( strtoupper( (string) ( $style_colors['button'] ?? '' ) ) ); ?>（文字 <?php echo esc_html( strtoupper( (string) ( $style_colors['button_text'] ?? '' ) ) ); ?>）、連結 <?php echo esc_html( strtoupper( (string) ( $style_colors['link'] ?? '' ) ) ); ?>、焦點框 <?php echo esc_html( strtoupper( (string) ( $style_colors['focus'] ?? '' ) ) ); ?>。
+							</p>
+						<?php endif; ?>
+					</div>
+					<fieldset class="ysca-wl-field ys-am-wl-fieldset">
+						<legend class="ysca-wl-field__label">背景</legend>
+						<label class="ys-am-wl-radio">
+							<input type="radio" name="login_background" value="" <?php checked( '', $style_bg ); ?>>
+							<span><strong>預設（深藍）</strong>接近黑的深藍漸層。</span>
+						</label>
+						<label class="ys-am-wl-radio">
+							<input type="radio" name="login_background" value="light" <?php checked( 'light', $style_bg ); ?>>
+							<span><strong>淺色</strong>淺灰藍的底、深色字。</span>
+						</label>
+						<label class="ys-am-wl-radio">
+							<input type="radio" name="login_background" value="custom" <?php checked( 'custom', $style_bg ); ?>>
+							<span><strong>自訂顏色</strong>用下面選的顏色當底，字的深淺依底色自動決定；沒選顏色時照預設。</span>
+						</label>
+						<input type="text" id="ys-am-login-background-color" name="login_background_color"
+							value="<?php echo esc_attr( (string) ( $login_style['background_color'] ?? '' ) ); ?>"
+							class="ys-am-color-field" data-default-color=""
+							placeholder="#f5f8fb" aria-label="自訂背景顏色">
+						<p class="ysca-wl-field__hint">有背景圖時，圖上疊的那一層跟著背景換。</p>
+					</fieldset>
+					<div class="ysca-wl-field" style="margin-top:18px;">
+						<label for="ys-am-login-wordmark" class="ysca-wl-field__label">左上字標</label>
+						<input type="text" id="ys-am-login-wordmark" name="login_wordmark" maxlength="40" class="ysca-wl-input"
+							value="<?php echo esc_attr( (string) ( $login_style['wordmark'] ?? '' ) ); ?>"
+							placeholder="例如：YANGSHEEP">
+						<p class="ysca-wl-field__hint">寬螢幕左上角的文字。有 LOGO 時放 LOGO；留空時放網站標題（和品牌名稱一樣就不放）。手機上不顯示。</p>
+					</div>
+					<?php foreach ( $style_notes as $style_note ) : ?>
+						<p class="ysca-wl-field__hint"><?php echo esc_html( (string) $style_note ); ?></p>
+					<?php endforeach; ?>
 				</div>
 			</div>
 		</section>

@@ -10,6 +10,7 @@
  *   - 品牌區（左上 LOGO 或字標＋品牌名稱＋標語）用 login_header 輸出，卡片標題用 login_message 輸出，
  *     頁尾文字用 login_footer 輸出；「返回首頁」用 login_site_html_link。
  *   - v1.5.2：卡片上方不放品牌名稱（左側大標、手機上卡片上方那一行已經有），卡片從標題開始。
+ *   - v1.6.0：主色、背景（預設深藍／淺色／自訂顏色）、左上字標，見 YSLoginStyle。都沒設定時外觀跟 1.5.2 一樣。
  *   - 忘記密碼、註冊、設定新密碼等畫面沿用同一套配色。
  *   - WordPress 的語言切換預設不顯示（login_display_language_dropdown），白牌設定可以打開。
  *   - 登入網址被其他外掛改掉（例如 WPS Hide Login）時照樣套用：它們在新網址載入的還是 wp-login.php。
@@ -167,11 +168,16 @@ final class YSLoginPage {
 	}
 
 	/**
-	 * 左上角的字標：沒有 LOGO 時放網站標題（字距拉開）。和品牌名稱（左側大標）一樣時不重複，回傳空字串。
+	 * 左上角的字標：有 LOGO 時放 LOGO（回傳空字串）；v1.6.0 起有自己填的字標就放它（和品牌名稱一樣也照放）；
+	 * 都沒有時放網站標題（字距拉開），和品牌名稱（左側大標）一樣時不重複，回傳空字串。
 	 */
 	public static function get_wordmark(): string {
 		if ( '' !== self::get_logo_url() ) {
 			return '';
+		}
+		$own = YSLoginStyle::get_wordmark_setting();
+		if ( '' !== $own ) {
+			return $own;
 		}
 		$site = trim( wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) );
 		return ( '' === $site || $site === self::get_brand() ) ? '' : $site;
@@ -239,6 +245,11 @@ final class YSLoginPage {
 			[ 'login' ],
 			YS_ADMIN_MENU_VERSION
 		);
+		// v1.6.0：主色、自訂背景色的變數。都是預設時不輸出（登入頁跟 1.5.2 一模一樣）。
+		$css = YSLoginStyle::inline_css();
+		if ( '' !== $css ) {
+			wp_add_inline_style( 'ys-admin-menu-login', $css );
+		}
 	}
 
 	/**
@@ -257,6 +268,10 @@ final class YSLoginPage {
 		}
 		if ( '' !== self::get_footer_html() ) {
 			$classes[] = 'ys-am-login--has-footer';
+		}
+		// v1.6.0：背景是淺色或自訂顏色時才多一個 class。
+		foreach ( YSLoginStyle::body_classes() as $class ) {
+			$classes[] = $class;
 		}
 		return $classes;
 	}
@@ -449,6 +464,9 @@ final class YSLoginPage {
 
 		update_option( self::OPTION_BACK_LINK, ! empty( $post['login_back_link'] ) ? 'yes' : 'no', false );
 		update_option( self::OPTION_LANGUAGE_SWITCHER, ! empty( $post['login_language_switcher'] ) ? 'yes' : 'no', false );
+
+		// v1.6.0：主色、背景、左上字標。
+		YSLoginStyle::save_settings( $post );
 	}
 
 	/**
@@ -472,6 +490,7 @@ final class YSLoginPage {
 			'back_link'         => self::show_back_link(),
 			'language_switcher' => self::show_language_switcher(),
 			'login_url'         => wp_login_url(),
+			'style'             => YSLoginStyle::settings_view(),
 		];
 	}
 }
