@@ -73,6 +73,14 @@ register_deactivation_hook(
 \YangSheep\AdminMenu\Security\YSLoginEntrances::register();
 
 /* ──────────────────────────────────────────────
+ * v1.6.0 登入次數限制：主檔載入時重設請求內的狀態（閘門、只算一次的旗標、IP 結果、REST 標記），
+ * 總開關打開、停用常數沒定義才掛 hook。在 WP::init() 與 determine_current_user 之前，不等 plugins_loaded。
+ * ────────────────────────────────────────────── */
+\YangSheep\AdminMenu\Security\YSLoginGuard::bootstrap();
+register_activation_hook( __FILE__, [ \YangSheep\AdminMenu\Security\YSLoginGuard::class, 'activate' ] );
+register_deactivation_hook( __FILE__, [ \YangSheep\AdminMenu\Security\YSLoginGuard::class, 'deactivate' ] );
+
+/* ──────────────────────────────────────────────
  * Hub Client 註冊（priority 5，比主外掛早）
  * ────────────────────────────────────────────── */
 add_action( 'plugins_loaded', function () {

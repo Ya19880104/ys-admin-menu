@@ -1,0 +1,797 @@
+<?php
+/**
+ * 登入次數限制（v1.6.0，設計 §4）：判斷流程與 hook。
+ *
+ * - 外掛主檔載入時呼叫 bootstrap()：重設請求內的狀態（閘門、只算一次的旗標、IP 結果、這次記在哪個鍵、REST 標記），
+ *   總開關打開、停用常數沒定義時才掛 hook（不等 plugins_loaded，§4.3）。
+ * - authenticate 1：跨站送來的瀏覽器請求（§4.13.1）與被鎖的鍵（§4.4），用跟 Turnstile 共用的閘門擋下：
+ *   這一次請求暫停核心的帳密檢查（含應用程式密碼），最後一關一律回同一個錯誤，猜對猜錯、帳號存不存在都一樣。
+ * - wp_login_failed 10：計數、到門檻建立鎖定；帳號存在時另記「這個鍵＋這個帳號」（§4.4.2）。
+ * - wp_login 10：只原諒這個帳號自己在這次的鍵上的失敗。
+ * - determine_current_user 19、rest_authentication_errors 80：REST 的應用程式密碼只執行鎖定、不計數。
+ * - 這次記在哪個鍵（§4.4.1）：分不出訪客是誰的請求記到共用桶（via: 開頭），照常計數、照常鎖、不逐次加長。
+ *
+ * 計數表的列數上限與依網段的 overflow 在另外一顆提交（設計 r5 審查中），會接在 lookup_keys() 與 count_target()。
+ *
+ * @package YangSheep\AdminMenu\Security
+ * @since   1.6.0
+ */
+
+namespace YangSheep\AdminMenu\Security;
+
+use YangSheep\AdminMenu\Login\YSAuthGate;
+use YangSheep\AdminMenu\Login\YSTurnstile;
+
+defined( 'ABSPATH' ) || exit;
+
+final class YSLoginGuard {
+
+	public const ERROR_LOCKED     = 'ys_admin_menu_login_locked';
+	public const ERROR_CROSS_SITE = 'ys_admin_menu_login_cross_site';
+
+	/** 擋下時暫停的核心 authenticate callback：帳號密碼、信箱密碼、應用程式密碼（XML-RPC 三種都收，§4.11.1）。 */
+	public const LOCK_FILTERS = [ 'wp_authenticate_username_password', 'wp_authenticate_email_password', 'wp_authenticate_application_password' ];
+
+	/** 共用桶與 /48 彙總的門檻倍數（外站 Worker 是 1 倍）。 */
+	public const SHARED_MULT = 5;
+	public const AGG48_MULT  = 5;
+
+	/** 每天一次的清理（只是額外的，§4.7.3）。 */
+	public const CRON_HOOK = 'ys_admin_menu_login_guard_cleanup';
+
+	/** 不算失敗的錯誤代碼（本外掛的鎖定與跨站拒絕、Turnstile、核心本來就不觸發的兩個）。 */
+	private const NOT_COUNTED = [ self::ERROR_LOCKED, self::ERROR_CROSS_SITE, 'empty_username', 'empty_password' ];
+
+	/** 同一個請求只算一次。 */
+	private static bool $counted = false;
+
+	/** @var null|array{d:null|array} 這個請求的鍵（null＝不判斷）。 */
+	private static ?array $decision = null;
+
+	/** @var null|array{lock:null|array{key:string,until:int}} 這個請求查過的鎖定狀態。 */
+	private static ?array $lock = null;
+
+	/** @var null|array{until:int} REST 標記：19 判斷這個 IP 被鎖、拿掉了應用程式密碼的驗證。 */
+	private static ?array $rest_flag = null;
+
+	/** @var null|string[] 這個請求的允許跨站來源。 */
+	private static ?array $origins = null;
+
+	/* ─────────────────────────── 啟動 ─────────────────────────── */
+
+	/**
+	 * 外掛主檔載入時呼叫：每個請求最早的時點（WP::init() 與 determine_current_user 之前）重設，再決定要不要掛 hook。
+	 */
+	public static function bootstrap(): void {
+		self::reset();
+		YSAuthGate::reset();
+		YSClientIp::reset();
+		YSLoginGuardHealth::reset();
+		if ( ! YSLoginGuardSettings::active() ) {
+			return;
+		}
+		self::register();
+	}
+
+	/** 清掉請求內的狀態。 */
+	public static function reset(): void {
+		self::$counted   = false;
+		self::$decision  = null;
+		self::$lock      = null;
+		self::$rest_flag = null;
+		self::$origins   = null;
+	}
+
+	public static function register(): void {
+		add_filter( 'authenticate', [ self::class, 'check' ], 1, 3 );
+		add_action( 'wp_login_failed', [ self::class, 'on_failed' ], 10, 2 );
+		add_action( 'wp_login', [ self::class, 'on_login' ], 10, 2 );
+		add_filter( 'determine_current_user', [ self::class, 'rest_pre_auth' ], 19 );
+		add_filter( 'rest_authentication_errors', [ self::class, 'rest_errors' ], 80 );
+		add_filter( 'shake_error_codes', [ self::class, 'shake_codes' ] );
+		add_filter( 'login_message', [ self::class, 'login_message' ] );
+		add_action( self::CRON_HOOK, [ self::class, 'cron_cleanup' ] );
+		add_action( 'init', [ self::class, 'schedule_cleanup' ] );
+		add_action( 'admin_init', [ self::class, 'maybe_ensure' ] );
+	}
+
+	/** 外掛啟用時：總開關是開的才建表（§4.7.4）。 */
+	public static function activate(): void {
+		if ( YSLoginGuardSettings::enabled() ) {
+			YSLoginGuardSchema::ensure();
+		}
+	}
+
+	/** 外掛停用時：取消排程，不刪表、不刪設定（§6）。 */
+	public static function deactivate(): void {
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+	}
+
+	/**
+	 * admin_init：總開關是開的（register 才會掛）、版本鍵不是目前版本、而且有 manage_options、不是 admin-ajax 才建表。
+	 * admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
+	 */
+	public static function maybe_ensure(): void {
+		if ( YSLoginGuardSchema::is_ready() || ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {
+			return;
+		}
+		YSLoginGuardSchema::ensure();
+	}
+
+	public static function schedule_cleanup(): void {
+		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_schedule_event( time() + 3600, 'daily', self::CRON_HOOK );
+		}
+	}
+
+	public static function cron_cleanup(): void {
+		if ( YSLoginGuardSchema::is_ready() ) {
+			YSLoginGuardStore::cleanup( time() );
+		}
+	}
+
+	/**
+	 * 存設定之後（設定頁、WP-CLI 都呼叫這一個）：
+	 * - 總開關從關到開時建表。
+	 * - 跨站判斷的觀察期只在「關到開」時開始（r5，審查 R4-P3-3）：存檔前不是「總開關與子開關都開」、存檔後是，才寫開始時間。
+	 *   整頁只有一張表單，存其他分頁時兩個值都沒變，不會重算。
+	 *
+	 * @param array{enabled?:bool,cross_site_reject?:bool} $old 存檔前的值。
+	 * @param array{enabled?:bool,cross_site_reject?:bool} $new 存檔後的值。
+	 */
+	public static function settings_changed( array $old, array $new ): void {
+		$was = ! empty( $old['enabled'] ) && ! empty( $old['cross_site_reject'] );
+		$is  = ! empty( $new['enabled'] ) && ! empty( $new['cross_site_reject'] );
+		if ( $is && ! $was ) {
+			update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, time(), true );
+		}
+		if ( ! empty( $new['enabled'] ) && empty( $old['enabled'] ) ) {
+			YSLoginGuardSchema::ensure();
+		}
+	}
+
+	/** 「現在就開始拒絕」：把開始時間設成觀察期以前。 */
+	public static function end_observation(): void {
+		update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, max( 1, time() - YSLoginGuardSettings::OBSERVE_SECONDS ), true );
+	}
+
+	/** 觀察期內（只記錄、不拒絕）。開始時間讀不到時當成已過。 */
+	public static function observing( int $now ): bool {
+		$since = YSLoginGuardSettings::cross_site_since();
+		return $since > 0 && $now < $since + YSLoginGuardSettings::OBSERVE_SECONDS;
+	}
+
+	/* ─────────────────────────── 這次記在哪個鍵（§4.4.1） ─────────────────────────── */
+
+	/**
+	 * authenticate 1 查鎖定、wp_login_failed 10 計數、wp_login 10 原諒，三邊用同一個函式（同一個請求只算一次）。
+	 *
+	 * @return null|array{key:string,mult:int,shared:bool,ip:string,from_header:bool} null＝不判斷（WP-CLI、白名單）。
+	 */
+	public static function decide(): ?array {
+		if ( null === self::$decision ) {
+			self::$decision = [ 'd' => self::compute_decision() ];
+		}
+		return self::$decision['d'];
+	}
+
+	/**
+	 * @return null|array{key:string,mult:int,shared:bool,ip:string,from_header:bool}
+	 */
+	private static function compute_decision(): ?array {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return null;
+		}
+		$r  = YSClientIp::resolve();
+		$ip = (string) $r['ip'];
+		if ( '' === $ip ) {
+			return self::shared( 'via:unknown', self::SHARED_MULT, '', false );
+		}
+		if ( YSClientIp::in_any( $ip, YSLoginGuardSettings::allowlist() ) ) {
+			return null;
+		}
+		if ( YSClientIp::is_foreign_worker() ) {
+			return self::shared( 'via:cf-worker', 1, $ip, (bool) $r['from_header'] );
+		}
+		if ( empty( $r['from_header'] ) ) {
+			if ( YSClientIp::is_trusted_proxy( $ip ) ) {
+				return self::shared( 'via:proxy', self::SHARED_MULT, $ip, false );
+			}
+			if ( YSClientIp::in_cloudflare_ranges( $ip ) ) {
+				return self::shared( 'via:cloudflare', self::SHARED_MULT, $ip, false );
+			}
+			if ( YSClientIp::is_internal( $ip ) && ! YSLoginGuardSettings::lock_private() ) {
+				return self::shared( 'via:internal', self::SHARED_MULT, $ip, false );
+			}
+		}
+		return [
+			'key'         => YSClientIp::key( $ip ),
+			'mult'        => 1,
+			'shared'      => false,
+			'ip'          => $ip,
+			'from_header' => (bool) $r['from_header'],
+		];
+	}
+
+	/** @return array{key:string,mult:int,shared:bool,ip:string,from_header:bool} */
+	private static function shared( string $key, int $mult, string $ip, bool $from_header ): array {
+		return [ 'key' => $key, 'mult' => $mult, 'shared' => true, 'ip' => $ip, 'from_header' => $from_header ];
+	}
+
+	/** IPv6 的 IP 鍵在打開 /48 彙總時的 /48 鍵；共用桶不做 /48。 */
+	public static function agg48_key( array $d ): ?string {
+		if ( ! empty( $d['shared'] ) || ! str_contains( (string) $d['ip'], ':' ) || ! YSLoginGuardSettings::ipv6_aggregate() ) {
+			return null;
+		}
+		$net = YSClientIp::network( (string) $d['ip'], 48 );
+		return '' === $net ? null : 'agg48:' . $net;
+	}
+
+	/**
+	 * 查鎖定要看的鍵。
+	 *
+	 * @return string[]
+	 */
+	private static function lookup_keys( array $d ): array {
+		$keys = [ (string) $d['key'] ];
+		$agg  = self::agg48_key( $d );
+		if ( null !== $agg ) {
+			$keys[] = $agg;
+		}
+		return $keys;
+	}
+
+	/**
+	 * 這次的失敗記在哪個鍵（目前就是這次的鍵）。
+	 *
+	 * @return array{key:string,mult:int,shared:bool,ip:string,from_header:bool}
+	 */
+	private static function count_target( array $d ): array {
+		return $d;
+	}
+
+	/**
+	 * 這次的鍵（與 /48 鍵）現在有沒有被鎖。查詢失敗當成沒鎖（fail-open，§4.6），已經記 health。
+	 *
+	 * @return null|array{key:string,until:int}
+	 */
+	public static function current_lock( array $d, int $now ): ?array {
+		if ( null !== self::$lock ) {
+			return self::$lock['lock'];
+		}
+		$keys = self::lookup_keys( $d );
+		$rows = YSLoginGuardStore::rows( $keys );
+		$lock = null;
+		foreach ( is_array( $rows ) ? $keys : [] as $key ) {
+			$until = (int) ( $rows[ $key ]['locked_until'] ?? 0 );
+			if ( $until > $now && ( null === $lock || $until > $lock['until'] ) ) {
+				$lock = [ 'key' => $key, 'until' => $until ];
+			}
+		}
+		self::$lock = [ 'lock' => $lock ];
+		return $lock;
+	}
+
+	/* ─────────────────────────── authenticate 1 ─────────────────────────── */
+
+	/**
+	 * 帳號與密碼都不是空的時：跨站拒絕、被鎖就關閘門。看到 $user 已經是 WP_User 也一樣要檢查（不提早 return）。
+	 *
+	 * @param null|\WP_User|\WP_Error $user
+	 * @param mixed                   $username
+	 * @param mixed                   $password
+	 * @return null|\WP_User|\WP_Error
+	 */
+	public static function check( $user, $username = '', $password = '' ) {
+		if ( ! is_string( $username ) || '' === trim( $username ) || ! is_string( $password ) || '' === $password ) {
+			return $user;
+		}
+		if ( ! YSLoginGuardSchema::is_ready() ) {
+			YSLoginGuardHealth::record( 'table_not_ready' );
+			return $user;
+		}
+		$now = time();
+
+		// 1. 跨站送來的瀏覽器請求（§4.13.1）。
+		if ( YSLoginGuardSettings::cross_site_reject() && self::is_cross_site_browser_request() ) {
+			$origin = self::request_origin();
+			if ( '' === $origin['normalized'] || ! in_array( $origin['normalized'], self::allowed_origins(), true ) ) {
+				$observing = self::observing( $now );
+				YSLoginGuardStore::log_xsite( '' !== $origin['normalized'] ? $origin['normalized'] : $origin['label'], self::entry_class(), $observing, $now );
+				if ( ! $observing ) {
+					YSAuthGate::close( new \WP_Error( self::ERROR_CROSS_SITE, self::cross_site_message() ), self::LOCK_FILTERS );
+					return YSAuthGate::error() ?? $user;
+				}
+			}
+		}
+
+		// 2. 被鎖的鍵（§4.4）。
+		$d = self::decide();
+		if ( null === $d ) {
+			return $user;
+		}
+		$lock = self::current_lock( $d, $now );
+		if ( null !== $lock ) {
+			YSLoginGuardStore::note_blocked( $lock['key'], $now );
+			YSAuthGate::close( self::locked_error( $lock['until'] - $now ), self::LOCK_FILTERS );
+			return YSAuthGate::error() ?? $user;
+		}
+		return $user;
+	}
+
+	/* ─────────────────────────── wp_login_failed 10 ─────────────────────────── */
+
+	/**
+	 * 計數。涵蓋 wp-login.php、改過的網址、XML-RPC、前台 wp_signon()、任何 wp_authenticate()。
+	 *
+	 * @param mixed $username
+	 * @param mixed $error
+	 */
+	public static function on_failed( $username, $error = null ): void {
+		if ( self::$counted || ! YSLoginGuardSchema::is_ready() ) {
+			return;
+		}
+		$code = $error instanceof \WP_Error ? (string) $error->get_error_code() : '';
+		if ( in_array( $code, self::NOT_COUNTED, true ) || YSTurnstile::ERROR_CODE === $code ) {
+			return;
+		}
+		$username = is_string( $username ) ? $username : '';
+		/**
+		 * 這一次登入失敗要不要計數（v1.6.0）。例如 2FA 外掛回「需要第二步驗證」時密碼其實是對的，可以用這個 filter 排除。
+		 *
+		 * @since 1.6.0
+		 *
+		 * @param bool          $count    預設 true。
+		 * @param null|WP_Error $error    核心最後回的錯誤。
+		 * @param string        $username 嘗試的帳號（原文，不要寫進紀錄或輸出）。
+		 */
+		if ( ! apply_filters( 'ys_admin_menu_login_guard_should_count', true, $error instanceof \WP_Error ? $error : null, $username ) ) {
+			return;
+		}
+		$d = self::decide();
+		if ( null === $d ) {
+			return;
+		}
+		self::$counted = true;
+		$now           = time();
+		$source        = self::source();
+		$target        = self::count_target( $d );
+
+		$count = self::count_and_lock( $target, $target['mult'], ! $target['shared'], $now, $source, $username, $code );
+
+		$agg = self::agg48_key( $d );
+		if ( null !== $agg ) {
+			self::count_and_lock( [ 'key' => $agg, 'ip' => $d['ip'], 'shared' => false ], self::AGG48_MULT, true, $now, $source, $username, $code );
+		}
+
+		if ( null !== $count ) {
+			YSLoginGuardStore::set_username( $target['key'], $username );
+			$user = self::existing_user( $username );
+			if ( null !== $user ) {
+				$window = YSLoginGuardStore::window_start( $target['key'] );
+				if ( null !== $window && $window > 0 ) {
+					YSLoginGuardStore::acct_record( $target['key'], YSLoginGuardStore::acct_hash( (int) $user->ID ), $window, $now );
+				}
+			}
+			YSLoginGuardStore::log_fail( $target['key'], (string) $d['ip'], $username, $source, $code, $now );
+		}
+		self::note_stats( $d, $now );
+		YSLoginGuardStore::maybe_cleanup( $now );
+	}
+
+	/**
+	 * 計數一個鍵，到門檻就建立鎖定（只有建立了的那個請求寫鎖定紀錄）。
+	 *
+	 * @param array{key:string,ip:string,shared:bool} $target
+	 * @return null|int 加完的次數；查詢失敗回 null。
+	 */
+	private static function count_and_lock( array $target, int $mult, bool $escalate, int $now, string $source, string $username, string $code ): ?int {
+		$result = YSLoginGuardStore::count_failure( (string) $target['key'], (string) $target['ip'], $source, $now, YSLoginGuardSettings::window_seconds() );
+		if ( null === $result ) {
+			return null;
+		}
+		$threshold = YSLoginGuardSettings::max_failures() * max( 1, $mult );
+		if ( $result['count'] >= $threshold ) {
+			$until = YSLoginGuardStore::lock(
+				(string) $target['key'],
+				$now,
+				$threshold,
+				YSLoginGuardSettings::lockout_seconds(),
+				$escalate && YSLoginGuardSettings::escalate(),
+				YSLoginGuardSettings::escalate_after(),
+				YSLoginGuardSettings::escalate_period_seconds(),
+				YSLoginGuardSettings::escalated_lockout_seconds()
+			);
+			if ( null !== $until ) {
+				self::$lock = null;
+				YSLoginGuardStore::log_event(
+					YSLoginGuardStore::EVENT_LOCKOUT,
+					[
+						'ip'       => (string) $target['ip'],
+						'ip_key'   => (string) $target['key'],
+						'username' => $username,
+						'source'   => $source,
+						'code'     => (string) ( $until - $now ),
+					],
+					$now
+				);
+				/**
+				 * 建立了一次鎖定（v1.6.0，通知用）。同一次鎖定只有一個請求會觸發。
+				 *
+				 * @since 1.6.0
+				 *
+				 * @param array{key:string,ip:string,until:int,source:string,shared:bool} $lock
+				 */
+				do_action(
+					'ys_admin_menu_login_guard_locked',
+					[
+						'key'    => (string) $target['key'],
+						'ip'     => (string) $target['ip'],
+						'until'  => $until,
+						'source' => $source,
+						'shared' => ! empty( $target['shared'] ),
+					]
+				);
+			}
+		}
+		return $result['count'];
+	}
+
+	/** 健康統計：記到共用桶、外站 Worker、從標頭取到內部或 CDN 位址（只在發生時寫，§4.7.2）。 */
+	private static function note_stats( array $d, int $now ): void {
+		if ( 'via:cf-worker' === $d['key'] ) {
+			YSLoginGuardStore::stat( [ 'lockout_count' => 1 ], $now );
+			YSLoginGuardHealth::record( 'cf_worker' );
+			return;
+		}
+		if ( ! empty( $d['shared'] ) ) {
+			YSLoginGuardStore::stat( [ 'total_failures' => 1 ], $now );
+			YSLoginGuardHealth::record( 'shared_bucket', [ 'key' => (string) $d['key'] ] );
+			return;
+		}
+		if ( ! empty( $d['from_header'] ) && ( YSClientIp::is_internal( (string) $d['ip'] ) || YSClientIp::in_cloudflare_ranges( (string) $d['ip'] ) ) ) {
+			YSLoginGuardStore::stat( [ 'blocked_count' => 1 ], $now );
+		}
+	}
+
+	/* ─────────────────────────── wp_login 10 ─────────────────────────── */
+
+	/**
+	 * 登入成功：只原諒這個帳號自己在這次的鍵上、同一個視窗裡的失敗（§4.4.2）。XML-RPC 與 REST 的成功不觸發 wp_login。
+	 *
+	 * @param mixed $user_login
+	 * @param mixed $user
+	 */
+	public static function on_login( $user_login, $user = null ): void {
+		if ( ! $user instanceof \WP_User || ! YSLoginGuardSchema::is_ready() ) {
+			return;
+		}
+		$d = self::decide();
+		if ( null === $d ) {
+			return;
+		}
+		$target = self::count_target( $d );
+		YSLoginGuardStore::acct_forgive( (string) $target['key'], YSLoginGuardStore::acct_hash( (int) $user->ID ), time() );
+	}
+
+	/* ─────────────────────────── REST（19／80） ─────────────────────────── */
+
+	/**
+	 * determine_current_user 19：還沒有人認證、帶 Basic、站上用過應用程式密碼、這個 IP 被鎖 →
+	 * 這一次請求拿掉核心 20 的 wp_validate_application_password（不算雜湊，猜對猜錯回應一樣），做標記。
+	 *
+	 * @param int|false $user_id
+	 * @return int|false
+	 */
+	public static function rest_pre_auth( $user_id ) {
+		if ( ! empty( $user_id ) ) {
+			return $user_id;
+		}
+		if ( ! isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] ) ) {
+			return $user_id;
+		}
+		if ( ! class_exists( 'WP_Application_Passwords' ) || ! \WP_Application_Passwords::is_in_use() || ! YSLoginGuardSchema::is_ready() ) {
+			return $user_id;
+		}
+		$d = self::decide();
+		if ( null === $d ) {
+			return $user_id;
+		}
+		$lock = self::current_lock( $d, time() );
+		if ( null === $lock ) {
+			return $user_id;
+		}
+		remove_filter( 'determine_current_user', 'wp_validate_application_password', 20 );
+		self::$rest_flag = [ 'until' => $lock['until'] ];
+		return $user_id;
+	}
+
+	/**
+	 * rest_authentication_errors 80：$result 非空或沒有標記 → 原樣回傳，不碰目前使用者。
+	 * 有標記時：已經被 cookie 認證（目前使用者大於 0）→ 原樣回傳；否則回 429。
+	 *
+	 * @param mixed $result
+	 * @return mixed
+	 */
+	public static function rest_errors( $result ) {
+		if ( ! empty( $result ) || null === self::$rest_flag ) {
+			return $result;
+		}
+		if ( get_current_user_id() > 0 ) {
+			return $result;
+		}
+		add_filter( 'rest_post_dispatch', [ self::class, 'rest_retry_after' ], 10, 1 );
+		return new \WP_Error( self::ERROR_LOCKED, self::lock_message_text( self::$rest_flag['until'] - time() ), [ 'status' => 429 ] );
+	}
+
+	/**
+	 * 429 的回應帶 Retry-After（秒）。
+	 *
+	 * @param mixed $response
+	 * @return mixed
+	 */
+	public static function rest_retry_after( $response ) {
+		if ( null !== self::$rest_flag && $response instanceof \WP_REST_Response && 429 === $response->get_status() ) {
+			$response->header( 'Retry-After', (string) max( 1, self::$rest_flag['until'] - time() ) );
+		}
+		return $response;
+	}
+
+	/* ─────────────────────────── 登入頁 ─────────────────────────── */
+
+	/**
+	 * 鎖定與跨站拒絕的錯誤也讓登入框晃一下。
+	 *
+	 * @param string[] $codes
+	 * @return string[]
+	 */
+	public static function shake_codes( $codes ): array {
+		$codes   = is_array( $codes ) ? $codes : [];
+		$codes[] = self::ERROR_LOCKED;
+		$codes[] = self::ERROR_CROSS_SITE;
+		return $codes;
+	}
+
+	/**
+	 * 打開登入頁（login 動作）時，這個 IP 正在鎖定中，就在表單上方顯示鎖定訊息；不計數。
+	 * 這一次請求已經回了本外掛的錯誤（閘門關著）時不重複顯示。忘記密碼、註冊畫面不顯示。
+	 *
+	 * @param mixed $message
+	 * @return mixed
+	 */
+	public static function login_message( $message ) {
+		$action = isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : 'login'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要顯示提醒
+		if ( 'login' !== $action || YSAuthGate::is_closed() || ! YSLoginGuardSchema::is_ready() ) {
+			return $message;
+		}
+		$d = self::decide();
+		if ( null === $d ) {
+			return $message;
+		}
+		$now  = time();
+		$lock = self::current_lock( $d, $now );
+		if ( null === $lock ) {
+			return $message;
+		}
+		return (string) $message . '<div class="notice notice-error message ys-am-login-locked"><p>' . esc_html( self::lock_message_text( $lock['until'] - $now ) ) . '</p></div>';
+	}
+
+	/* ─────────────────────────── 訊息（§4.5） ─────────────────────────── */
+
+	public static function locked_error( int $seconds ): \WP_Error {
+		return new \WP_Error(
+			self::ERROR_LOCKED,
+			'<strong>' . esc_html__( '錯誤', 'ys-admin-menu' ) . '</strong>：' . esc_html( self::lock_message_text( $seconds ) )
+		);
+	}
+
+	/** 純文字的鎖定訊息：第一句可以換（設定，留空用內建文字），後面接大約幾分鐘後可以再試。 */
+	public static function lock_message_text( int $seconds ): string {
+		$first = YSLoginGuardSettings::message();
+		if ( '' === $first ) {
+			$first = '登入失敗太多次，這個網路位址暫時不能登入。';
+		}
+		return $first . self::retry_text( $seconds );
+	}
+
+	/** 分鐘數往上取整；不到 1 分鐘寫「不到 1 分鐘」。 */
+	public static function retry_text( int $seconds ): string {
+		if ( $seconds < 60 ) {
+			return '不到 1 分鐘後可以再試。';
+		}
+		return sprintf( '大約 %d 分鐘後可以再試。', (int) ceil( $seconds / 60 ) );
+	}
+
+	public static function cross_site_message(): string {
+		return '<strong>' . esc_html__( '錯誤', 'ys-admin-menu' ) . '</strong>：' . esc_html__( '這個登入要求來自其他網站，已經拒絕。請直接打開本站的登入頁再試一次。', 'ys-admin-menu' );
+	}
+
+	/* ─────────────────────────── 跨站判斷（§4.13.1） ─────────────────────────── */
+
+	/**
+	 * 瀏覽器宣告的跨站請求：有 Sec-Fetch-Site 就只看它（cross-site 才算）；沒有時拿 Origin 跟這次請求的 Host
+	 * （加上本站主機與 filter）比；Origin: null 算跨站；兩個都沒有（非瀏覽器用戶端、很舊的瀏覽器）不算。
+	 */
+	public static function is_cross_site_browser_request(): bool {
+		$site = strtolower( trim( self::server( 'HTTP_SEC_FETCH_SITE' ) ) );
+		if ( '' !== $site ) {
+			return 'cross-site' === $site;
+		}
+		$origin = trim( self::server( 'HTTP_ORIGIN' ) );
+		if ( '' === $origin ) {
+			return false;
+		}
+		if ( 'null' === strtolower( $origin ) ) {
+			return true;
+		}
+		$host = strtolower( (string) wp_parse_url( $origin, PHP_URL_HOST ) );
+		$req  = strtolower( (string) wp_parse_url( 'http://' . self::server( 'HTTP_HOST' ), PHP_URL_HOST ) );
+		return '' === $host || ( $host !== $req && ! in_array( $host, self::own_hosts(), true ) );
+	}
+
+	/**
+	 * 本站的主機（主機完全相同才算；跟 CF-Worker 的 zone 規則分開，審查 R3-P3-3）。
+	 *
+	 * @return string[]
+	 */
+	public static function own_hosts(): array {
+		$hosts = [];
+		foreach ( [ home_url(), site_url() ] as $url ) {
+			$host = wp_parse_url( (string) $url, PHP_URL_HOST );
+			if ( is_string( $host ) && '' !== $host ) {
+				$hosts[] = strtolower( $host );
+			}
+		}
+		/**
+		 * 跨站判斷時算成本站的主機（v1.6.0）。主機要完全相同才算。
+		 *
+		 * @since 1.6.0
+		 *
+		 * @param string[] $hosts 預設是 home_url 與 siteurl 的主機。
+		 */
+		$hosts = apply_filters( 'ys_admin_menu_login_guard_own_hosts', $hosts );
+		return array_values( array_unique( array_filter( array_map( static fn( $h ) => is_string( $h ) ? strtolower( trim( $h ) ) : '', (array) $hosts ) ) ) );
+	}
+
+	/**
+	 * 這次請求的 Origin：正規化後的值（不合法時空字串），與記紀錄用的標籤（null、沒有，或截短的原文）。
+	 *
+	 * @return array{normalized:string,label:string}
+	 */
+	public static function request_origin(): array {
+		$raw = trim( self::server( 'HTTP_ORIGIN' ) );
+		if ( '' === $raw ) {
+			return [ 'normalized' => '', 'label' => '(none)' ];
+		}
+		$normalized = YSLoginGuardSettings::normalize_origin( $raw );
+		$label      = substr( (string) preg_replace( '/[^\x21-\x7E]/', '', $raw ), 0, 255 );
+		return [ 'normalized' => $normalized, 'label' => '' !== $label ? $label : '(invalid)' ];
+	}
+
+	/**
+	 * 允許跨站登入的來源：設定、filter、YS CART 的 headless 前台設定、核心的 allowed_http_origins（都正規化）。
+	 *
+	 * @return string[]
+	 */
+	public static function allowed_origins(): array {
+		if ( null === self::$origins ) {
+			$list = YSLoginGuardSettings::cross_site_origins();
+			/**
+			 * 另外允許跨站送帳密的來源（v1.6.0），一個 https://主機[:埠] 一個字串。給另一個網域上的前台用。
+			 *
+			 * @since 1.6.0
+			 *
+			 * @param string[] $origins 預設空陣列。
+			 */
+			foreach ( (array) apply_filters( 'ys_admin_menu_login_guard_allow_cross_site', [] ) as $origin ) {
+				$list[] = is_string( $origin ) ? YSLoginGuardSettings::normalize_origin( $origin ) : '';
+			}
+			$auto          = self::auto_origins();
+			$list          = array_merge( $list, $auto['yscart'], $auto['core'] );
+			self::$origins = array_values( array_unique( array_filter( $list ) ) );
+		}
+		return self::$origins;
+	}
+
+	/**
+	 * 自動帶入的來源（設定頁唯讀列出來）：YS CART 的 headless_cors_origins、核心的 get_allowed_http_origins()。
+	 * YS CART 不在、方法不存在或出錯時略過。
+	 *
+	 * @return array{yscart:string[],core:string[]}
+	 */
+	public static function auto_origins(): array {
+		$yscart = [];
+		$class  = '\\YangSheep\\Ecommerce\\YSEcommerce';
+		try {
+			if ( class_exists( $class ) && method_exists( $class, 'get_instance' ) ) {
+				$ec = $class::get_instance();
+				if ( is_object( $ec ) && method_exists( $ec, 'get_setting' ) ) {
+					$raw = $ec->get_setting( 'headless_cors_origins', '' );
+					foreach ( preg_split( '/\r\n|\r|\n/', is_string( $raw ) ? $raw : '' ) as $line ) {
+						$yscart[] = YSLoginGuardSettings::normalize_origin( (string) $line );
+					}
+				}
+			}
+		} catch ( \Throwable $e ) {
+			$yscart = [];
+		}
+		$core = [];
+		if ( function_exists( 'get_allowed_http_origins' ) ) {
+			foreach ( (array) get_allowed_http_origins() as $origin ) {
+				$core[] = is_string( $origin ) ? YSLoginGuardSettings::normalize_origin( $origin ) : '';
+			}
+		}
+		return [
+			'yscart' => array_values( array_unique( array_filter( $yscart ) ) ),
+			'core'   => array_values( array_unique( array_filter( $core ) ) ),
+		];
+	}
+
+	/** 入口類別：xmlrpc、REST 路徑前綴（例如 /ys-ecommerce-headless/v1）、wp-login、other。 */
+	public static function entry_class(): string {
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return 'xmlrpc';
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			$route = isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] ) ? (string) ( $GLOBALS['wp']->query_vars['rest_route'] ?? '' ) : '';
+			$parts = array_values( array_filter( explode( '/', strtolower( $route ) ) ) );
+			$path  = '/' . implode( '/', array_slice( $parts, 0, 2 ) );
+			$path  = (string) preg_replace( '/[^a-z0-9_\/-]/', '', $path );
+			return '/' !== $path ? substr( $path, 0, 40 ) : 'rest';
+		}
+		if ( isset( $GLOBALS['pagenow'] ) && 'wp-login.php' === $GLOBALS['pagenow'] ) {
+			return 'wp-login';
+		}
+		return 'other';
+	}
+
+	/* ─────────────────────────── 健康狀態 ─────────────────────────── */
+
+	/**
+	 * 有開但沒有正常作用（§4.10）：資料表不可用；或最近一輪記到 via:proxy、via:cloudflare、via:internal、via:unknown
+	 * 的次數合計 20 次以上、而且占失敗總數一半以上（站多半在代理後面、IP 偵測沒設好）。
+	 *
+	 * @return array{effective:bool,reasons:string[],stats:array}
+	 */
+	public static function status(): array {
+		if ( ! YSLoginGuardSchema::is_ready() ) {
+			return [ 'effective' => false, 'reasons' => [ 'table_not_ready' ], 'stats' => [] ];
+		}
+		$stats   = YSLoginGuardStore::stat24();
+		$reasons = [];
+		if ( $stats['shared'] >= 20 && 2 * $stats['shared'] > $stats['failures'] ) {
+			$reasons[] = 'shared_bucket';
+		}
+		return [ 'effective' => [] === $reasons, 'reasons' => $reasons, 'stats' => $stats ];
+	}
+
+	/* ─────────────────────────── 工具 ─────────────────────────── */
+
+	/** 來源：login（wp-login.php）、xmlrpc、rest、other。 */
+	private static function source(): string {
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return 'xmlrpc';
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return 'rest';
+		}
+		return isset( $GLOBALS['pagenow'] ) && 'wp-login.php' === $GLOBALS['pagenow'] ? 'login' : 'other';
+	}
+
+	/** 嘗試的帳號是不是站上存在的使用者（帳號或信箱）。 */
+	private static function existing_user( string $username ): ?\WP_User {
+		if ( '' === $username ) {
+			return null;
+		}
+		$user = get_user_by( 'login', $username );
+		if ( ! $user instanceof \WP_User && is_email( $username ) ) {
+			$user = get_user_by( 'email', $username );
+		}
+		return $user instanceof \WP_User ? $user : null;
+	}
+
+	private static function server( string $key ): string {
+		$value = $_SERVER[ $key ] ?? ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- 呼叫的地方自己驗證
+		return is_string( $value ) ? $value : '';
+	}
+}
