@@ -150,7 +150,9 @@ final class YSLoginGuardCommand {
 	}
 
 	/**
-	 * 解除鎖定。IPv4 位址解它自己；IPv6 位址解它的 /64（打開 /48 彙總時一併解它的 /48）；也可以直接給鍵（via:internal、
+	 * 解除鎖定（一個 IP 位址或鍵，或 --all）。
+	 *
+	 * IPv4 位址解它自己；IPv6 位址解它的 /64（打開 /48 彙總時一併解它的 /48）；也可以直接給鍵（via:internal、
 	 * via:overflow:203.0.113.0/24、agg48:…）。
 	 *
 	 * ## OPTIONS
@@ -403,8 +405,8 @@ final class YSLoginGuardCommand {
 	 *
 	 * ## OPTIONS
 	 *
-	 * --drop-tables
-	 * : 要刪資料表（必填，確認你知道要做什麼）。
+	 * [--drop-tables]
+	 * : 要刪資料表（一定要帶，確認你知道要做什麼；WP-CLI 的旗標只能寫成選填，沒帶時指令自己報錯）。
 	 *
 	 * [--yes]
 	 * : 真的刪。
