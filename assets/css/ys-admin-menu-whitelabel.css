@@ -648,7 +648,10 @@ body.ysca-wl-active .ys-am-wl-grid .ysca-wl-field {
     margin-bottom: 0;
 }
 
+/* 捲動框也是定位的基準：表頭裡只給讀屏的字（.screen-reader-text 是 position: absolute）才會留在框裡，
+   不會在窄螢幕上把整頁撐出橫向捲動（v1.6.0）。 */
 body.ysca-wl-active .ys-am-wl-table-wrap {
+    position: relative;
     margin: 16px 0 12px;
     overflow-x: auto;
     border: 1px solid #e5e7eb;
