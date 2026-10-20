@@ -102,6 +102,9 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_ip_trusted_proxies',
 	'ys_admin_menu_ip_trust_cloudflare',
 	'ys_admin_menu_ip_turnstile_use',
+	// v1.6.0：登入入口的兩個獨立開關（關閉 XML-RPC 登入、停用應用程式密碼）。
+	'ys_admin_menu_disable_xmlrpc_login',
+	'ys_admin_menu_disable_app_passwords',
 	'ys_admin_menu_turnstile_enabled',
 	'ys_admin_menu_turnstile_site_key',
 	'ys_admin_menu_turnstile_secret_key',

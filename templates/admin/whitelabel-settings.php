@@ -8,12 +8,13 @@
  *   1. 後台品牌：後台 LOGO（頂層選單圖示＋選單上方 LOGO 區塊）、Footer 文字、後台頁尾、背景色、資料清除
  *   2. Admin Bar：隱藏 WordPress 標誌、各節點後台／前台隱藏、前台 Admin Bar 載入方式與角色
  *   3. 登入頁：自訂 wp-login.php 的開關與文字
- *   4. 登入防護：Cloudflare Turnstile；v1.6.0 加「進階：訪客 IP」（預設收合）
+ *   4. 登入防護：Cloudflare Turnstile；v1.6.0 加「登入入口」（兩個獨立開關，放在最上面）與「進階：訪客 IP」（預設收合）
  *
  * 變數（render_settings 提供）：
  *   - $logo_url, $footer_text, $hide_footer, $hide_wp_logo, $admin_bg_color, $purge_on_uninstall, $notice
  *   - v1.4.0：$show_menu_logo, $menu_logo_text, $adminbar, $login_page, $turnstile, $field_errors, $active_tab
- *   - v1.6.0：$ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）
+ *   - v1.6.0：$entrance_view（登入防護分頁的「登入入口」，YSLoginSecurityAdmin::entrance_view()）、
+ *             $ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）
  *
  * @package YangSheep\Ecommerce\Templates
  */
@@ -30,6 +31,7 @@ defined( 'ABSPATH' ) || exit;
 /** @var array  $turnstile */
 /** @var array  $field_errors */
 /** @var string $active_tab */
+/** @var array  $entrance_view */
 /** @var array  $ip_view */
 
 $has_logo        = ( '' !== $logo_url );
@@ -545,6 +547,33 @@ $log_labels = [
 
 		<?php /* ═══════════════════════ 分頁 4：登入防護（Turnstile） ═══════════════════════ */ ?>
 		<section class="ys-am-wl-panel" id="ys-am-wl-panel-turnstile" role="tabpanel" aria-labelledby="ys-am-wl-tab-turnstile" data-panel="turnstile">
+
+			<?php /* v1.6.0：登入入口的兩個獨立開關（跟其他登入防護設定無關，可以單獨使用）。 */ ?>
+			<div class="ysca-wl-card" id="ys-am-entrance-card">
+				<div class="ysca-wl-card__header">
+					<h3 class="ysca-wl-card__title">登入入口</h3>
+				</div>
+				<div class="ysca-wl-card__body">
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="disable_xmlrpc_login" value="yes" <?php checked( ! empty( $entrance_view['disable_xmlrpc'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>關閉 XML-RPC 登入</strong>xmlrpc.php 需要登入的功能全部停用：送來的帳號密碼一律回錯誤（405），不檢查密碼。用 XML-RPC 登入的工具都會不能用，例如 WordPress 手機 App 用帳號密碼直接連這個站、離線發文軟體；Jetpack 的部分功能也可能受影響。Pingback 照常，REST API 不受影響。XML-RPC 不在 Turnstile 的範圍裡，又能在一個請求裡試很多組密碼，用不到的站建議打開。</span>
+					</label>
+					<label class="ys-am-toggle-field">
+						<span class="ys-am-toggle">
+							<input type="checkbox" name="disable_app_passwords" value="yes" <?php checked( ! empty( $entrance_view['disable_app_passwords'] ) ); ?>>
+							<span class="ys-am-toggle__slider"></span>
+						</span>
+						<span class="ys-am-toggle-field__text"><strong>停用應用程式密碼</strong>所有應用程式密碼都不能用（REST API 與 XML-RPC），個人資料頁也不能再建立。已建立的會保留，關掉這個開關就恢復。WooCommerce 手機 App（用網站帳號登入時）與用應用程式密碼連線的整合會斷；WooCommerce 的 REST API 金鑰不受影響。應用程式密碼外洩時，也可以先打開它止血。</span>
+					</label>
+					<?php if ( empty( $entrance_view['app_passwords_supported'] ) ) : ?>
+						<p class="ysca-wl-field__hint">這個站沒有 HTTPS，WordPress 本來就不提供應用程式密碼。</p>
+					<?php endif; ?>
+					<p class="ysca-wl-field__hint">關掉用不到的登入入口，可以縮小被猜密碼的範圍。這兩個開關跟其他登入防護設定無關，可以單獨使用；wp-login.php 的一般登入不受影響。</p>
+				</div>
+			</div>
 
 			<?php $ts_status = (array) ( $turnstile['status'] ?? [] ); ?>
 			<?php if ( ! empty( $ts_status['active'] ) && empty( $ts_status['effective'] ) ) : ?>

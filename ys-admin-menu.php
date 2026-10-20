@@ -66,6 +66,13 @@ register_deactivation_hook(
 );
 
 /* ──────────────────────────────────────────────
+ * v1.6.0 登入入口的兩個獨立開關（關閉 XML-RPC 登入、停用應用程式密碼）
+ * 主檔載入時就掛，不等 plugins_loaded：有外掛在 plugins_loaded 就呼叫 wp_get_current_user()。
+ * 設定等 filter 真的被呼叫時才讀；跟登入次數限制的總開關無關。
+ * ────────────────────────────────────────────── */
+\YangSheep\AdminMenu\Security\YSLoginEntrances::register();
+
+/* ──────────────────────────────────────────────
  * Hub Client 註冊（priority 5，比主外掛早）
  * ────────────────────────────────────────────── */
 add_action( 'plugins_loaded', function () {

@@ -364,7 +364,8 @@ class YSWhiteLabelAdmin {
 		$adminbar       = YSAdminBarFilter::settings_view();
 		$login_page     = YSLoginPage::settings_view();
 		$turnstile      = YSTurnstile::settings_view();
-		// v1.6.0：「登入防護」分頁的「進階：訪客 IP」。
+		// v1.6.0：「登入防護」分頁的「登入入口」與「進階：訪客 IP」。
+		$entrance_view  = YSLoginSecurityAdmin::entrance_view();
 		$ip_view        = YSLoginSecurityAdmin::ip_view();
 		$field_errors   = self::read_field_errors();
 		$active_tab     = self::read_tab( $_GET['tab'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定先顯示哪個分頁
@@ -442,6 +443,8 @@ class YSWhiteLabelAdmin {
 		YSAdminBarFilter::save_settings( $post );
 		YSLoginPage::save_settings( $post );
 		$errors = YSTurnstile::save_settings( $post );
+		// v1.6.0：登入入口的兩個開關。
+		YSLoginSecurityAdmin::save_entrance_settings( $post );
 		// v1.6.0：訪客 IP 偵測。不合法的欄位不存、保留原本的值，錯誤代碼一起帶回設定頁。
 		$errors = array_merge( $errors, YSLoginSecurityAdmin::save_ip_settings( $post ) );
 

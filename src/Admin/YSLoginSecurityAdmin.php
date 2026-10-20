@@ -2,6 +2,7 @@
 /**
  * 白牌設定頁「登入防護」分頁的新設定（v1.6.0）。
  *
+ * - 「登入入口」卡片：關閉 XML-RPC 登入、停用應用程式密碼（兩個獨立開關，YSLoginEntrances）。
  * - 「進階：訪客 IP」卡片：偵測方式、信任的代理、信任 Cloudflare、Turnstile 也使用偵測到的 IP，以及診斷。
  *
  * 存檔由 YSWhiteLabelAdmin::handle_save_settings 在驗過 manage_options 與 nonce 之後呼叫；這裡每個欄位再驗證一次，
@@ -14,6 +15,7 @@
 namespace YangSheep\AdminMenu\Admin;
 
 use YangSheep\AdminMenu\Security\YSClientIp;
+use YangSheep\AdminMenu\Security\YSLoginEntrances;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -21,6 +23,33 @@ final class YSLoginSecurityAdmin {
 
 	/** 錯誤代碼裡最多列幾個行號（避免網址太長）。 */
 	private const MAX_LINE_CODES = 5;
+
+	/**
+	 * 存「登入入口」的兩個開關。整頁只有一張表單，存任何分頁都會送出這兩個勾選，沒勾就是 no。
+	 *
+	 * @param array<string, mixed> $post 已 wp_unslash 的 $_POST。
+	 */
+	public static function save_entrance_settings( array $post ): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		update_option( YSLoginEntrances::OPTION_DISABLE_XMLRPC, ! empty( $post['disable_xmlrpc_login'] ) ? 'yes' : 'no', false );
+		update_option( YSLoginEntrances::OPTION_DISABLE_APP_PASSWORDS, ! empty( $post['disable_app_passwords'] ) ? 'yes' : 'no', true );
+	}
+
+	/**
+	 * 「登入入口」卡片需要的值。
+	 *
+	 * @return array{disable_xmlrpc: bool, disable_app_passwords: bool, app_passwords_supported: bool}
+	 */
+	public static function entrance_view(): array {
+		return [
+			'disable_xmlrpc'          => YSLoginEntrances::xmlrpc_login_disabled(),
+			'disable_app_passwords'   => YSLoginEntrances::app_passwords_disabled(),
+			// 沒有 HTTPS（也不是 local 環境）時，WordPress 本來就不提供應用程式密碼。
+			'app_passwords_supported' => function_exists( 'wp_is_application_passwords_supported' ) ? (bool) wp_is_application_passwords_supported() : true,
+		];
+	}
 
 	/**
 	 * 存「訪客 IP」設定。
