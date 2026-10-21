@@ -105,7 +105,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - **關閉 XML-RPC 登入**：需要帳密的 XML-RPC 方法一律失敗，其他照常。
   - **停用應用程式密碼**：已建立的應用程式密碼保留，關掉就恢復。
 - WP-CLI：`wp ys-admin-menu login-guard xmlrpc on|off`、`wp ys-admin-menu login-guard app-passwords on|off`。
-- 「停用應用程式密碼」與登入次數限制的總開關，請用設定頁或上面的 WP-CLI 指令設定（會寫成自動載入）。沒存過設定的站，為了每個請求都不多查資料庫，本外掛只看自動載入的設定；用別的工具把它們改成不自動載入時，前台會先當成「關」，直到管理員下一次打開後台，或執行 `wp ys-admin-menu login-guard status`，本外掛會把它們改回自動載入。用 `pre_option_`、`default_option_` filter 指定這兩個值的，照樣有效。
+- 「停用應用程式密碼」與登入次數限制的總開關，請用設定頁或上面的 WP-CLI 指令設定（會寫成自動載入）。沒存過設定的站，為了每個請求都不多查資料庫，本外掛只看自動載入的設定；用別的工具把它們改成不自動載入時，前台會先當成「關」，直到管理員下一次打開後台，或執行 `wp ys-admin-menu login-guard status`，本外掛會把它們改回自動載入。用 `pre_option_`、`default_option_` filter 指定這兩個值的，照樣有效：交給 `default_option_` 的開關，本外掛不會替它寫入預設值（寫了就蓋掉 filter），所以前台每個請求會為它查一次資料庫，要完全不查請用 `pre_option_`；`default_option_` 只在沒有存過值時作用，在設定頁或 WP-CLI 改成別的值之後，以存的值為準。
 
 ### WP-CLI（v1.6.0 起）
 

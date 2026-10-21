@@ -174,13 +174,22 @@ final class YSLoginGuardSettings {
 	}
 
 	/**
-	 * 兩個每個請求都要讀的開關（總開關、停用應用程式密碼），還沒有時寫預設值 no（自動載入；已經有的不動）。只存了其中一個
+	 * 兩個每個請求都要讀的開關（總開關、停用應用程式密碼），還沒有時寫預設值 no（自動載入）。只存了其中一個
 	 * （例如只用 WP-CLI enable 打開、或只設了 app-passwords）時，前台讀另一個才不用每個請求查一次資料庫。設定頁存「登入入口」、
-	 * WP-CLI 的 enable、disable、app-passwords 寫完之後呼叫。
+	 * WP-CLI 的 enable、disable、app-passwords 寫完之後，與 heal_autoload() 改回自動載入之後呼叫。
+	 *
+	 * 有人掛 default_option_{鍵} filter 的開關不寫（最終核對 A 線 F1）：值交給 filter 決定，寫了就蓋掉它（README 說這種 filter 照樣有效）。
+	 * 而且核心 add_option() 判斷「已經有了」，是拿 filter 的回傳值跟 get_option() 比：相同時當成不存在，照樣用
+	 * INSERT … ON DUPLICATE KEY UPDATE 寫入——filter 回 yes、站上也存了 yes 時，現值會被覆寫成 no。這種站本來就不走 shortcut()，
+	 * 每個請求為它查一次資料庫（用 filter 的代價；要完全不查請用 pre_option_）。pre_option_ 的值 add_option() 自己會當成已經有了，不會寫。
 	 */
 	public static function seed_switches(): void {
-		add_option( self::OPTION_ENABLED, 'no', '', true );
-		add_option( 'ys_admin_menu_disable_app_passwords', 'no', '', true );
+		foreach ( [ self::OPTION_ENABLED, 'ys_admin_menu_disable_app_passwords' ] as $key ) {
+			if ( false !== has_filter( 'default_option_' . $key ) ) {
+				continue;
+			}
+			add_option( $key, 'no', '', true );
+		}
 	}
 
 	/** admin_init（不看總開關，YSLoginGuard::bootstrap 掛）：有 manage_options、不是 admin-ajax 時 heal_autoload()。 */

@@ -36,7 +36,7 @@
   - 整合用的 ys_admin_menu_client_ip filter：回傳合法、而且跟偵測結果不一樣的位址時採用；伺服器給不出合法的 REMOTE_ADDR 時也會呼叫，可以用它補上訪客的位址。
   - **Turnstile 照舊用 REMOTE_ADDR**：只有勾了「Turnstile 也使用偵測到的 IP」才改用偵測到的 IP。沒勾的站（包括沒存過 IP 設定的站），不管存了哪個分頁，Turnstile 都跟 1.5.2 一樣。
 - **登入入口的兩個獨立開關**（「登入防護」分頁的「登入入口」，預設都關，跟登入次數限制的總開關無關）：「關閉 XML-RPC 登入」（需要帳密的 XML-RPC 方法一律失敗，其他照常）、「停用應用程式密碼」（已建立的保留，關掉就恢復）。
-  - 「停用應用程式密碼」與登入次數限制的總開關，請用設定頁或 WP-CLI 設定（會寫成自動載入）：沒存過設定的站，為了每個請求都不多查資料庫，本外掛只看自動載入的設定。被別的工具改成不自動載入時，前台會先當成「關」，直到管理員下一次打開後台，或執行 wp ys-admin-menu login-guard status，本外掛會把它們改回自動載入。用 pre_option_、default_option_ filter 指定的值照樣有效。
+  - 「停用應用程式密碼」與登入次數限制的總開關，請用設定頁或 WP-CLI 設定（會寫成自動載入）：沒存過設定的站，為了每個請求都不多查資料庫，本外掛只看自動載入的設定。被別的工具改成不自動載入時，前台會先當成「關」，直到管理員下一次打開後台，或執行 wp ys-admin-menu login-guard status，本外掛會把它們改回自動載入。用 pre_option_、default_option_ filter 指定的值照樣有效：交給 default_option_ 的開關，本外掛不會替它寫入預設值（寫了就蓋掉 filter），所以前台每個請求會為它查一次資料庫，要完全不查請用 pre_option_；default_option_ 只在沒有存過值時作用，在設定頁或 WP-CLI 改成別的值之後，以存的值為準。
 - **自訂登入頁的樣式**（「登入頁」分頁的「樣式」卡片）：主色（按鈕、焦點框、表單裡的連結；對比不夠時自動調深或改用深色字）、背景（預設深藍、淺色、自訂顏色；背景圖照樣可用）、左上字標。三項都留空時，登入頁跟 1.5.2 一模一樣。
 - **WP-CLI**：
   - wp ys-admin-menu login-guard：status（開關、資料表、IP 偵測、有沒有正常作用；加 --repair 重新建表）、list（--locked、--ip）、unlock（一個 IP 位址或鍵，或 --all；IPv6 位址解它的 /64，打開 /48 彙總時一併解 /48）、allowlist list、add、remove、enable、disable、cleanup、log（--since、--ip）、purge --drop-tables --yes、xmlrpc on 或 off、app-passwords on 或 off。
