@@ -180,6 +180,7 @@ final class YSLoginGuardSchema {
 		YSLoginGuardHealth::clear( 'ensure_failed' );
 		YSLoginGuardHealth::clear( 'table_not_ready' );
 		YSLoginGuardHealth::clear( 'query_failed' );
+		YSLoginGuardHealth::clear( 'table_missing' );
 		return true;
 	}
 

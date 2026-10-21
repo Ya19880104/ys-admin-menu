@@ -43,6 +43,9 @@ final class YSLoginGuard {
 	/** 查詢失敗在多久之內算成「沒有正常作用」（秒）。 */
 	public const QUERY_FAILED_SECONDS = 3600;
 
+	/** 暫時性的查詢失敗：最近一小時有幾分鐘以上才算「一再失敗」、沒有正常作用（只有一分鐘時只是提醒）。 */
+	public const UNSTABLE_MINUTES = 2;
+
 	/** 不算失敗的錯誤代碼（本外掛的鎖定與跨站拒絕、Turnstile、核心本來就不觸發的兩個）。 */
 	private const NOT_COUNTED = [ self::ERROR_LOCKED, self::ERROR_CROSS_SITE, 'empty_username', 'empty_password' ];
 
@@ -79,12 +82,14 @@ final class YSLoginGuard {
 		YSLoginGuardHealth::reset();
 		YSLoginGuardCapacity::reset();
 		YSLoginGuardNotifier::reset();
-		// 不看總開關的兩個（安全審查 B 線 P2-2、P3-4）：
+		// 不看總開關的三個（安全審查 B 線 P2-2、P3-4；差異審查 SEC P3-1、CODE N1）：
 		// - 每天清理的 callback：總開關關掉之後，紀錄照樣依保留天數清掉（cron_cleanup 自己會看資料表在不在；
 		//   排程只在打開過時才建立，從沒打開過的站不會多出排程或查詢）。
 		// - login_init 再重設一次這個請求記住的 IP 與判斷（設計 §3.3 第 4 步）。
+		// - 管理員打開後台時，把被別的工具改成不自動載入的開關改回自動載入（只在一個都不在自動載入裡時才查）。
 		add_action( self::CRON_HOOK, [ self::class, 'cron_cleanup' ] );
 		add_action( 'login_init', [ self::class, 'reset_on_login_init' ], 0 );
+		add_action( 'admin_init', [ YSLoginGuardSettings::class, 'heal_on_admin' ] );
 		if ( ! YSLoginGuardSettings::active() ) {
 			return;
 		}
@@ -142,11 +147,12 @@ final class YSLoginGuard {
 	}
 
 	/**
-	 * admin_init：總開關是開的（register 才會掛）、版本鍵不是目前版本、而且有 manage_options、不是 admin-ajax 才建表。
-	 * admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
+	 * admin_init：總開關是開的（register 才會掛）、版本鍵不是目前版本（或計數表在、但紀錄表或小表不見了，table_missing），
+	 * 而且有 manage_options、不是 admin-ajax 才建表。admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
 	 */
 	public static function maybe_ensure(): void {
-		if ( YSLoginGuardSchema::is_ready() || ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {
+		$repair = null !== YSLoginGuardHealth::get( 'table_missing' );
+		if ( ( YSLoginGuardSchema::is_ready() && ! $repair ) || ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {
 			return;
 		}
 		YSLoginGuardSchema::ensure();
@@ -184,8 +190,8 @@ final class YSLoginGuard {
 		if ( $is && ! $was ) {
 			update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, time(), true );
 		}
-		// 從關到開，或開著但表不可用：建表。這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
-		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() ) ) {
+		// 從關到開，或開著但表不可用、少了紀錄表或小表：建表。這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
+		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() || null !== YSLoginGuardHealth::get( 'table_missing' ) ) ) {
 			YSLoginGuardSchema::ensure( true );
 		}
 	}
@@ -814,7 +820,8 @@ final class YSLoginGuard {
 	/* ─────────────────────────── 健康狀態 ─────────────────────────── */
 
 	/**
-	 * 有開但沒有正常作用（§4.10）：資料表不可用；最近一小時有查詢失敗（query_failed）；或最近一輪記到 via:proxy、
+	 * 有開但沒有正常作用（§4.10）：資料表不可用；最近一小時有查詢失敗（query_failed）；最近一小時有兩分鐘以上暫時性的
+	 * 查詢失敗（query_unstable）；或最近一輪記到 via:proxy、
 	 * via:cloudflare、via:internal、via:unknown 的次數合計 20 次以上、而且占失敗總數一半以上（站多半在代理後面、IP 偵測沒設好）。
 	 *
 	 * @return array{effective:bool,reasons:string[],stats:array}
@@ -825,15 +832,32 @@ final class YSLoginGuard {
 		}
 		$stats   = YSLoginGuardStore::stat24();
 		$reasons = [];
-		// 最近一小時有查詢失敗（表被刪掉、沒有權限……）：失敗的那幾次照設計放行，但一定要算成沒有正常作用（§4.6、§4.10；實作審查 A 線 P2-3）。
+		// 最近一小時有查詢失敗（計數表不見、沒有權限、不明的錯誤）：失敗的那幾次照設計放行，但一定要算成沒有正常作用
+		// （§4.6、§4.10；實作審查 A 線 P2-3）。死結、逾時、連線斷掉這類暫時性的錯誤另外算：一小時內有兩分鐘以上才算
+		// （差異審查 SEC P3-4、CODE N2）。
 		$failed = YSLoginGuardHealth::get( 'query_failed' );
 		if ( null !== $failed && time() - (int) $failed['last'] < self::QUERY_FAILED_SECONDS ) {
 			$reasons[] = 'query_failed';
+		}
+		if ( self::transient_minutes( time() ) >= self::UNSTABLE_MINUTES ) {
+			$reasons[] = 'query_unstable';
 		}
 		if ( $stats['shared'] >= 20 && 2 * $stats['shared'] > $stats['failures'] ) {
 			$reasons[] = 'shared_bucket';
 		}
 		return [ 'effective' => [] === $reasons, 'reasons' => $reasons, 'stats' => $stats ];
+	}
+
+	/** 暫時性的查詢失敗：最近一小時有幾分鐘有（health 同一個原因每分鐘最多寫一次，一筆就是一分鐘）。 */
+	public static function transient_minutes( int $now ): int {
+		$row = YSLoginGuardHealth::get( 'query_transient' );
+		$n   = 0;
+		foreach ( (array) ( $row['data']['recent'] ?? [] ) as $t ) {
+			if ( is_numeric( $t ) && $now - (int) $t < self::QUERY_FAILED_SECONDS ) {
+				++$n;
+			}
+		}
+		return $n;
 	}
 
 	/* ─────────────────────────── 工具 ─────────────────────────── */

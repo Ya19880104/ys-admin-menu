@@ -78,10 +78,10 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - YS CART 的前台登入會把被擋的原因一律顯示成「帳號或密碼錯誤」，請看「鎖定與紀錄」與後台提醒。
 - **鎖定與紀錄**（設定表單下方）：目前鎖定中的位址（解鎖、全部解鎖）、最近 7 天被拒的跨站登入來源、最近的紀錄（可以只看某一個 IP）、清空紀錄、把你目前的 IP 加進白名單（IPv6 加它的 /64）。每個動作都要有管理網站的權限。
 - **通知**（預設關）：建立一次鎖定就寄一封純文字信給網站管理員（或你指定的信箱）。同一個位址 24 小時內一封，全站每 24 小時最多十封；信裡只列站上存在的帳號，不存在的只寫個數。
-- **後台提醒**（只給管理員）：資料表建不起來、最近一小時有查詢失敗（資料表被刪掉、或資料庫帳號沒有權限；表不見時，管理員下一次打開後台就自動重建）、IP 偵測可能沒設好、計數空間用完、計數資料有一部分不見了、其他網站的 Cloudflare Worker 送來登入失敗、被拒的跨站來源一天超過 5 次、通知信寄不出去、清理出錯。查詢失敗的那幾次照常可以登入，但會算成「沒有正常作用」。
+- **後台提醒**（只給管理員）：資料表建不起來、最近一小時有查詢失敗（計數表不見了、資料庫帳號沒有權限或其他錯誤，提醒會寫是哪一種；計數表不見時，管理員下一次打開後台就自動重建）、資料庫查詢暫時失敗（死結、逾時、連線中斷：只有一次時是黃色的提醒，一小時內一再發生才算「沒有正常作用」）、只少了紀錄表或「鍵＋帳號」表（計數與鎖定照常，管理員打開後台時自動補回）、IP 偵測可能沒設好、計數空間用完、計數資料有一部分不見了、其他網站的 Cloudflare Worker 送來登入失敗、被拒的跨站來源一天超過 5 次、通知信寄不出去、清理出錯。查詢失敗的那幾次照常可以登入。
 - **不會把自己鎖在外面**：
   - WP-CLI：`wp ys-admin-menu login-guard unlock 你的IP`、`unlock --all`、`disable`。
-  - 在 wp-config.php 加 `define( 'YS_ADMIN_MENU_LOGIN_GUARD_DISABLED', true );`，整個登入次數限制不作用（「登入入口」的兩個開關不受影響）。
+  - 在 wp-config.php 加 `define( 'YS_ADMIN_MENU_LOGIN_GUARD_DISABLED', true );`，整個登入次數限制不作用（「登入入口」的兩個開關不受影響；每天的清理照樣依保留天數刪掉舊紀錄）。
   - 白名單（一行一個 IP 或 CIDR，最多 200 行）：白名單裡的位址不計數、不鎖，從那裡來的登入沒有這一層保護。
 - **資料**：三張自己的資料表——計數（`{prefix}ys_admin_menu_login_guard`）、「鍵＋帳號」（`{prefix}ys_admin_menu_login_guard_acct`，帳號只存使用者 ID 的雜湊；這張表把 IP 鍵跟帳號的雜湊連在一起，最多保留到下次清理，「清空紀錄」也會清掉）、紀錄（`{prefix}ys_admin_menu_login_log`）。紀錄裡有 IP 與嘗試的帳號名稱，只有管理員看得到，保留天數可設（預設 30 天，紀錄最多 50,000 筆）；總開關關掉之後，留下的紀錄照樣每天依保留天數清掉。建表只在管理員打開後台、外掛啟用、WP-CLI 時做，建不起來時照常可以登入。
 - 2FA 外掛「需要第二步驗證」的錯誤會被算成一次失敗時，可以用 `ys_admin_menu_login_guard_should_count` filter 排除。
@@ -92,8 +92,9 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - 六種方式：自動（預設）、只用 REMOTE_ADDR、Cloudflare、X-Forwarded-For、X-Real-IP、自訂標頭。
   - **自動就是 REMOTE_ADDR**，不猜標頭；打開「信任 Cloudflare」時，從 Cloudflare 範圍來的請求才改用 CF-Connecting-IP。
   - 標頭模式只在 REMOTE_ADDR 是你加入的「信任的代理」時才看標頭；X-Forwarded-For 從右往左讀、跳過信任的代理，遇到不合法的段落就停。私有位址不會自動被信任。
-  - IPv4 對應的 IPv6 位址（`::ffff:` 開頭）與 NAT64 標準前綴 `64:ff9b::/96` 裡的位址，一律換回內嵌的 IPv4 判斷與計數：只有 IPv6 的主機前面用 NAT64 轉進 IPv4 訪客時，每個 IPv4 訪客照樣分開計算。
+  - IPv4 對應的 IPv6 位址（`::ffff:` 開頭）與 NAT64 標準前綴 `64:ff9b::/96` 裡的位址，一律換回內嵌的 IPv4 判斷與計數：只有 IPv6 的主機前面用 NAT64 轉進 IPv4 訪客時，每個 IPv4 訪客照樣分開計算。白名單與「信任的代理」裡請直接填內嵌的 IPv4：填 NAT64 的寫法時，單一位址存起來會變成 IPv4，網段會被判成不合法。
 - **「信任 Cloudflare」預設關**。只有原站只收自己這個 Cloudflare zone 的流量時才安全（例如 Authenticated Origin Pulls 或 Cloudflare Tunnel）；只把防火牆開給 Cloudflare 的 IP 不夠，其他 Cloudflare 客戶也從那些 IP 連進來。其他網站的 Cloudflare Worker 送來的請求不採用 CF-Connecting-IP。
+- **其他網站的 Cloudflare Worker 送來的登入，一律併成一桶計算，白名單對它們不適用**（Worker 帶來的位址不可信）。站方自己掛在另一個網域的 Worker（例如另一個網域的前台用 Worker 代送登入），請用 `ys_admin_menu_ip_own_domains` filter 把那個網域加進本站的網域；在那之前，從那裡來的登入會併成同一桶。
 - 診斷表列出這一次請求的各個標頭、每種選項會得到什麼 IP，並可以一鍵「信任這個代理」。改設定之前也可以用 `wp ys-admin-menu ip check --remote-addr=10.0.0.2 --header="X-Forwarded-For: 9.9.9.9, 10.0.0.5"` 試算。
 - 內建的 Cloudflare 範圍隨外掛版本更新，不會自動下載；`wp ys-admin-menu ip cloudflare-check` 手動比對官方清單、只印差異，需要時用 `ys_admin_menu_ip_cloudflare_ranges` filter 調整。
 - 整合用的 `ys_admin_menu_client_ip` filter：回傳合法、而且跟偵測結果不一樣的位址時採用。伺服器給不出合法的 REMOTE_ADDR 時也會呼叫（收到的位址是空字串），可以用它補上訪客的位址。
@@ -104,6 +105,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - **關閉 XML-RPC 登入**：需要帳密的 XML-RPC 方法一律失敗，其他照常。
   - **停用應用程式密碼**：已建立的應用程式密碼保留，關掉就恢復。
 - WP-CLI：`wp ys-admin-menu login-guard xmlrpc on|off`、`wp ys-admin-menu login-guard app-passwords on|off`。
+- 「停用應用程式密碼」與登入次數限制的總開關，請用設定頁或上面的 WP-CLI 指令設定（會寫成自動載入）。沒存過設定的站，為了每個請求都不多查資料庫，本外掛只看自動載入的設定；用別的工具把它們改成不自動載入時，前台會先當成「關」，直到管理員下一次打開後台，或執行 `wp ys-admin-menu login-guard status`，本外掛會把它們改回自動載入。用 `pre_option_`、`default_option_` filter 指定這兩個值的，照樣有效。
 
 ### WP-CLI（v1.6.0 起）
 
@@ -119,7 +121,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 | `wp ys-admin-menu login-guard purge --drop-tables [--yes]` | 刪掉三張資料表與內部用的鍵（降版前用）；沒帶 `--yes` 只印會刪什麼 |
 | `wp ys-admin-menu ip check`、`wp ys-admin-menu ip cloudflare-check` | 試算 IP 偵測、比對 Cloudflare 清單（都不改設定） |
 
-輸出裡從資料庫來的帳號名稱、來源會先清掉控制字元。
+輸出裡從資料庫來的帳號名稱、來源會先清掉控制字元。`list` 與 `log` 加 `--format=json` 時用英文鍵（例如 `key`、`last_ip`、`locked_until`、`created_at`），時間是 UNIX 秒，給腳本用；表格是中文，給人看。
 
 ### 已知限制（v1.6.0 的登入防護）
 
@@ -138,7 +140,9 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - 在登入流程很早的時點（`authenticate` 優先順序 0 或更早）就自己驗證帳密、設好登入 cookie 的外掛，鎖定擋不住它。
 - 拒絕跨站登入時，同一個註冊網域底下的其他子網域照常放行；既不送 Sec-Fetch-Site 也不送 Origin 的很舊瀏覽器照常處理。
 - 常駐的 PHP 執行方式（一個程序連續處理很多個請求，例如 FrankenPHP 的 worker 模式、RoadRunner）不在支援範圍。
-- 使用讀寫分離的資料庫外掛（`db.php`，例如 HyperDB、LudicrousDB）時，清理用的互斥鎖可能落在讀庫的連線上：清理偶爾會同時跑或略過一次，計數與鎖定不受影響。
+- 使用讀寫分離的資料庫外掛（`db.php`，例如 HyperDB、LudicrousDB）時：計數照樣寫進主庫、讀回同一條連線，不受影響；剛建立的鎖定可能因為讀庫的延遲，晚一點才擋得到；清理用的互斥鎖可能落在讀庫的連線上，清理偶爾會同時跑或略過一次。
+- 「停用應用程式密碼」與總開關被別的工具改成不自動載入時，前台會先當成「關」，要等管理員下一次打開後台（或執行 WP-CLI 的 `status`）才改回來；請用設定頁或 WP-CLI 設定這兩個開關。
+- 站方自己掛在另一個網域的 Cloudflare Worker 送來的登入，要用 `ys_admin_menu_ip_own_domains` filter 加進本站的網域；沒加之前會併成一桶，白名單對它不適用。
 - 多站網路是各站分開計算；有外掛在請求中途切換到別的站（`switch_to_blog()`）再登入時，判斷會用到切換後那個站的資料表與設定。
 
 ### 解除安裝、停用與降版（v1.6.0）

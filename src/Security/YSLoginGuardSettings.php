@@ -102,20 +102,78 @@ final class YSLoginGuardSettings {
 	/**
 	 * 每個請求都要讀的開關（總開關；停用應用程式密碼，YSLoginEntrances）。沒存過 1.6.0 設定的站，這些 option 不存在：
 	 * 沒有持久物件快取時，get_option() 每個請求都要為它查一次資料庫（WordPress 只在這一次請求記住「不存在」；實作審查 A 線 P3-1）。
-	 * 所以先看 wp_load_alloptions()（get_option() 本來就會讀它，已經在快取裡）：
-	 * - 這個鍵在自動載入裡：照常 get_option()，從快取拿，不查資料庫。
-	 * - 不在，但有別的本外掛鍵在：存過設定、只有這一個不在自動載入裡（例如被別的工具改成不自動載入），照常 get_option() 讀到真正的值。
-	 * - 一個都不在：沒存過設定，直接回預設，不查資料庫。這時不經過 get_option 的 filter（這幾個鍵沒有對外的 filter 介面）。
+	 * 所以能確定「沒存過」時直接回預設（shortcut()）；其他情況一律照常 get_option()。
 	 */
 	public static function autoloaded( string $option, string $default ): string {
-		if ( function_exists( 'wp_load_alloptions' ) ) {
-			$all = wp_load_alloptions();
-			if ( is_array( $all ) && ! array_key_exists( $option, $all ) && [] === array_intersect_key( $all, array_flip( self::AUTOLOADED_KEYS ) ) ) {
-				return $default;
-			}
+		if ( self::shortcut( $option ) ) {
+			return $default;
 		}
 		$value = get_option( $option, $default );
 		return is_string( $value ) ? $value : $default;
+	}
+
+	/**
+	 * 可以不查資料庫、直接回預設嗎（實作審查 A 線 P3-1；差異審查 SEC P3-1、CODE N1）：
+	 * - 有持久物件快取時不走：get_option() 對不存在的 option 本來就從快取的 notoptions 回答，不查資料庫。
+	 * - 有人掛了 pre_option_{鍵}、pre_option、default_option_{鍵} 時不走：照常 get_option()，filter 照樣作用
+	 *   （例如用 mu-plugin 讓所有站停用應用程式密碼）。
+	 * - 這個鍵在自動載入裡：get_option() 從快取拿，不查資料庫，不必走。
+	 * - 本外掛其他的自動載入鍵有一個在：存過設定、只有這一個不在自動載入裡，照常 get_option() 讀到真正的值。
+	 * - 一個都不在：當成沒存過，回預設。存過、但全部被別的工具改成不自動載入時也會走到這裡（讀成預設）：
+	 *   heal_autoload() 在管理員打開後台、WP-CLI status 時把它們改回自動載入，README 寫明這兩個開關要用設定頁或 WP-CLI 設定。
+	 */
+	private static function shortcut( string $option ): bool {
+		if ( ! function_exists( 'wp_load_alloptions' ) || ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) ) {
+			return false;
+		}
+		if ( false !== has_filter( 'pre_option_' . $option ) || false !== has_filter( 'pre_option' ) || false !== has_filter( 'default_option_' . $option ) ) {
+			return false;
+		}
+		$all = wp_load_alloptions();
+		return is_array( $all ) && ! array_key_exists( $option, $all ) && [] === array_intersect_key( $all, array_flip( self::AUTOLOADED_KEYS ) );
+	}
+
+	/**
+	 * 本外掛的自動載入鍵一個都不在自動載入裡，但其中有存在的（被 option 最佳化工具、wp option add --autoload=no 這類方式改成不自動載入）：
+	 * 改回自動載入，前台的捷徑才不會把開關讀成「關」（差異審查 SEC P3-1、CODE N1）。有任何一個在自動載入裡時什麼都不做（存過設定的站不多查）；
+	 * 沒存過的站多一句 SELECT。管理員打開後台（heal_on_admin）與 WP-CLI status 時呼叫。
+	 *
+	 * @return string[] 改回自動載入的鍵。
+	 */
+	public static function heal_autoload(): array {
+		if ( ! function_exists( 'wp_load_alloptions' ) ) {
+			return [];
+		}
+		$all = wp_load_alloptions();
+		if ( ! is_array( $all ) || [] !== array_intersect_key( $all, array_flip( self::AUTOLOADED_KEYS ) ) ) {
+			return [];
+		}
+		if ( function_exists( 'wp_set_option_autoload_values' ) ) {
+			return array_keys( array_filter( (array) wp_set_option_autoload_values( array_fill_keys( self::AUTOLOADED_KEYS, true ) ) ) );
+		}
+		// WordPress 6.4 以前沒有 wp_set_option_autoload_values()：自己找出存在的鍵、改成自動載入，再清掉快取。
+		global $wpdb;
+		$in    = implode( ', ', array_fill( 0, count( self::AUTOLOADED_KEYS ), '%s' ) );
+		$found = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name IN ({$in})", self::AUTOLOADED_KEYS ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 佔位符是系統產生的
+		$names = array_values( array_intersect( self::AUTOLOADED_KEYS, array_map( 'strval', is_array( $found ) ? $found : [] ) ) );
+		if ( [] === $names ) {
+			return [];
+		}
+		$in = implode( ', ', array_fill( 0, count( $names ), '%s' ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET autoload = 'yes' WHERE option_name IN ({$in})", $names ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 佔位符是系統產生的
+		wp_cache_delete( 'alloptions', 'options' );
+		foreach ( $names as $name ) {
+			wp_cache_delete( $name, 'options' );
+		}
+		return $names;
+	}
+
+	/** admin_init（不看總開關，YSLoginGuard::bootstrap 掛）：有 manage_options、不是 admin-ajax 時 heal_autoload()。 */
+	public static function heal_on_admin(): void {
+		if ( ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {
+			return;
+		}
+		self::heal_autoload();
 	}
 
 	/** 總開關打開、常數沒有停用。 */

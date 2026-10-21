@@ -14,7 +14,7 @@
  *   wp ys-admin-menu login-guard app-passwords <on|off>
  *
  * WP-CLI 本身不會被判斷或計數（沒有遠端的用戶端，§4.4.1）。輸出裡從資料庫來的字串（帳號名稱、來源）都先清掉控制字元，
- * 不會變成終端機的控制序列（審查 P2-9）。
+ * 不會變成終端機的控制序列（審查 P2-9）。list 與 log 的 --format=json 用英文鍵、時間是 UNIX 秒（給腳本用）；表格是中文（給人看）。
  *
  * @package YangSheep\AdminMenu\Cli
  * @since   1.6.0
@@ -65,6 +65,11 @@ final class YSLoginGuardCommand {
 	 * @param array<string,string> $assoc_args
 	 */
 	public function status( $args, $assoc_args ): void {
+		// 開關被別的工具改成不自動載入時，前台會先讀成「關」：在這裡改回自動載入（差異審查 SEC P3-1、CODE N1）。
+		$healed = YSLoginGuardSettings::heal_autoload();
+		if ( [] !== $healed ) {
+			\WP_CLI::line( '這幾個設定原本不是自動載入（前台會讀成預設值），已經改回自動載入：' . implode( '、', $healed ) );
+		}
 		if ( isset( $assoc_args['repair'] ) ) {
 			$ok = YSLoginGuardSchema::ensure( true ); // 手動修復：不管建表失敗後 10 分鐘的冷卻
 			\WP_CLI::line( $ok ? '資料表已經是目前的版本。' : '建表失敗（原因記在健康狀態裡；請確認資料庫帳號有建表的權限）。' );
@@ -126,27 +131,47 @@ final class YSLoginGuardCommand {
 		self::require_ready();
 		$filter = self::filter( (string) ( $assoc_args['ip'] ?? '' ) );
 		$now    = time();
+		$json   = 'json' === self::format( $assoc_args );
 		$rows   = [];
 		foreach ( YSLoginGuardStore::list_rows( $now, isset( $assoc_args['locked'] ), $filter, 1000 ) as $row ) {
-			$until  = (int) $row['locked_until'];
-			$rows[] = [
-				'鍵'     => self::clean( (string) $row['ip_key'] ),
-				'說明'   => self::clean( YSLoginGuardNotices::describe_key( (string) $row['ip_key'] ) ),
-				'最後位址' => self::clean( YSClientIp::normalize( (string) $row['last_ip'] ) ),
-				'這段時間失敗' => (int) $row['fail_count'],
-				'累計失敗' => (int) $row['total_failures'],
-				'鎖到'   => $until > $now ? wp_date( 'Y-m-d H:i', $until ) : '—',
-				'被鎖次數' => (int) $row['lockout_count'],
-				'被擋'   => (int) $row['blocked_count'],
-				'最後帳號' => self::clean( YSLoginGuardStore::sanitize_username( (string) $row['last_username'] ) ),
-				'來源'   => self::clean( (string) $row['last_source'] ),
-			];
+			$until    = (int) $row['locked_until'];
+			$key      = self::clean( (string) $row['ip_key'] );
+			$label    = self::clean( YSLoginGuardNotices::describe_key( (string) $row['ip_key'] ) );
+			$last_ip  = self::clean( YSClientIp::normalize( (string) $row['last_ip'] ) );
+			$username = self::clean( YSLoginGuardStore::sanitize_username( (string) $row['last_username'] ) );
+			$source   = self::clean( (string) $row['last_source'] );
+			// --format=json 用英文鍵、時間給 UNIX 秒（給腳本用，差異審查 CODE P3-5）；終端機的表格照樣中文。
+			$rows[] = $json
+				? [
+					'key'             => $key,
+					'label'           => $label,
+					'last_ip'         => $last_ip,
+					'window_failures' => (int) $row['fail_count'],
+					'total_failures'  => (int) $row['total_failures'],
+					'locked_until'    => $until > $now ? $until : 0,
+					'lockout_count'   => (int) $row['lockout_count'],
+					'blocked_count'   => (int) $row['blocked_count'],
+					'last_username'   => $username,
+					'last_source'     => $source,
+				]
+				: [
+					'鍵'         => $key,
+					'說明'       => $label,
+					'最後位址'   => $last_ip,
+					'這段時間失敗' => (int) $row['fail_count'],
+					'累計失敗'   => (int) $row['total_failures'],
+					'鎖到'       => $until > $now ? wp_date( 'Y-m-d H:i', $until ) : '—',
+					'被鎖次數'   => (int) $row['lockout_count'],
+					'被擋'       => (int) $row['blocked_count'],
+					'最後帳號'   => $username,
+					'來源'       => $source,
+				];
 		}
 		if ( [] === $rows ) {
 			\WP_CLI::line( '沒有符合的列。' );
 			return;
 		}
-		\WP_CLI\Utils\format_items( self::format( $assoc_args ), $rows, array_keys( $rows[0] ) );
+		\WP_CLI\Utils\format_items( $json ? 'json' : 'table', $rows, array_keys( $rows[0] ) );
 	}
 
 	/**
@@ -378,23 +403,38 @@ final class YSLoginGuardCommand {
 		}
 		$filter = self::filter( (string) ( $assoc_args['ip'] ?? '' ) );
 		$logs   = YSLoginGuardStore::recent_logs( $filter, time() - $seconds, 1, 500 );
+		$json   = 'json' === self::format( $assoc_args );
 		$rows   = [];
 		foreach ( $logs['rows'] as $log ) {
-			$rows[] = [
-				'時間' => wp_date( 'Y-m-d H:i:s', (int) $log['created_at'] ),
-				'事件' => self::clean( (string) $log['event'] ),
-				'IP'   => self::clean( YSClientIp::normalize( (string) $log['ip'] ) ),
-				'鍵'   => self::clean( (string) $log['ip_key'] ),
-				'帳號' => self::clean( YSLoginGuardStore::sanitize_username( (string) $log['username'] ) ),
-				'來源' => self::clean( (string) $log['source'] ),
-				'說明' => self::clean( (string) $log['code'] . ( '' !== (string) $log['origin'] ? ' ' . (string) $log['origin'] : '' ) ),
-			];
+			// --format=json 用英文鍵、時間給 UNIX 秒、code 與 origin 分開（差異審查 CODE P3-5）；終端機的表格照樣中文。
+			$code   = self::clean( (string) $log['code'] );
+			$origin = self::clean( (string) $log['origin'] );
+			$rows[] = $json
+				? [
+					'created_at' => (int) $log['created_at'],
+					'event'      => self::clean( (string) $log['event'] ),
+					'ip'         => self::clean( YSClientIp::normalize( (string) $log['ip'] ) ),
+					'key'        => self::clean( (string) $log['ip_key'] ),
+					'username'   => self::clean( YSLoginGuardStore::sanitize_username( (string) $log['username'] ) ),
+					'source'     => self::clean( (string) $log['source'] ),
+					'code'       => $code,
+					'origin'     => $origin,
+				]
+				: [
+					'時間' => wp_date( 'Y-m-d H:i:s', (int) $log['created_at'] ),
+					'事件' => self::clean( (string) $log['event'] ),
+					'IP'   => self::clean( YSClientIp::normalize( (string) $log['ip'] ) ),
+					'鍵'   => self::clean( (string) $log['ip_key'] ),
+					'帳號' => self::clean( YSLoginGuardStore::sanitize_username( (string) $log['username'] ) ),
+					'來源' => self::clean( (string) $log['source'] ),
+					'說明' => $code . ( '' !== $origin ? ' ' . $origin : '' ),
+				];
 		}
 		if ( [] === $rows ) {
 			\WP_CLI::line( '沒有紀錄。' );
 			return;
 		}
-		\WP_CLI\Utils\format_items( self::format( $assoc_args ), $rows, array_keys( $rows[0] ) );
+		\WP_CLI\Utils\format_items( $json ? 'json' : 'table', $rows, array_keys( $rows[0] ) );
 		if ( $logs['total'] > count( $rows ) ) {
 			\WP_CLI::line( sprintf( '（只列最新的 %d 筆，共 %d 筆）', count( $rows ), (int) $logs['total'] ) );
 		}
@@ -570,7 +610,8 @@ final class YSLoginGuardCommand {
 	private static function reason( string $reason ): string {
 		$labels = [
 			'table_not_ready' => '資料表不可用',
-			'query_failed'    => '最近一小時有查詢失敗（資料表可能被刪掉，或資料庫帳號沒有權限）',
+			'query_failed'    => '最近一小時有查詢失敗（原因見下面的提醒）',
+			'query_unstable'  => '最近一小時資料庫查詢一再暫時失敗（資料庫太忙或連線中斷）',
 			'shared_bucket'   => '最近的失敗大多分不出訪客 IP（IP 偵測可能沒設好）',
 		];
 		return $labels[ $reason ] ?? $reason;

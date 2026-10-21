@@ -45,6 +45,19 @@ final class YSLoginGuardStore {
 	/** 「鍵＋帳號」的 HMAC 用途前綴（審查 R3-P3-1）。 */
 	public const ACCT_PREFIX = 'ys_admin_menu_lg_acct|';
 
+	/**
+	 * 暫時性的資料庫錯誤：死結（1213）、鎖等待逾時（1205）、連線斷掉（2006、2013）、連線數滿（1040、1203）、伺服器關閉中（1053）、
+	 * 查詢被中斷或逾時（1317、1927、1969、3024、4031）。跟「表不見、沒有權限」分開說（實作審查差異 SEC P3-4、CODE N2）。
+	 */
+	public const TRANSIENT_ERRORS = [ 1040, 1053, 1203, 1205, 1213, 1317, 1927, 1969, 2006, 2013, 3024, 4031 ];
+
+	/** 沒有權限。 */
+	public const PRIVILEGE_ERRORS = [ 1044, 1045, 1142, 1143, 1227 ];
+
+	/** 暫時性的失敗記最近多久、最多幾分鐘（health 同一個原因每分鐘最多寫一次，一筆就是一分鐘）。 */
+	public const TRANSIENT_WINDOW = 3600;
+	public const TRANSIENT_KEEP   = 10;
+
 	/* ─────────────────────────── 查詢 ─────────────────────────── */
 
 	/**
@@ -953,25 +966,104 @@ final class YSLoginGuardStore {
 	}
 
 	/**
-	 * 查詢失敗：記 health（設定頁、全後台提醒、WP-CLI status 會把最近一小時的當成「沒有正常作用」）。剛才那一句失敗是因為
-	 * 表不存在（版本鍵還在，例如表被單獨刪掉、只還原了 wp_options）時，清掉版本鍵：之後當成「表還沒建好」，不再查這幾張表，
-	 * 管理員下一次打開後台時 admin_init 重新建表（實作審查 A 線 P2-3）。
+	 * 查詢失敗：依原因分開記 health（設定頁、全後台提醒、WP-CLI status 看這幾筆；實作審查 A 線 P2-3、差異審查 SEC P3-2～4、CODE N2、N3）。
+	 *
+	 * - 表不存在（1146）：先用 SHOW TABLES 再確認一次（還原或搬家換表的那一瞬間，表可能已經回來了）。
+	 *   - 計數表真的不在：記 query_failed（missing）、清掉版本鍵。之後當成「表還沒建好」，不再查這幾張表，
+	 *     管理員下一次打開後台時 admin_init 重新建表。
+	 *   - 計數表在、只少紀錄表或「鍵＋帳號」小表：版本鍵留著，計數與鎖定照常；記 table_missing，管理員打開後台時補表。
+	 *   - 再確認時表都在，或 SHOW TABLES 本身也失敗：當成暫時性的錯誤，什麼都不清。
+	 * - 死結、逾時、連線斷掉這類暫時性的錯誤：記 query_transient，帶最近一小時是哪幾分鐘
+	 *   （YSLoginGuard::status() 一小時內有兩分鐘以上才算沒有正常作用；只有一次時只是提醒）。
+	 * - 其他（沒有權限、不明的錯誤）：記 query_failed（privilege、other），最近一小時都算成沒有正常作用。
 	 */
 	private static function query_failed( string $where ): void {
-		$missing = self::table_missing();
-		YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'missing' => $missing ] );
-		if ( $missing ) {
-			delete_option( YSLoginGuardSettings::OPTION_DB_VERSION );
+		$code = self::error_code();
+		if ( 1146 === $code ) {
+			$counter = self::table_exists( YSLoginGuardSchema::counter_table() );
+			if ( false === $counter ) {
+				YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'code' => $code, 'kind' => 'missing' ] );
+				delete_option( YSLoginGuardSettings::OPTION_DB_VERSION );
+				return;
+			}
+			if ( true === $counter ) {
+				$recent = YSLoginGuardHealth::get( 'table_missing' );
+				if ( null !== $recent && time() - (int) $recent['last'] < YSLoginGuardHealth::THROTTLE ) {
+					return; // 剛記過：不用每一句失敗都再查一次
+				}
+				$gone = [];
+				foreach ( [ YSLoginGuardSchema::acct_table(), YSLoginGuardSchema::log_table() ] as $table ) {
+					if ( false === self::table_exists( $table ) ) {
+						$gone[] = $table;
+					}
+				}
+				if ( [] !== $gone ) {
+					YSLoginGuardHealth::record( 'table_missing', [ 'where' => $where, 'tables' => $gone ], true );
+					return;
+				}
+			}
+			self::record_transient( $where, $code );
+			return;
 		}
+		if ( in_array( $code, self::TRANSIENT_ERRORS, true ) ) {
+			self::record_transient( $where, $code );
+			return;
+		}
+		YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'code' => $code, 'kind' => in_array( $code, self::PRIVILEGE_ERRORS, true ) ? 'privilege' : 'other' ] );
 	}
 
-	/** 剛才那一句失敗是不是因為表不存在（MySQL、MariaDB 的 1146）。 */
-	private static function table_missing(): bool {
+	/** 暫時性的失敗：記這一分鐘（最近一小時的、最多 10 筆）。health 同一個原因每分鐘最多寫一次。 */
+	private static function record_transient( string $where, int $code ): void {
+		$now    = time();
+		$row    = YSLoginGuardHealth::get( 'query_transient' );
+		$recent = [];
+		foreach ( (array) ( $row['data']['recent'] ?? [] ) as $t ) {
+			if ( is_numeric( $t ) && $now - (int) $t < self::TRANSIENT_WINDOW ) {
+				$recent[] = (int) $t;
+			}
+		}
+		$recent[] = $now;
+		YSLoginGuardHealth::record( 'query_transient', [ 'where' => $where, 'code' => $code, 'recent' => array_slice( $recent, -self::TRANSIENT_KEEP ) ] );
+	}
+
+	/**
+	 * 剛才那一句失敗的錯誤代碼：mysqli 的 errno；不是 mysqli（替身、其他驅動）時從錯誤訊息認幾種常見的。認不出來是 0。
+	 * 要在任何其他查詢之前讀（之後的查詢會蓋掉 errno 與 last_error）。
+	 */
+	private static function error_code(): int {
 		global $wpdb;
 		$dbh = $wpdb->dbh ?? null;
-		if ( $dbh instanceof \mysqli && 1146 === (int) mysqli_errno( $dbh ) ) {
-			return true;
+		if ( $dbh instanceof \mysqli && (int) mysqli_errno( $dbh ) > 0 ) {
+			return (int) mysqli_errno( $dbh );
 		}
-		return 1 === preg_match( "/^Table '[^']+' doesn't exist/", (string) ( $wpdb->last_error ?? '' ) );
+		$error = (string) ( $wpdb->last_error ?? '' );
+		$known = [
+			"/^Table '[^']+' doesn't exist/" => 1146,
+			'/^Deadlock found/'              => 1213,
+			'/^Lock wait timeout exceeded/'  => 1205,
+			'/server has gone away/i'        => 2006,
+			'/^Lost connection to /'         => 2013,
+			'/^Too many connections/'        => 1040,
+			'/^\w+ command denied to user /' => 1142,
+			'/^Access denied for user /'     => 1045,
+		];
+		foreach ( $known as $pattern => $code ) {
+			if ( 1 === preg_match( $pattern, $error ) ) {
+				return $code;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * 這張表在不在（只在查詢因為「表不存在」失敗時再確認一次；大小寫不分，跟 ensure() 一樣）。SHOW TABLES 本身也失敗時回 null（不知道）。
+	 */
+	private static function table_exists( string $table ): ?bool {
+		global $wpdb;
+		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+		if ( '' !== (string) ( $wpdb->last_error ?? '' ) ) {
+			return null;
+		}
+		return is_string( $found ) && 0 === strcasecmp( $found, $table );
 	}
 }

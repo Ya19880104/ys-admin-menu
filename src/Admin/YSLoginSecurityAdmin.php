@@ -326,6 +326,8 @@ final class YSLoginSecurityAdmin {
 			'disabled_constant' => YSLoginGuardSettings::disabled_by_constant(),
 			'ready'             => YSLoginGuardSchema::is_ready(),
 			'status'            => $status,
+			'query_failed_text'   => YSLoginGuardNotices::query_failed_text(),
+			'query_unstable_text' => YSLoginGuardNotices::query_unstable_text(),
 			'numbers'           => $numbers,
 			'escalate'          => YSLoginGuardSettings::escalate(),
 			'ipv6_aggregate'    => YSLoginGuardSettings::ipv6_aggregate(),

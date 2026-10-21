@@ -3,7 +3,8 @@
  * 登入次數限制給管理員看的說明與提醒（v1.6.0，設計 §4.8～§4.10）。
  *
  * - describe_key()：鍵給人看的說明（共用桶寫明是哪一條路、overflow 分桶寫明網段）。
- * - collect()：全後台的健康提醒（只在總開關打開、常數沒停用時）：資料表不可用、IP 偵測沒設好（effective＝false）、
+ * - collect()：全後台的健康提醒（只在總開關打開、常數沒停用時）：資料表不可用、查詢失敗（沒有權限或不明的錯誤）、
+ *   暫時性的查詢失敗（一再發生才是 error）、只少紀錄表或小表、IP 偵測沒設好（effective＝false）、
  *   最近一小時有記到 overflow、全站 overflow、記列數的保留列不見了、外站 Worker、被拒的跨站來源一天超過 5 次（全站一天算一次）、
  *   通知信寄不出去、清理出錯。
  * - 只產生純文字；輸出的人（設定頁、admin_notices、信件、WP-CLI）負責跳脫或清理。給使用者看的文字只講狀況、限制與怎麼補強，
@@ -86,7 +87,18 @@ final class YSLoginGuardNotices {
 		$out    = [];
 		$status = YSLoginGuard::status();
 		if ( in_array( 'query_failed', $status['reasons'], true ) ) {
-			$out[] = self::notice( 'error', 'query_failed', '登入次數限制最近一小時有查詢失敗（資料表可能被刪掉，或資料庫帳號沒有權限），失敗的那幾次沒有作用（照常可以登入）。資料表不見時，管理員下一次打開後台會自動重建；一直出現時，請確認資料庫。' );
+			$out[] = self::notice( 'error', 'query_failed', self::query_failed_text() );
+		}
+		// 死結、逾時、連線斷掉這類暫時性的錯誤：一小時內一再發生才是 error；只有一分鐘時只提醒，不說成表被刪掉（差異審查 SEC P3-4、CODE N2）。
+		if ( in_array( 'query_unstable', $status['reasons'], true ) ) {
+			$out[] = self::notice( 'error', 'query_unstable', self::query_unstable_text() );
+		} elseif ( self::recent( 'query_transient', $now, self::RECENT_SECONDS ) ) {
+			$out[] = self::notice( 'warning', 'query_transient', self::query_transient_text() );
+		}
+		// 計數表在、只少紀錄表或「鍵＋帳號」小表：計數與鎖定照常，管理員打開後台時補表（差異審查 SEC P3-2、CODE N3）。
+		if ( self::recent( 'table_missing', $now, self::DAY_SECONDS ) ) {
+			$tables = array_values( array_filter( (array) ( YSLoginGuardHealth::get( 'table_missing' )['data']['tables'] ?? [] ), 'is_string' ) );
+			$out[]  = self::notice( 'warning', 'table_missing', '登入防護有資料表不見了：計數與鎖定照常，紀錄或「只原諒同一個帳號」暫時不作用。管理員下一次打開後台會自動補回來，在設定頁按儲存也會馬上補。不見的表：', $tables );
 		}
 		if ( in_array( 'shared_bucket', $status['reasons'], true ) ) {
 			$key   = (string) ( YSLoginGuardHealth::get( 'shared_bucket' )['data']['key'] ?? '' );
@@ -113,7 +125,7 @@ final class YSLoginGuardNotices {
 			$out[] = self::notice( 'warning', 'reserved', '登入防護的計數資料有一部分不見了，已經改用最保守的方式處理並重建。' );
 		}
 		if ( self::recent( 'cf_worker', $now, self::DAY_SECONDS ) ) {
-			$out[] = self::notice( 'warning', 'cf_worker', '最近有其他網站的 Cloudflare Worker 送來登入失敗，已經併成一桶計算。' );
+			$out[] = self::notice( 'warning', 'cf_worker', '最近有其他網站的 Cloudflare Worker 送來登入失敗，已經併成一桶計算（白名單對它們不適用）。如果是你們自己另一個網域的 Worker，請用 ys_admin_menu_ip_own_domains 這個 filter 把那個網域加進本站的網域。' );
 		}
 		$top = self::xsite_summary( $now );
 		if ( [] !== $top ) {
@@ -148,6 +160,37 @@ final class YSLoginGuardNotices {
 		}
 		YSLoginGuardHealth::record( 'xsite_summary', [ 'top' => $top ], true );
 		return $top;
+	}
+
+	/** 查詢失敗（不是暫時性的）：依原因說（設定頁卡片、全後台提醒共用；差異審查 SEC P3-4）。 */
+	public static function query_failed_text(): string {
+		$data = (array) ( YSLoginGuardHealth::get( 'query_failed' )['data'] ?? [] );
+		$code = self::code_text( (int) ( $data['code'] ?? 0 ) );
+		$tail = '失敗的那幾次沒有作用（照常可以登入）。';
+		switch ( (string) ( $data['kind'] ?? '' ) ) {
+			case 'privilege':
+				return '登入次數限制最近一小時有查詢失敗：資料庫帳號沒有權限' . $code . '。' . $tail . '請確認資料庫帳號對登入防護的三張資料表有讀寫的權限。';
+			case 'missing':
+				return '登入次數限制最近一小時有查詢失敗：計數的資料表不見了' . $code . '。' . $tail . '管理員下一次打開後台會自動重建。';
+			default:
+				return '登入次數限制最近一小時有查詢失敗' . $code . '。' . $tail . '一直出現時，請確認資料庫。';
+		}
+	}
+
+	/** 暫時性的查詢失敗一再發生（一小時內兩分鐘以上）。 */
+	public static function query_unstable_text(): string {
+		$code = (int) ( YSLoginGuardHealth::get( 'query_transient' )['data']['code'] ?? 0 );
+		return '最近一小時資料庫查詢一再暫時失敗（資料庫太忙或連線中斷' . ( $code > 0 ? '，最後一次的錯誤碼 ' . $code : '' ) . '），失敗的那幾次沒有作用（照常可以登入）。請檢查資料庫的負載與連線。';
+	}
+
+	/** 暫時性的查詢失敗只有一分鐘：只提醒。 */
+	public static function query_transient_text(): string {
+		$code = (int) ( YSLoginGuardHealth::get( 'query_transient' )['data']['code'] ?? 0 );
+		return '最近一小時有資料庫查詢暫時失敗（資料庫太忙或連線中斷' . ( $code > 0 ? '，錯誤碼 ' . $code : '' ) . '），失敗的那幾次照常可以登入。偶爾發生不用處理；一直出現時，請檢查資料庫的負載與連線。';
+	}
+
+	private static function code_text( int $code ): string {
+		return $code > 0 ? '（錯誤碼 ' . $code . '）' : '';
 	}
 
 	private static function recent( string $reason, int $now, int $seconds ): bool {
