@@ -972,7 +972,15 @@ final class YSLoginGuardStore {
 	 *   - 計數表真的不在：記 query_failed（missing）、清掉版本鍵。之後當成「表還沒建好」，不再查這幾張表，
 	 *     管理員下一次打開後台時 admin_init 重新建表。
 	 *   - 計數表在、只少紀錄表或「鍵＋帳號」小表：版本鍵留著，計數與鎖定照常；記 table_missing，管理員打開後台時補表。
-	 *   - 再確認時表都在，或 SHOW TABLES 本身也失敗：當成暫時性的錯誤，什麼都不清。
+	 *   - 再確認時表都在：當成暫時性的錯誤，什麼都不清。
+	 *   - SHOW TABLES 本身也失敗（不知道表在不在）：記 query_failed（unverified，帶 SHOW TABLES 那一句的錯誤碼），不當成暫時性的錯誤
+	 *     （最終核對 A 線 F4）。理由：
+	 *     - 1146 是資料庫明確說「表不存在」，不是太忙或連線中斷（暫時性的清單本來就沒有它）；再確認失敗只代表沒辦法確認，不會讓它變得比較不真。
+	 *       當成暫時性的，表真的不見、主機又擋掉 SHOW 這類語句時，會一直放行、不補表，提醒還說成資料庫太忙。
+	 *     - 失敗的那幾次確實沒有計數：跟其他非暫時性的錯誤一樣，最近一小時算「沒有正常作用」，提醒照實說。
+	 *     - 版本鍵留著：不確定時不把功能整個關掉（清了之後要等建表成功才恢復，擋掉 SHOW 的主機 ensure() 也驗證不了）。
+	 *     - 管理員打開後台（admin_init，建表失敗後照樣有 10 分鐘冷卻）或存設定時跑 ensure()（YSLoginGuard::repair_pending()）：
+	 *       dbDelta 只補不在的表與欄位，表都在時什麼都不改；成功時清掉這一筆。問題消失一小時後就不再觸發。攻擊者沒辦法製造 1146。
 	 * - 死結、逾時、連線斷掉這類暫時性的錯誤：記 query_transient，帶最近一小時是哪幾分鐘
 	 *   （YSLoginGuard::status() 一小時內有兩分鐘以上才算沒有正常作用；只有一次時只是提醒）。
 	 * - 其他（沒有權限、不明的錯誤）：記 query_failed（privilege、other），最近一小時都算成沒有正常作用。
@@ -981,26 +989,30 @@ final class YSLoginGuardStore {
 		$code = self::error_code();
 		if ( 1146 === $code ) {
 			$counter = self::table_exists( YSLoginGuardSchema::counter_table() );
+			if ( null === $counter ) {
+				$check = self::error_code(); // SHOW TABLES 那一句的錯誤碼（要在任何其他查詢之前讀）
+				YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'code' => $code, 'kind' => 'unverified', 'check' => $check ] );
+				return;
+			}
 			if ( false === $counter ) {
 				YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'code' => $code, 'kind' => 'missing' ] );
 				delete_option( YSLoginGuardSettings::OPTION_DB_VERSION );
 				return;
 			}
-			if ( true === $counter ) {
-				$recent = YSLoginGuardHealth::get( 'table_missing' );
-				if ( null !== $recent && time() - (int) $recent['last'] < YSLoginGuardHealth::THROTTLE ) {
-					return; // 剛記過：不用每一句失敗都再查一次
+			// 計數表在：版本鍵留著。再查紀錄表與小表，少了的記 table_missing；都在（換表的那一瞬間）算暫時性的。
+			$recent = YSLoginGuardHealth::get( 'table_missing' );
+			if ( null !== $recent && time() - (int) $recent['last'] < YSLoginGuardHealth::THROTTLE ) {
+				return; // 剛記過：不用每一句失敗都再查一次
+			}
+			$gone = [];
+			foreach ( [ YSLoginGuardSchema::acct_table(), YSLoginGuardSchema::log_table() ] as $table ) {
+				if ( false === self::table_exists( $table ) ) {
+					$gone[] = $table;
 				}
-				$gone = [];
-				foreach ( [ YSLoginGuardSchema::acct_table(), YSLoginGuardSchema::log_table() ] as $table ) {
-					if ( false === self::table_exists( $table ) ) {
-						$gone[] = $table;
-					}
-				}
-				if ( [] !== $gone ) {
-					YSLoginGuardHealth::record( 'table_missing', [ 'where' => $where, 'tables' => $gone ], true );
-					return;
-				}
+			}
+			if ( [] !== $gone ) {
+				YSLoginGuardHealth::record( 'table_missing', [ 'where' => $where, 'tables' => $gone ], true );
+				return;
 			}
 			self::record_transient( $where, $code );
 			return;

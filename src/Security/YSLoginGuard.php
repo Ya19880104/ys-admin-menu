@@ -147,15 +147,34 @@ final class YSLoginGuard {
 	}
 
 	/**
-	 * admin_init：總開關是開的（register 才會掛）、版本鍵不是目前版本（或計數表在、但紀錄表或小表不見了，table_missing），
-	 * 而且有 manage_options、不是 admin-ajax 才建表。admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
+	 * admin_init：總開關是開的（register 才會掛）、有 manage_options、不是 admin-ajax，而且版本鍵不是目前版本或要補表
+	 * （repair_pending()）時才建表。admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
+	 * 先看權限與 admin-ajax，再讀 health：health 不自動載入，讀它可能要查一句，前台訪客的 admin-ajax、admin-post 請求不能多這一句
+	 * （最終核對 A 線 F2）。
 	 */
 	public static function maybe_ensure(): void {
-		$repair = null !== YSLoginGuardHealth::get( 'table_missing' );
-		if ( ( YSLoginGuardSchema::is_ready() && ! $repair ) || ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {
+		if ( wp_doing_ajax() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( YSLoginGuardSchema::is_ready() && ! self::repair_pending() ) {
 			return;
 		}
 		YSLoginGuardSchema::ensure();
+	}
+
+	/**
+	 * 版本鍵是目前版本，但要檢查並補表：
+	 * - 計數表在、只少紀錄表或「鍵＋帳號」小表（table_missing）；
+	 * - 最近一小時有查詢回報表不存在、再確認時 SHOW TABLES 也失敗（query_failed 的 unverified，最終核對 A 線 F4）。
+	 *   不知道是哪一張，交給 ensure()：dbDelta 只補不在的表與欄位，表都在時什麼都不改。問題消失一小時後就不再觸發。
+	 * ensure() 成功時兩筆都會清掉。
+	 */
+	public static function repair_pending(): bool {
+		if ( null !== YSLoginGuardHealth::get( 'table_missing' ) ) {
+			return true;
+		}
+		$failed = YSLoginGuardHealth::get( 'query_failed' );
+		return null !== $failed && 'unverified' === ( $failed['data']['kind'] ?? '' ) && time() - (int) $failed['last'] < self::QUERY_FAILED_SECONDS;
 	}
 
 	public static function schedule_cleanup(): void {
@@ -190,8 +209,9 @@ final class YSLoginGuard {
 		if ( $is && ! $was ) {
 			update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, time(), true );
 		}
-		// 從關到開，或開著但表不可用、少了紀錄表或小表：建表。這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
-		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() || null !== YSLoginGuardHealth::get( 'table_missing' ) ) ) {
+		// 從關到開，或開著但表不可用、要補表（少了紀錄表或小表，或表不存在而沒辦法再確認；repair_pending()）：建表。
+		// 這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
+		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() || self::repair_pending() ) ) {
 			YSLoginGuardSchema::ensure( true );
 		}
 	}
