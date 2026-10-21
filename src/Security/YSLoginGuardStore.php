@@ -892,7 +892,7 @@ final class YSLoginGuardStore {
 			// 遇到不合法的位元組會報 notice、回 false，所以改用 mb_scrub()（換成 ?）。
 			$username = function_exists( 'wp_scrub_utf8' ) ? (string) wp_scrub_utf8( $username ) : ( function_exists( 'mb_scrub' ) ? (string) mb_scrub( $username, 'UTF-8' ) : '' );
 		}
-		$username = (string) preg_replace( '/[\x{0000}-\x{001F}\x{007F}-\x{009F}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $username );
+		$username = (string) preg_replace( '/[\x{0000}-\x{001F}\x{007F}-\x{009F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $username );
 		return function_exists( 'mb_substr' ) ? mb_substr( $username, 0, 60 ) : substr( $username, 0, 60 );
 	}
 

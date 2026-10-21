@@ -166,6 +166,7 @@ $lg_ip     = (string) ( $lg['my_ip'] ?? '' );
 				<li>本外掛的 Turnstile 只保護 wp-login.php，不保護 XML-RPC、REST 與前台表單。不需要 XML-RPC 時，建議打開上面的「關閉 XML-RPC 登入」。</li>
 				<li>IPv6 位址很容易大量取得。攻擊分散在大量 IPv6 網段時，登入次數限制只能把每個網段的猜測速度壓低，沒辦法單獨擋住。請搭配 Cloudflare Turnstile 或 WAF。</li>
 				<li>網站在代理或 Cloudflare 後面、但下面的「進階：訪客 IP」沒設好時，所有人會併成同一桶計算。</li>
+				<li>用標頭判斷訪客 IP 時（Cloudflare、X-Forwarded-For、X-Real-IP、自訂標頭）：有些伺服器會把名稱帶底線的標頭跟帶連字號的當成同一個。請確認伺服器會丟掉名稱帶底線的標頭（nginx 預設就會）。</li>
 			</ul>
 		</details>
 	</div>

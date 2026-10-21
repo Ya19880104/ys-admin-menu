@@ -51,7 +51,8 @@ final class YSClientIp {
 	private const REJECTED_HEADERS = [ 'host', 'cookie', 'authorization', 'proxy-authorization', 'forwarded' ];
 
 	/**
-	 * 內部與保留位址（自己的範圍表，不靠 PHP 各版不同的旗標）。64:ff9b::/96（NAT64）不算。
+	 * 內部與保留位址（自己的範圍表，不靠 PHP 各版不同的旗標）。64:ff9b::/96（NAT64）不在表裡：normalize() 先轉回內嵌的 IPv4，
+	 * 照那個 IPv4 分類。
 	 */
 	private const INTERNAL_RANGES = [
 		'10.0.0.0/8',
@@ -264,6 +265,12 @@ final class YSClientIp {
 	 * 一個位址的正規化：去掉前後空白與 tab、去掉 port 與中括號、驗證、轉成標準寫法（IPv6 小寫、零壓縮），
 	 * IPv4 對應的 IPv6（二進位前綴 ::ffff:0:0/96，十六進位寫法也算）轉回 IPv4。不合法回空字串。
 	 *
+	 * NAT64 的標準前綴 64:ff9b::/96（RFC 6052）也轉回內嵌的 IPv4（安全審查 B 線 P3-2）：這個前綴保留給 IPv4／IPv6 轉換，
+	 * 裡面每個位址都代表一個 IPv4 訪客。只有 IPv6 的主機前面用 NAT64 轉進 IPv4 訪客時，不轉的話所有 IPv4 訪客會落在
+	 * 同一個 /64 鍵（1 倍門檻、會逐次加長），一個人錯 10 次就鎖住所有 IPv4 訪客。轉回之後鍵、白名單、信任的代理、
+	 * overflow 分桶（/24）、內部位址的分類都照那個 IPv4。營運商自己網段的 NAT64 前綴分辨不出來，寫在已知限制
+	 * （用 ys_admin_menu_client_ip filter 換回）。
+	 *
 	 * @param mixed $value
 	 */
 	public static function normalize( $value ): string {
@@ -286,8 +293,8 @@ final class YSClientIp {
 		if ( false === $bin ) {
 			return '';
 		}
-		if ( 16 === strlen( $bin ) && 0 === strncmp( $bin, str_repeat( "\0", 10 ) . "\xff\xff", 12 ) ) {
-			$bin = substr( $bin, 12 );
+		if ( 16 === strlen( $bin ) && ( 0 === strncmp( $bin, str_repeat( "\0", 10 ) . "\xff\xff", 12 ) || 0 === strncmp( $bin, "\x00\x64\xff\x9b" . str_repeat( "\0", 8 ), 12 ) ) ) {
+			$bin = substr( $bin, 12 ); // ::ffff:0:0/96（IPv4 對應）與 64:ff9b::/96（NAT64）：內嵌的 IPv4
 		}
 		$out = inet_ntop( $bin );
 		return is_string( $out ) ? $out : '';

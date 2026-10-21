@@ -3,7 +3,8 @@
  * 登入次數限制（v1.6.0，設計 §4）：判斷流程與 hook。
  *
  * - 外掛主檔載入時呼叫 bootstrap()：重設請求內的狀態（閘門、只算一次的旗標、IP 結果、這次記在哪個鍵、REST 標記），
- *   總開關打開、停用常數沒定義時才掛 hook（不等 plugins_loaded，§4.3）。
+ *   總開關打開、停用常數沒定義時才掛登入的 hook（不等 plugins_loaded，§4.3）。每天清理的 callback 與 login_init 的重設
+ *   不看總開關（關掉之後紀錄照樣依保留天數清掉）。
  * - authenticate 1：跨站送來的瀏覽器請求（§4.13.1）與被鎖的鍵（§4.4），用跟 Turnstile 共用的閘門擋下：
  *   這一次請求暫停核心的帳密檢查（含應用程式密碼），最後一關一律回同一個錯誤，猜對猜錯、帳號存不存在都一樣。
  * - wp_login_failed 10：計數、到門檻建立鎖定；帳號存在時另記「這個鍵＋這個帳號」（§4.4.2）。
@@ -69,10 +70,25 @@ final class YSLoginGuard {
 		YSLoginGuardHealth::reset();
 		YSLoginGuardCapacity::reset();
 		YSLoginGuardNotifier::reset();
+		// 不看總開關的兩個（安全審查 B 線 P2-2、P3-4）：
+		// - 每天清理的 callback：總開關關掉之後，紀錄照樣依保留天數清掉（cron_cleanup 自己會看資料表在不在；
+		//   排程只在打開過時才建立，從沒打開過的站不會多出排程或查詢）。
+		// - login_init 再重設一次這個請求記住的 IP 與判斷（設計 §3.3 第 4 步）。
+		add_action( self::CRON_HOOK, [ self::class, 'cron_cleanup' ] );
+		add_action( 'login_init', [ self::class, 'reset_on_login_init' ], 0 );
 		if ( ! YSLoginGuardSettings::active() ) {
 			return;
 		}
 		self::register();
+	}
+
+	/**
+	 * login_init：IP 結果與這次的判斷一起重設（只重設其中一個的話，判斷會沿用舊的 IP）。wp-login.php 上沒有 REST 的標記，
+	 * 這時還沒有計數，可以安全地重設。
+	 */
+	public static function reset_on_login_init(): void {
+		YSClientIp::reset();
+		self::reset();
 	}
 
 	/** 清掉請求內的狀態。 */
@@ -92,16 +108,21 @@ final class YSLoginGuard {
 		add_filter( 'rest_authentication_errors', [ self::class, 'rest_errors' ], 80 );
 		add_filter( 'shake_error_codes', [ self::class, 'shake_codes' ] );
 		add_filter( 'login_message', [ self::class, 'login_message' ] );
-		add_action( self::CRON_HOOK, [ self::class, 'cron_cleanup' ] );
 		add_action( 'init', [ self::class, 'schedule_cleanup' ] );
 		add_action( 'admin_init', [ self::class, 'maybe_ensure' ] );
 		YSLoginGuardNotifier::register();
 	}
 
-	/** 外掛啟用時：總開關是開的才建表（§4.7.4）。 */
+	/**
+	 * 外掛啟用時：總開關是開的才建表（§4.7.4）。資料表在（打開過）就把每天的清理排回去：停用時排程被取消，
+	 * 再啟用時總開關若關著，紀錄照樣要依保留天數清掉（安全審查 B 線 P2-2）。沒有表的站不排。
+	 */
 	public static function activate(): void {
 		if ( YSLoginGuardSettings::enabled() ) {
 			YSLoginGuardSchema::ensure();
+		}
+		if ( YSLoginGuardSchema::is_ready() ) {
+			self::schedule_cleanup();
 		}
 	}
 
@@ -195,11 +216,13 @@ final class YSLoginGuard {
 		if ( '' === $ip ) {
 			return self::shared( 'via:unknown', self::SHARED_MULT, '', false );
 		}
-		if ( YSClientIp::in_any( $ip, YSLoginGuardSettings::allowlist() ) ) {
-			return null;
-		}
+		// 外站的 Cloudflare Worker 在白名單之前判斷（§4.4.1 那張表的「最先判斷」；安全審查 B 線 P2-1）：它帶來的位址不可信，
+		// 不能拿去比白名單。站方自己另一個 zone 的 Worker 用 ys_admin_menu_ip_own_domains 加進來。
 		if ( YSClientIp::is_foreign_worker() ) {
 			return self::shared( 'via:cf-worker', 1, $ip, (bool) $r['from_header'] );
+		}
+		if ( YSClientIp::in_any( $ip, YSLoginGuardSettings::allowlist() ) ) {
+			return null;
 		}
 		if ( empty( $r['from_header'] ) ) {
 			if ( YSClientIp::is_trusted_proxy( $ip ) ) {

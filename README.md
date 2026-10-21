@@ -83,7 +83,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - WP-CLI：`wp ys-admin-menu login-guard unlock 你的IP`、`unlock --all`、`disable`。
   - 在 wp-config.php 加 `define( 'YS_ADMIN_MENU_LOGIN_GUARD_DISABLED', true );`，整個登入次數限制不作用（「登入入口」的兩個開關不受影響）。
   - 白名單（一行一個 IP 或 CIDR，最多 200 行）：白名單裡的位址不計數、不鎖，從那裡來的登入沒有這一層保護。
-- **資料**：三張自己的資料表——計數（`{prefix}ys_admin_menu_login_guard`）、「鍵＋帳號」（`{prefix}ys_admin_menu_login_guard_acct`，帳號只存使用者 ID 的雜湊）、紀錄（`{prefix}ys_admin_menu_login_log`）。紀錄裡有 IP 與嘗試的帳號名稱，只有管理員看得到，保留天數可設（預設 30 天，紀錄最多 50,000 筆）。建表只在管理員打開後台、外掛啟用、WP-CLI 時做，建不起來時照常可以登入。
+- **資料**：三張自己的資料表——計數（`{prefix}ys_admin_menu_login_guard`）、「鍵＋帳號」（`{prefix}ys_admin_menu_login_guard_acct`，帳號只存使用者 ID 的雜湊）、紀錄（`{prefix}ys_admin_menu_login_log`）。紀錄裡有 IP 與嘗試的帳號名稱，只有管理員看得到，保留天數可設（預設 30 天，紀錄最多 50,000 筆）；總開關關掉之後，留下的紀錄照樣每天依保留天數清掉。建表只在管理員打開後台、外掛啟用、WP-CLI 時做，建不起來時照常可以登入。
 - 2FA 外掛「需要第二步驗證」的錯誤會被算成一次失敗時，可以用 `ys_admin_menu_login_guard_should_count` filter 排除。
 
 ### 訪客 IP 偵測（v1.6.0 起）
@@ -92,6 +92,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - 六種方式：自動（預設）、只用 REMOTE_ADDR、Cloudflare、X-Forwarded-For、X-Real-IP、自訂標頭。
   - **自動就是 REMOTE_ADDR**，不猜標頭；打開「信任 Cloudflare」時，從 Cloudflare 範圍來的請求才改用 CF-Connecting-IP。
   - 標頭模式只在 REMOTE_ADDR 是你加入的「信任的代理」時才看標頭；X-Forwarded-For 從右往左讀、跳過信任的代理，遇到不合法的段落就停。私有位址不會自動被信任。
+  - IPv4 對應的 IPv6 位址（`::ffff:` 開頭）與 NAT64 標準前綴 `64:ff9b::/96` 裡的位址，一律換回內嵌的 IPv4 判斷與計數：只有 IPv6 的主機前面用 NAT64 轉進 IPv4 訪客時，每個 IPv4 訪客照樣分開計算。
 - **「信任 Cloudflare」預設關**。只有原站只收自己這個 Cloudflare zone 的流量時才安全（例如 Authenticated Origin Pulls 或 Cloudflare Tunnel）；只把防火牆開給 Cloudflare 的 IP 不夠，其他 Cloudflare 客戶也從那些 IP 連進來。其他網站的 Cloudflare Worker 送來的請求不採用 CF-Connecting-IP。
 - 診斷表列出這一次請求的各個標頭、每種選項會得到什麼 IP，並可以一鍵「信任這個代理」。改設定之前也可以用 `wp ys-admin-menu ip check --remote-addr=10.0.0.2 --header="X-Forwarded-For: 9.9.9.9, 10.0.0.5"` 試算。
 - 內建的 Cloudflare 範圍隨外掛版本更新，不會自動下載；`wp ys-admin-menu ip cloudflare-check` 手動比對官方清單、只印差異，需要時用 `ys_admin_menu_ip_cloudflare_ranges` filter 調整。
@@ -126,6 +127,8 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - 不經過 `wp_authenticate()` 的密碼驗證不在範圍內，例如外掛自己直接比對密碼的登入（YS CART headless 的 token 端點）；社群登入、單一登入、忘記密碼、註冊不計數。
 - 站在代理或 Cloudflare 後面、「進階：訪客 IP」沒設好時，所有人併成同一桶：有人在那條路上猜到門檻時，從那條路登入的人會一起暫停（已經登入的不受影響）。
 - 打開「信任 Cloudflare」、而原站沒有限制只收自己這個 zone 的流量時，訪客的 IP 可以被偽造。
+- 用標頭判斷訪客 IP 時（Cloudflare、X-Forwarded-For、X-Real-IP、自訂標頭）：有些伺服器會把名稱帶底線的標頭跟帶連字號的當成同一個。請確認伺服器會丟掉名稱帶底線的標頭（nginx 預設就會）。
+- NAT64 用的是自己網段的前綴（不是 `64:ff9b::/96`）時，IPv4 訪客會落在同一個 IPv6 /64 一起計算；請用 `ys_admin_menu_client_ip` filter 換回內嵌的 IPv4。
 - 計數空間滿了之後，同一個網段裡在表裡沒有自己紀錄的人，會跟同網段的人一起算。
 - 拒絕跨站登入時，同一個註冊網域底下的其他子網域照常放行；既不送 Sec-Fetch-Site 也不送 Origin 的很舊瀏覽器照常處理。
 - 多站網路是各站分開計算。

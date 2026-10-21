@@ -545,7 +545,7 @@ final class YSLoginGuardCommand {
 		if ( 1 !== preg_match( '//u', $value ) ) {
 			$value = function_exists( 'wp_scrub_utf8' ) ? (string) wp_scrub_utf8( $value ) : ( function_exists( 'mb_scrub' ) ? (string) mb_scrub( $value, 'UTF-8' ) : '' );
 		}
-		$value = (string) preg_replace( '/[\x{0000}-\x{001F}\x{007F}-\x{009F}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $value );
+		$value = (string) preg_replace( '/[\x{0000}-\x{001F}\x{007F}-\x{009F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $value );
 		return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, $max ) : substr( $value, 0, $max );
 	}
 
