@@ -168,6 +168,16 @@ final class YSLoginGuardSettings {
 		return $names;
 	}
 
+	/**
+	 * 兩個每個請求都要讀的開關（總開關、停用應用程式密碼），還沒有時寫預設值 no（自動載入；已經有的不動）。只存了其中一個
+	 * （例如只用 WP-CLI enable 打開、或只設了 app-passwords）時，前台讀另一個才不用每個請求查一次資料庫。設定頁存「登入入口」、
+	 * WP-CLI 的 enable、disable、app-passwords 寫完之後呼叫。
+	 */
+	public static function seed_switches(): void {
+		add_option( self::OPTION_ENABLED, 'no', '', true );
+		add_option( 'ys_admin_menu_disable_app_passwords', 'no', '', true );
+	}
+
 	/** admin_init（不看總開關，YSLoginGuard::bootstrap 掛）：有 manage_options、不是 admin-ajax 時 heal_autoload()。 */
 	public static function heal_on_admin(): void {
 		if ( ! current_user_can( 'manage_options' ) || wp_doing_ajax() ) {

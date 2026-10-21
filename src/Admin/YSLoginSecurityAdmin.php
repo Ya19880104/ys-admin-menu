@@ -83,6 +83,7 @@ final class YSLoginSecurityAdmin {
 		}
 		update_option( YSLoginEntrances::OPTION_DISABLE_XMLRPC, ! empty( $post['disable_xmlrpc_login'] ) ? 'yes' : 'no', false );
 		update_option( YSLoginEntrances::OPTION_DISABLE_APP_PASSWORDS, ! empty( $post['disable_app_passwords'] ) ? 'yes' : 'no', true );
+		YSLoginGuardSettings::seed_switches(); // 總開關還沒有時（例如送出的是沒有登入次數限制卡片的舊頁面）寫預設值
 	}
 
 	/**

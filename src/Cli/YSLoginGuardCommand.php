@@ -309,6 +309,7 @@ final class YSLoginGuardCommand {
 	public function enable( $args, $assoc_args ): void {
 		$old = [ 'enabled' => YSLoginGuardSettings::enabled(), 'cross_site_reject' => YSLoginGuardSettings::cross_site_reject() ];
 		update_option( YSLoginGuardSettings::OPTION_ENABLED, 'yes', true );
+		YSLoginGuardSettings::seed_switches(); // 另一個開關還沒有時寫預設值：前台讀它才不用查資料庫
 		YSLoginGuard::settings_changed( $old, [ 'enabled' => true, 'cross_site_reject' => YSLoginGuardSettings::cross_site_reject() ] );
 		// settings_changed() 在「關到開」或「開著但表不可用」時已經建表（手動，不管冷卻）。
 		if ( ! YSLoginGuardSchema::is_ready() ) {
@@ -332,6 +333,7 @@ final class YSLoginGuardCommand {
 	 */
 	public function disable( $args, $assoc_args ): void {
 		update_option( YSLoginGuardSettings::OPTION_ENABLED, 'no', true );
+		YSLoginGuardSettings::seed_switches();
 		\WP_CLI::success( '登入次數限制已經關閉（資料表與紀錄留著；要刪請用 purge --drop-tables）。' );
 	}
 
@@ -529,6 +531,7 @@ final class YSLoginGuardCommand {
 	public function app_passwords( $args, $assoc_args ): void {
 		$on = self::on_off( (string) ( $args[0] ?? '' ) );
 		update_option( YSLoginEntrances::OPTION_DISABLE_APP_PASSWORDS, $on ? 'yes' : 'no', true );
+		YSLoginGuardSettings::seed_switches(); // 總開關還沒有時寫預設值：前台讀它才不用查資料庫
 		\WP_CLI::success( $on ? '已經停用應用程式密碼（已建立的保留，關掉就恢復）。' : '應用程式密碼恢復。' );
 	}
 
