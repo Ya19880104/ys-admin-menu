@@ -135,8 +135,8 @@ final class YSLoginGuardSettings {
 
 	/**
 	 * 本外掛的自動載入鍵一個都不在自動載入裡，但其中有存在的（被 option 最佳化工具、wp option add --autoload=no 這類方式改成不自動載入）：
-	 * 改回自動載入，前台的捷徑才不會把開關讀成「關」（差異審查 SEC P3-1、CODE N1）。有任何一個在自動載入裡時什麼都不做（存過設定的站不多查）；
-	 * 沒存過的站多一句 SELECT。管理員打開後台（heal_on_admin）與 WP-CLI status 時呼叫。
+	 * 改回自動載入，前台的捷徑才不會把開關讀成「關」（差異審查 SEC P3-1、CODE N1）；有改回來時，另一個還沒有的開關寫預設值（seed_switches）。
+	 * 有任何一個在自動載入裡時什麼都不做（存過設定的站不多查）；沒存過的站多一句 SELECT。管理員打開後台（heal_on_admin）與 WP-CLI status 時呼叫。
 	 *
 	 * @return string[] 改回自動載入的鍵。
 	 */
@@ -149,7 +149,11 @@ final class YSLoginGuardSettings {
 			return [];
 		}
 		if ( function_exists( 'wp_set_option_autoload_values' ) ) {
-			return array_keys( array_filter( (array) wp_set_option_autoload_values( array_fill_keys( self::AUTOLOADED_KEYS, true ) ) ) );
+			$healed = array_keys( array_filter( (array) wp_set_option_autoload_values( array_fill_keys( self::AUTOLOADED_KEYS, true ) ) ) );
+			if ( [] !== $healed ) {
+				self::seed_switches(); // 改回來的只有其中一個開關時，另一個寫預設值，前台讀它才不用查資料庫
+			}
+			return $healed;
 		}
 		// WordPress 6.4 以前沒有 wp_set_option_autoload_values()：自己找出存在的鍵、改成自動載入，再清掉快取。
 		global $wpdb;
@@ -165,6 +169,7 @@ final class YSLoginGuardSettings {
 		foreach ( $names as $name ) {
 			wp_cache_delete( $name, 'options' );
 		}
+		self::seed_switches();
 		return $names;
 	}
 
