@@ -42,7 +42,7 @@
   - wp ys-admin-menu login-guard：status（開關、資料表、IP 偵測、有沒有正常作用；加 --repair 重新建表）、list（--locked、--ip）、unlock（一個 IP 位址或鍵，或 --all；IPv6 位址解它的 /64，打開 /48 彙總時一併解 /48）、allowlist list、add、remove、enable、disable、cleanup、log（--since、--ip）、purge --drop-tables --yes、xmlrpc on 或 off、app-passwords on 或 off。
   - wp ys-admin-menu ip check（用指定的 REMOTE_ADDR 與標頭試算每種選項會得到什麼，不改設定）、ip cloudflare-check（手動下載 Cloudflare 公開的 IP 清單跟內建的比對，只印差異，不改設定）。
   - 從資料庫來的帳號名稱、來源在印到終端機之前會先清掉控制字元。
-  - list 與 log 加 --format=json 時用英文鍵（例如 key、last_ip、locked_until、created_at），時間是 UNIX 秒，給腳本用；表格是中文，給人看。
+  - list 與 log 加 --format=json 時用英文鍵（例如 key、last_ip、locked_until、created_at），時間是 UNIX 秒，給腳本用：STDOUT 只有 JSON，沒有資料時印 []，log 超過 500 筆時「只列最新的 500 筆」的說明寫到 STDERR。表格是中文，給人看。
 
 ### 變更
 - Turnstile 擋下登入的方式改成跟登入次數限制共用同一個閘門；擋下時的行為跟 1.5.2 一樣。

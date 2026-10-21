@@ -14,7 +14,8 @@
  *   wp ys-admin-menu login-guard app-passwords <on|off>
  *
  * WP-CLI 本身不會被判斷或計數（沒有遠端的用戶端，§4.4.1）。輸出裡從資料庫來的字串（帳號名稱、來源）都先清掉控制字元，
- * 不會變成終端機的控制序列（審查 P2-9）。list 與 log 的 --format=json 用英文鍵、時間是 UNIX 秒（給腳本用）；表格是中文（給人看）。
+ * 不會變成終端機的控制序列（審查 P2-9）。list 與 log 的 --format=json 用英文鍵、時間是 UNIX 秒（給腳本用），STDOUT 只有 JSON：
+ * 沒有資料時是 []，紀錄超過 500 筆的說明寫到 STDERR（最終核對 A 線 F3）；表格是中文（給人看）。
  *
  * @package YangSheep\AdminMenu\Cli
  * @since   1.6.0
@@ -38,6 +39,12 @@ defined( 'ABSPATH' ) || exit;
  * 登入次數限制：狀態、解鎖、白名單、開關、清理、紀錄、刪表。
  */
 final class YSLoginGuardCommand {
+
+	/**
+	 * list、log 的 --format=json 欄位（英文鍵，跟每一列的鍵相同）。沒有資料時照樣用這組欄位印 []（最終核對 A 線 F3）。
+	 */
+	public const LIST_JSON_FIELDS = [ 'key', 'label', 'last_ip', 'window_failures', 'total_failures', 'locked_until', 'lockout_count', 'blocked_count', 'last_username', 'last_source' ];
+	public const LOG_JSON_FIELDS  = [ 'created_at', 'event', 'ip', 'key', 'username', 'source', 'code', 'origin' ];
 
 	/** purge 會刪掉的內部鍵（跟 uninstall.php 同一份）。 */
 	public const INTERNAL_OPTIONS = [
@@ -168,6 +175,10 @@ final class YSLoginGuardCommand {
 				];
 		}
 		if ( [] === $rows ) {
+			if ( $json ) {
+				\WP_CLI\Utils\format_items( 'json', [], self::LIST_JSON_FIELDS ); // STDOUT 只放 JSON：印 []，腳本照樣解析得了
+				return;
+			}
 			\WP_CLI::line( '沒有符合的列。' );
 			return;
 		}
@@ -433,12 +444,22 @@ final class YSLoginGuardCommand {
 				];
 		}
 		if ( [] === $rows ) {
+			if ( $json ) {
+				\WP_CLI\Utils\format_items( 'json', [], self::LOG_JSON_FIELDS ); // STDOUT 只放 JSON：印 []
+				return;
+			}
 			\WP_CLI::line( '沒有紀錄。' );
 			return;
 		}
 		\WP_CLI\Utils\format_items( $json ? 'json' : 'table', $rows, array_keys( $rows[0] ) );
 		if ( $logs['total'] > count( $rows ) ) {
-			\WP_CLI::line( sprintf( '（只列最新的 %d 筆，共 %d 筆）', count( $rows ), (int) $logs['total'] ) );
+			$more = sprintf( '（只列最新的 %d 筆，共 %d 筆）', count( $rows ), (int) $logs['total'] );
+			// JSON 模式的 STDOUT 只放 JSON（被攻擊時最常超過 500 筆，腳本偏偏在那時候要解析；最終核對 A 線 F3）：說明改用 warning，寫到 STDERR。
+			if ( $json ) {
+				\WP_CLI::warning( $more );
+			} else {
+				\WP_CLI::line( $more );
+			}
 		}
 	}
 

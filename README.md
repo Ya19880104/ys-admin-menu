@@ -121,7 +121,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 | `wp ys-admin-menu login-guard purge --drop-tables [--yes]` | 刪掉三張資料表與內部用的鍵（降版前用）；沒帶 `--yes` 只印會刪什麼 |
 | `wp ys-admin-menu ip check`、`wp ys-admin-menu ip cloudflare-check` | 試算 IP 偵測、比對 Cloudflare 清單（都不改設定） |
 
-輸出裡從資料庫來的帳號名稱、來源會先清掉控制字元。`list` 與 `log` 加 `--format=json` 時用英文鍵（例如 `key`、`last_ip`、`locked_until`、`created_at`），時間是 UNIX 秒，給腳本用；表格是中文，給人看。
+輸出裡從資料庫來的帳號名稱、來源會先清掉控制字元。`list` 與 `log` 加 `--format=json` 時用英文鍵（例如 `key`、`last_ip`、`locked_until`、`created_at`），時間是 UNIX 秒，給腳本用：STDOUT 只有 JSON，沒有資料時印 `[]`，`log` 超過 500 筆時「只列最新的 500 筆」的說明寫到 STDERR。表格是中文，給人看。
 
 ### 已知限制（v1.6.0 的登入防護）
 
