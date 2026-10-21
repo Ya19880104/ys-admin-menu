@@ -216,8 +216,9 @@ final class YSLoginGuardNotifier {
 		return $out;
 	}
 
+	/** 純文字信用的網站名稱：blogname 存的是 esc_html 過的值，跟核心寄信一樣先解回來（「A &amp; B」寄成「A & B」；實作審查 A 線 P3-13）。 */
 	private static function site_name(): string {
-		$name = wp_strip_all_tags( (string) get_option( 'blogname', '' ) );
+		$name = wp_strip_all_tags( wp_specialchars_decode( (string) get_option( 'blogname', '' ), ENT_QUOTES ) );
 		return '' !== $name ? $name : (string) wp_parse_url( home_url(), PHP_URL_HOST );
 	}
 

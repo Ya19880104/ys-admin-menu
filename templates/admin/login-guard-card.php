@@ -47,7 +47,9 @@ $lg_ip     = (string) ( $lg['my_ip'] ?? '' );
 		<?php if ( ! empty( $lg['enabled'] ) && ! empty( $lg['disabled_constant'] ) ) : ?>
 			<div class="ysca-wl-notice ysca-wl-notice--error"><p>wp-config.php 定義了 <code>YS_ADMIN_MENU_LOGIN_GUARD_DISABLED</code>，登入次數限制目前不作用。</p></div>
 		<?php elseif ( ! empty( $lg['enabled'] ) && empty( $lg['ready'] ) ) : ?>
-			<div class="ysca-wl-notice ysca-wl-notice--error"><p>資料表還沒建好或版本不對，目前沒有作用（照常可以登入）。儲存或重新整理這一頁會重試；一直出現時，請確認資料庫帳號有建表的權限。</p></div>
+			<div class="ysca-wl-notice ysca-wl-notice--error"><p>資料表還沒建好或版本不對，目前沒有作用（照常可以登入）。按儲存會馬上重試（重新整理也會重試，但建表失敗之後 10 分鐘內不會再試）；一直出現時，請確認資料庫帳號有建表的權限。</p></div>
+		<?php elseif ( ! empty( $lg['enabled'] ) && in_array( 'query_failed', (array) ( $lg_status['reasons'] ?? [] ), true ) ) : ?>
+			<div class="ysca-wl-notice ysca-wl-notice--error"><p>最近一小時有查詢失敗（資料表可能被刪掉，或資料庫帳號沒有權限），失敗的那幾次沒有作用（照常可以登入）。資料表不見時，重新整理這一頁就會重建；一直出現時，請確認資料庫。</p></div>
 		<?php elseif ( ! empty( $lg['enabled'] ) && in_array( 'shared_bucket', (array) ( $lg_status['reasons'] ?? [] ), true ) ) : ?>
 			<div class="ysca-wl-notice ysca-wl-notice--error"><p>最近的登入失敗大多分不出訪客的 IP，目前併在一起算：達到門檻時，從同一條路登入的人會一起暫停。請到下面的 <a href="#ys-am-ip-card">進階：訪客 IP</a> 確認偵測方式。</p></div>
 		<?php endif; ?>

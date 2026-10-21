@@ -66,8 +66,8 @@ final class YSLoginGuardCommand {
 	 */
 	public function status( $args, $assoc_args ): void {
 		if ( isset( $assoc_args['repair'] ) ) {
-			$ok = YSLoginGuardSchema::ensure();
-			\WP_CLI::line( $ok ? '資料表已經是目前的版本。' : '建表失敗（10 分鐘內不會再試；原因記在健康狀態裡）。' );
+			$ok = YSLoginGuardSchema::ensure( true ); // 手動修復：不管建表失敗後 10 分鐘的冷卻
+			\WP_CLI::line( $ok ? '資料表已經是目前的版本。' : '建表失敗（原因記在健康狀態裡；請確認資料庫帳號有建表的權限）。' );
 		}
 		$now    = time();
 		$ready  = YSLoginGuardSchema::is_ready();
@@ -83,7 +83,7 @@ final class YSLoginGuardCommand {
 			[ '項目' => '有正常作用', '值' => ! empty( $status['effective'] ) ? '是' : '否（' . implode( '、', array_map( [ self::class, 'reason' ], (array) $status['reasons'] ) ) . '）' ],
 			[ '項目' => '鎖定中', '值' => (string) $locked ],
 			[ '項目' => '最近一輪的失敗', '值' => (string) (int) ( $stats['failures'] ?? 0 ) . '（記到共用桶 ' . (int) ( $stats['shared'] ?? 0 ) . '、外站 Worker ' . (int) ( $stats['cf_worker'] ?? 0 ) . '）' ],
-			[ '項目' => '跨站判斷', '值' => ! YSLoginGuardSettings::cross_site_reject() ? '關' : ( YSLoginGuard::observing( $now ) ? '觀察中，到 ' . wp_date( 'Y-m-d H:i', $since + YSLoginGuardSettings::OBSERVE_SECONDS ) . ' 開始拒絕' : '拒絕中' ) ],
+			[ '項目' => '跨站判斷', '值' => ! YSLoginGuardSettings::active() ? '不作用（總開關關著或有停用常數）' : ( ! YSLoginGuardSettings::cross_site_reject() ? '關' : ( YSLoginGuard::observing( $now ) ? '觀察中，到 ' . wp_date( 'Y-m-d H:i', $since + YSLoginGuardSettings::OBSERVE_SECONDS ) . ' 開始拒絕' : '拒絕中' ) ) ],
 			[ '項目' => '關閉 XML-RPC 登入', '值' => YSLoginEntrances::xmlrpc_login_disabled() ? '開' : '關' ],
 			[ '項目' => '停用應用程式密碼', '值' => YSLoginEntrances::app_passwords_disabled() ? '開' : '關' ],
 		];
@@ -285,13 +285,13 @@ final class YSLoginGuardCommand {
 		$old = [ 'enabled' => YSLoginGuardSettings::enabled(), 'cross_site_reject' => YSLoginGuardSettings::cross_site_reject() ];
 		update_option( YSLoginGuardSettings::OPTION_ENABLED, 'yes', true );
 		YSLoginGuard::settings_changed( $old, [ 'enabled' => true, 'cross_site_reject' => YSLoginGuardSettings::cross_site_reject() ] );
+		// settings_changed() 在「關到開」或「開著但表不可用」時已經建表（手動，不管冷卻）。
 		if ( ! YSLoginGuardSchema::is_ready() ) {
-			YSLoginGuardSchema::ensure();
-		}
-		if ( YSLoginGuardSchema::is_ready() ) {
-			\WP_CLI::success( '登入次數限制已經打開。' );
-		} else {
 			\WP_CLI::warning( '總開關已經打開，但建表失敗：目前不作用，照常可以登入。請用 status 看原因。' );
+		} elseif ( YSLoginGuardSettings::disabled_by_constant() ) {
+			\WP_CLI::warning( '總開關已經打開，但 wp-config.php 定義了 YS_ADMIN_MENU_LOGIN_GUARD_DISABLED：拿掉那一行之前都不作用。' );
+		} else {
+			\WP_CLI::success( '登入次數限制已經打開。' );
 		}
 	}
 
@@ -570,6 +570,7 @@ final class YSLoginGuardCommand {
 	private static function reason( string $reason ): string {
 		$labels = [
 			'table_not_ready' => '資料表不可用',
+			'query_failed'    => '最近一小時有查詢失敗（資料表可能被刪掉，或資料庫帳號沒有權限）',
 			'shared_bucket'   => '最近的失敗大多分不出訪客 IP（IP 偵測可能沒設好）',
 		];
 		return $labels[ $reason ] ?? $reason;

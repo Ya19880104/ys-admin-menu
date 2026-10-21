@@ -164,7 +164,9 @@ final class YSClientIp {
 	public static function resolve_with( array $settings, array $server, bool $apply_filter = true ): array {
 		$remote = self::normalize( self::server_string( $server, 'REMOTE_ADDR' ) );
 		if ( '' === $remote ) {
-			return [ 'ip' => '', 'from_header' => false, 'source' => 'remote_addr_invalid' ];
+			// 伺服器給不出合法的 REMOTE_ADDR：不讀任何標頭，但照樣經過 filter，整合的人可以用文件寫的 filter 補上（實作審查 A 線 P3-10）。
+			$result = [ 'ip' => '', 'from_header' => false, 'source' => 'remote_addr_invalid' ];
+			return $apply_filter ? self::apply_ip_filter( $result ) : $result;
 		}
 
 		$result = [ 'ip' => $remote, 'from_header' => false, 'source' => 'remote_addr' ];
@@ -197,25 +199,30 @@ final class YSClientIp {
 			}
 		}
 
-		if ( $apply_filter ) {
-			/**
-			 * 訪客 IP（v1.6.0）。回傳合法、而且跟偵測結果不一樣的位址時採用，標成「從標頭或 filter 來的」，
-			 * 登入次數限制照它自己的 IP 鍵計數；不合法就丟掉。
-			 *
-			 * @since 1.6.0
-			 *
-			 * @param string $ip     偵測到的位址（不合法時是空字串）。
-			 * @param array  $result 偵測的細節（ip、from_header、source）。
-			 */
-			$filtered = apply_filters( 'ys_admin_menu_client_ip', $result['ip'], $result );
-			if ( is_string( $filtered ) && $filtered !== $result['ip'] ) {
-				$candidate = self::normalize( $filtered );
-				if ( '' !== $candidate ) {
-					$result = [ 'ip' => $candidate, 'from_header' => true, 'source' => 'filter' ];
-				}
+		return $apply_filter ? self::apply_ip_filter( $result ) : $result;
+	}
+
+	/**
+	 * @param array{ip:string,from_header:bool,source:string,bad_segment?:int} $result
+	 * @return array{ip:string,from_header:bool,source:string,bad_segment?:int}
+	 */
+	private static function apply_ip_filter( array $result ): array {
+		/**
+		 * 訪客 IP（v1.6.0）。回傳合法、而且跟偵測結果不一樣的位址時採用，標成「從標頭或 filter 來的」，
+		 * 登入次數限制照它自己的 IP 鍵計數；不合法就丟掉。REMOTE_ADDR 不合法時也會呼叫（$ip 是空字串）。
+		 *
+		 * @since 1.6.0
+		 *
+		 * @param string $ip     偵測到的位址（不合法時是空字串）。
+		 * @param array  $result 偵測的細節（ip、from_header、source）。
+		 */
+		$filtered = apply_filters( 'ys_admin_menu_client_ip', $result['ip'], $result );
+		if ( is_string( $filtered ) && $filtered !== $result['ip'] ) {
+			$candidate = self::normalize( $filtered );
+			if ( '' !== $candidate ) {
+				return [ 'ip' => $candidate, 'from_header' => true, 'source' => 'filter' ];
 			}
 		}
-
 		return $result;
 	}
 

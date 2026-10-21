@@ -40,6 +40,9 @@ final class YSLoginGuard {
 	/** 每天一次的清理（只是額外的，§4.7.3）。 */
 	public const CRON_HOOK = 'ys_admin_menu_login_guard_cleanup';
 
+	/** 查詢失敗在多久之內算成「沒有正常作用」（秒）。 */
+	public const QUERY_FAILED_SECONDS = 3600;
+
 	/** 不算失敗的錯誤代碼（本外掛的鎖定與跨站拒絕、Turnstile、核心本來就不觸發的兩個）。 */
 	private const NOT_COUNTED = [ self::ERROR_LOCKED, self::ERROR_CROSS_SITE, 'empty_username', 'empty_password' ];
 
@@ -57,6 +60,12 @@ final class YSLoginGuard {
 
 	/** @var null|string[] 這個請求的允許跨站來源。 */
 	private static ?array $origins = null;
+
+	/**
+	 * 這個請求已經由本外掛擋下（跨站拒絕或鎖定）。登入頁的提醒看這個，不看閘門：wp_login_failed 0 的
+	 * YSAuthGate::restore() 在 login_header 之前就把閘門打開了（實作審查 A 線 P2-1）。
+	 */
+	private static bool $blocked = false;
 
 	/* ─────────────────────────── 啟動 ─────────────────────────── */
 
@@ -98,6 +107,7 @@ final class YSLoginGuard {
 		self::$lock      = null;
 		self::$rest_flag = null;
 		self::$origins   = null;
+		self::$blocked   = false;
 	}
 
 	public static function register(): void {
@@ -119,7 +129,7 @@ final class YSLoginGuard {
 	 */
 	public static function activate(): void {
 		if ( YSLoginGuardSettings::enabled() ) {
-			YSLoginGuardSchema::ensure();
+			YSLoginGuardSchema::ensure( true );
 		}
 		if ( YSLoginGuardSchema::is_ready() ) {
 			self::schedule_cleanup();
@@ -174,8 +184,9 @@ final class YSLoginGuard {
 		if ( $is && ! $was ) {
 			update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, time(), true );
 		}
-		if ( ! empty( $new['enabled'] ) && empty( $old['enabled'] ) ) {
-			YSLoginGuardSchema::ensure();
+		// 從關到開，或開著但表不可用：建表。這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
+		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() ) ) {
+			YSLoginGuardSchema::ensure( true );
 		}
 	}
 
@@ -336,6 +347,7 @@ final class YSLoginGuard {
 				$observing = self::observing( $now );
 				YSLoginGuardStore::log_xsite( '' !== $origin['normalized'] ? $origin['normalized'] : $origin['label'], self::entry_class(), $observing, $now );
 				if ( ! $observing ) {
+					self::$blocked = true;
 					YSAuthGate::close( new \WP_Error( self::ERROR_CROSS_SITE, self::cross_site_message() ), self::LOCK_FILTERS );
 					return YSAuthGate::error() ?? $user;
 				}
@@ -349,6 +361,7 @@ final class YSLoginGuard {
 		}
 		$lock = self::current_lock( $d, $now );
 		if ( null !== $lock ) {
+			self::$blocked = true;
 			YSLoginGuardStore::note_blocked( $lock['key'], $now );
 			YSAuthGate::close( self::locked_error( $lock['until'] - $now ), self::LOCK_FILTERS );
 			return YSAuthGate::error() ?? $user;
@@ -607,14 +620,14 @@ final class YSLoginGuard {
 
 	/**
 	 * 打開登入頁（login 動作）時，這個 IP 正在鎖定中，就在表單上方顯示鎖定訊息；不計數。
-	 * 這一次請求已經回了本外掛的錯誤（閘門關著）時不重複顯示。忘記密碼、註冊畫面不顯示。
+	 * 這一次請求已經由本外掛擋下（回了鎖定或跨站拒絕的錯誤，#login_error 會顯示）時不重複顯示。忘記密碼、註冊畫面不顯示。
 	 *
 	 * @param mixed $message
 	 * @return mixed
 	 */
 	public static function login_message( $message ) {
 		$action = isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : 'login'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要顯示提醒
-		if ( 'login' !== $action || YSAuthGate::is_closed() || ! YSLoginGuardSchema::is_ready() ) {
+		if ( 'login' !== $action || self::$blocked || ! YSLoginGuardSchema::is_ready() ) {
 			return $message;
 		}
 		$d = self::decide();
@@ -801,8 +814,8 @@ final class YSLoginGuard {
 	/* ─────────────────────────── 健康狀態 ─────────────────────────── */
 
 	/**
-	 * 有開但沒有正常作用（§4.10）：資料表不可用；或最近一輪記到 via:proxy、via:cloudflare、via:internal、via:unknown
-	 * 的次數合計 20 次以上、而且占失敗總數一半以上（站多半在代理後面、IP 偵測沒設好）。
+	 * 有開但沒有正常作用（§4.10）：資料表不可用；最近一小時有查詢失敗（query_failed）；或最近一輪記到 via:proxy、
+	 * via:cloudflare、via:internal、via:unknown 的次數合計 20 次以上、而且占失敗總數一半以上（站多半在代理後面、IP 偵測沒設好）。
 	 *
 	 * @return array{effective:bool,reasons:string[],stats:array}
 	 */
@@ -812,6 +825,11 @@ final class YSLoginGuard {
 		}
 		$stats   = YSLoginGuardStore::stat24();
 		$reasons = [];
+		// 最近一小時有查詢失敗（表被刪掉、沒有權限……）：失敗的那幾次照設計放行，但一定要算成沒有正常作用（§4.6、§4.10；實作審查 A 線 P2-3）。
+		$failed = YSLoginGuardHealth::get( 'query_failed' );
+		if ( null !== $failed && time() - (int) $failed['last'] < self::QUERY_FAILED_SECONDS ) {
+			$reasons[] = 'query_failed';
+		}
 		if ( $stats['shared'] >= 20 && 2 * $stats['shared'] > $stats['failures'] ) {
 			$reasons[] = 'shared_bucket';
 		}

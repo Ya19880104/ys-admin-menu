@@ -130,6 +130,16 @@ $log_labels = [
 			<p>偵測方式選了「自訂標頭」，但沒有填合法的標頭名稱，偵測方式沒有儲存。</p>
 		</div>
 	<?php endif; ?>
+	<?php
+	// v1.6.0：整頁一張表單，存其他分頁時登入次數限制的欄位也會送出。有欄位沒存（例如逐次加長比鎖定短）時，詳細的錯誤
+	// 只在「登入防護」分頁的卡片裡，存其他分頁的人看不到：這裡提醒一句（實作審查 A 線 P3-12）。
+	$lg_page_errors = 'turnstile' !== $active_tab ? \YangSheep\AdminMenu\Admin\YSLoginSecurityAdmin::guard_error_texts( array_filter( $field_errors, static fn( $c ) => 0 !== strpos( (string) $c, 'lg_allow_warn_' ) ) ) : []; // 寬網段的提醒是已經存了，不算
+	?>
+	<?php if ( [] !== $lg_page_errors ) : ?>
+		<div class="ysca-wl-notice ysca-wl-notice--error" id="ys-am-lg-page-notice">
+			<p>登入次數限制有 <?php echo esc_html( (string) count( $lg_page_errors ) ); ?> 則要處理的提醒（有欄位沒有儲存，仍沿用原本的值）：內容在「登入防護」分頁的「登入次數限制」卡片裡。</p>
+		</div>
+	<?php endif; ?>
 
 	<form method="post" action="<?php echo esc_url( $settings_action ); ?>" class="ysca-wl-section" id="ys-am-wl-form">
 		<input type="hidden" name="action" value="<?php echo esc_attr( \YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin::ADMIN_POST_ACTION ); ?>">
@@ -771,7 +781,9 @@ $log_labels = [
 			$ip_custom   = (string) ( $ip_settings['custom_header'] ?? '' );
 			$ip_remote   = (string) ( $ip_diag['remote'] ?? '' );
 			$ip_errors   = array_filter( $field_errors, static fn( $c ) => 0 === strpos( (string) $c, 'ip_' ) );
-			$ip_open     = [] !== $ip_errors || [] !== array_diff( $ip_hints, [ 'custom_header_warning' ] ) || 'auto' !== $ip_source || $ip_trust_cf || ! empty( $ip_view['turnstile_use'] );
+			// 登入次數限制說「IP 偵測可能沒設好」（共用桶占多數）時也展開：卡片上那條紅字的錨點指到這裡（設計 §5.2；實作審查 A 線 P3-12）。
+			$ip_shared   = ! empty( $guard_view['enabled'] ) && in_array( 'shared_bucket', (array) ( $guard_view['status']['reasons'] ?? [] ), true );
+			$ip_open     = [] !== $ip_errors || [] !== array_diff( $ip_hints, [ 'custom_header_warning' ] ) || 'auto' !== $ip_source || $ip_trust_cf || ! empty( $ip_view['turnstile_use'] ) || $ip_shared;
 
 			$ip_sources = [
 				'auto'             => [ '自動', '用 REMOTE_ADDR。打開「信任 Cloudflare」時，從 Cloudflare 範圍來的請求改用 CF-Connecting-IP。不會讀其他標頭：站在其他代理後面時，請選對應的選項並信任那個代理。' ],

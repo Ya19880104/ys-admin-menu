@@ -90,7 +90,32 @@ final class YSLoginGuardSettings {
 
 	/** 總開關（不看常數）。 */
 	public static function enabled(): bool {
-		return 'yes' === get_option( self::OPTION_ENABLED, 'no' );
+		return 'yes' === self::autoloaded( self::OPTION_ENABLED, 'no' );
+	}
+
+	/**
+	 * 本外掛一律用自動載入寫入的鍵（設定頁、WP-CLI 都是 update_option( …, true )）。有任何一個在自動載入裡，就是存過 1.6.0 的設定。
+	 * 最後一個是 YSLoginEntrances::OPTION_DISABLE_APP_PASSWORDS（寫字串，這個類別不必先載入那一個）。
+	 */
+	private const AUTOLOADED_KEYS = [ self::OPTION_ENABLED, self::OPTION_DB_VERSION, self::OPTION_CROSS_SITE_SINCE, 'ys_admin_menu_disable_app_passwords' ];
+
+	/**
+	 * 每個請求都要讀的開關（總開關；停用應用程式密碼，YSLoginEntrances）。沒存過 1.6.0 設定的站，這些 option 不存在：
+	 * 沒有持久物件快取時，get_option() 每個請求都要為它查一次資料庫（WordPress 只在這一次請求記住「不存在」；實作審查 A 線 P3-1）。
+	 * 所以先看 wp_load_alloptions()（get_option() 本來就會讀它，已經在快取裡）：
+	 * - 這個鍵在自動載入裡：照常 get_option()，從快取拿，不查資料庫。
+	 * - 不在，但有別的本外掛鍵在：存過設定、只有這一個不在自動載入裡（例如被別的工具改成不自動載入），照常 get_option() 讀到真正的值。
+	 * - 一個都不在：沒存過設定，直接回預設，不查資料庫。這時不經過 get_option 的 filter（這幾個鍵沒有對外的 filter 介面）。
+	 */
+	public static function autoloaded( string $option, string $default ): string {
+		if ( function_exists( 'wp_load_alloptions' ) ) {
+			$all = wp_load_alloptions();
+			if ( is_array( $all ) && ! array_key_exists( $option, $all ) && [] === array_intersect_key( $all, array_flip( self::AUTOLOADED_KEYS ) ) ) {
+				return $default;
+			}
+		}
+		$value = get_option( $option, $default );
+		return is_string( $value ) ? $value : $default;
 	}
 
 	/** 總開關打開、常數沒有停用。 */

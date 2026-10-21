@@ -9,7 +9,8 @@
  *   是同時，兩種都對。不用 VALUES()（MySQL 8.0.20 起不建議），也不用 AS 別名（MariaDB 不支援），直接再帶一次參數。
  * - 遇到死結（1213）或鎖等待逾時（1205）重試一次。
  * - 查詢失敗時回 null，呼叫的人照樣放行（fail-open），並記 health。
- * - 紀錄：一般失敗每分鐘 120 筆、被拒的跨站登入每分鐘 20 筆（各自的保留列原子計數），每個 IP 每分鐘一筆；
+ * - 紀錄：全站每分鐘前 120 次一般失敗、前 20 次被拒的跨站登入才可能寫紀錄（各自的保留列原子計數），每個 IP 每分鐘一筆；
+ *   預算算的是失敗（被拒）的次數，不是寫了幾筆紀錄，omitted 記的是超出的次數（實作審查 A 線 P3-15）。
  *   鎖定、解鎖、清空不受額度限制。
  * - 上限（§4.7.3）：哪一次失敗記到哪裡由 YSLoginGuardCapacity 決定；這裡只提供它用的 SQL：只更新既有列的 UPDATE、
  *   數同一個 /48 的列數、保留列的原子加 1、照上限刪與重算列數、清理互斥（GET_LOCK 與 ~cleanup 租約）。
@@ -31,7 +32,7 @@ final class YSLoginGuardStore {
 	public const EVENT_OMITTED = 'omitted';
 	public const EVENT_XSITE   = 'xsite';
 
-	/** 每分鐘的紀錄預算。 */
+	/** 每分鐘的紀錄預算：算的是失敗（被拒）的次數，不是寫了幾筆紀錄。 */
 	public const LOG_BUDGET   = 120;
 	public const XSITE_BUDGET = 20;
 
@@ -119,8 +120,9 @@ final class YSLoginGuardStore {
 
 	/**
 	 * 只更新已經存在的列（表滿了、或 IPv6 的 IP 鍵要先看自己有沒有列時，§4.4 失敗時第 2 步）。SET 跟計數那一句一樣，
-	 * 加完的次數用 LAST_INSERT_ID( 運算式 ) 記在這個連線上，再一句 SELECT LAST_INSERT_ID() 取回
-	 * （wpdb 只在 INSERT／REPLACE 之後更新 insert_id）。
+	 * 加完的次數用 LAST_INSERT_ID( 運算式 ) 記在這個連線上。wpdb 只在 INSERT／REPLACE 之後更新 insert_id，所以直接用
+	 * mysqli_insert_id() 從剛剛那一句的連線取回；讀寫分離的 db.php（HyperDB、LudicrousDB）會把另一句 SELECT 送到讀庫，
+	 * 那裡沒有這個值（實作審查 A 線 P3-2）。$wpdb->dbh 不是 mysqli 時（替身、其他驅動）才再送一句 SELECT LAST_INSERT_ID()。
 	 *
 	 * @return null|array{count:int,matched:bool} matched＝這個鍵有列（加過了）。查詢失敗回 null。
 	 */
@@ -153,7 +155,8 @@ final class YSLoginGuardStore {
 		if ( (int) $wpdb->rows_affected < 1 ) {
 			return [ 'count' => 0, 'matched' => false ];
 		}
-		$count = $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 同一個連線上剛剛那一句設的值
+		$dbh   = $wpdb->dbh ?? null;
+		$count = $dbh instanceof \mysqli ? mysqli_insert_id( $dbh ) : $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- 同一個連線上剛剛那一句設的值
 		return [ 'count' => max( 1, (int) $count ), 'matched' => true ];
 	}
 
@@ -349,19 +352,12 @@ final class YSLoginGuardStore {
 		return $forgiven;
 	}
 
-	/**
-	 * 這個鍵在目前的視窗裡，有幾個不同的（存在的）帳號失敗過（鎖定紀錄與通知用）。
-	 */
-	public static function acct_distinct( string $key, int $window_start ): int {
-		global $wpdb;
-		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . YSLoginGuardSchema::acct_table() . ' WHERE ip_key = %s AND acct_window = %d', $key, $window_start ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
-	}
-
 	/* ─────────────────────────── 紀錄 ─────────────────────────── */
 
 	/**
-	 * 一般失敗的紀錄：每個 IP 鍵每分鐘一筆，加上全站每分鐘 120 筆。用完時只加計數。
-	 * 不管有沒有寫紀錄，每一次失敗都算進 ~log_budget（換分鐘時彙總進 ~stat24 的失敗總數）。
+	 * 一般失敗的紀錄：每個 IP 鍵每分鐘一筆，而且是全站這一分鐘的前 120 次失敗之一。用完時只加計數。
+	 * 不管有沒有寫紀錄，每一次失敗都算進 ~log_budget（同一個 IP 這一分鐘已經寫過、這次沒寫，照樣用掉一次預算），
+	 * 換分鐘時彙總進 ~stat24 的失敗總數。
 	 */
 	public static function log_fail( string $key, string $ip, string $username, string $source, string $code, int $now ): void {
 		global $wpdb;
@@ -411,7 +407,9 @@ final class YSLoginGuardStore {
 	/**
 	 * 每分鐘的預算（INSERT … ON DUPLICATE KEY UPDATE，保留列不見了也會補回來）。
 	 * 換分鐘時，上一分鐘的數量先暫存到 total_failures（寫在 fail_count、window_start 前面，只看改之前的值），
-	 * 這一分鐘的第一個請求把它讀回來：超過預算就寫一筆 omitted，一般失敗的另外併進 ~stat24。
+	 * 這一分鐘的第一個請求把它讀回來：超過預算就寫一筆 omitted（code 帶超出的次數），一般失敗的另外併進 ~stat24。
+	 * 所以 ~stat24 的失敗總數比共用桶的次數慢一拍：上一分鐘的失敗要等下一個有失敗的分鐘才併進去。失敗總數偏小時，
+	 * 健康狀態的 shared_bucket（共用桶占一半以上）比較容易成立：寧可早一點提醒，不會漏掉（設計允許）。
 	 *
 	 * @return bool 這一筆在預算內（可以寫紀錄）。查詢失敗回 false（不寫，大小有界）。
 	 */
@@ -523,7 +521,7 @@ final class YSLoginGuardStore {
 	}
 
 	/**
-	 * 目前這一輪的統計（健康狀態用）。
+	 * 目前這一輪的統計（健康狀態用）。failures 不含還沒彙總的這一分鐘（見 take_budget()）。
 	 *
 	 * @return array{since:int,failures:int,shared:int,header_internal:int,cf_worker:int}
 	 */
@@ -766,10 +764,31 @@ final class YSLoginGuardStore {
 		return is_array( $rows ) ? $rows : [];
 	}
 
-	/** 「鍵＋帳號」小表裡這個鍵有幾個不同的（存在的）帳號失敗過（鎖定列表與通知用）。 */
+	/** 「鍵＋帳號」小表裡這個鍵有幾個不同的（存在的）帳號失敗過（通知用）。 */
 	public static function acct_count( string $key ): int {
 		global $wpdb;
 		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . YSLoginGuardSchema::acct_table() . ' WHERE ip_key = %s', $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
+	}
+
+	/**
+	 * 一次數好幾個鍵（設定頁的鎖定列表，最多 200 列）：一句 GROUP BY，不是每一列各查一次（實作審查 A 線 P3-11）。
+	 *
+	 * @param string[] $keys
+	 * @return array<string, int> 鍵 => 帳號數；沒有列的鍵不在結果裡。
+	 */
+	public static function acct_counts( array $keys ): array {
+		global $wpdb;
+		$keys = array_values( array_unique( array_map( 'strval', $keys ) ) );
+		if ( [] === $keys ) {
+			return [];
+		}
+		$in   = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT ip_key, COUNT(*) AS n FROM ' . YSLoginGuardSchema::acct_table() . " WHERE ip_key IN ({$in}) GROUP BY ip_key", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名與佔位符是系統產生的
+		$out  = [];
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$out[ (string) $row['ip_key'] ] = (int) $row['n'];
+		}
+		return $out;
 	}
 
 	/**
@@ -933,7 +952,26 @@ final class YSLoginGuardStore {
 		return str_contains( $error, 'Deadlock found' ) || str_contains( $error, 'Lock wait timeout' );
 	}
 
+	/**
+	 * 查詢失敗：記 health（設定頁、全後台提醒、WP-CLI status 會把最近一小時的當成「沒有正常作用」）。剛才那一句失敗是因為
+	 * 表不存在（版本鍵還在，例如表被單獨刪掉、只還原了 wp_options）時，清掉版本鍵：之後當成「表還沒建好」，不再查這幾張表，
+	 * 管理員下一次打開後台時 admin_init 重新建表（實作審查 A 線 P2-3）。
+	 */
 	private static function query_failed( string $where ): void {
-		YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where ] );
+		$missing = self::table_missing();
+		YSLoginGuardHealth::record( 'query_failed', [ 'where' => $where, 'missing' => $missing ] );
+		if ( $missing ) {
+			delete_option( YSLoginGuardSettings::OPTION_DB_VERSION );
+		}
+	}
+
+	/** 剛才那一句失敗是不是因為表不存在（MySQL、MariaDB 的 1146）。 */
+	private static function table_missing(): bool {
+		global $wpdb;
+		$dbh = $wpdb->dbh ?? null;
+		if ( $dbh instanceof \mysqli && 1146 === (int) mysqli_errno( $dbh ) ) {
+			return true;
+		}
+		return 1 === preg_match( "/^Table '[^']+' doesn't exist/", (string) ( $wpdb->last_error ?? '' ) );
 	}
 }

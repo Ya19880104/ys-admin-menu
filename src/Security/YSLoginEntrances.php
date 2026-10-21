@@ -40,8 +40,9 @@ final class YSLoginEntrances {
 		return 'yes' === get_option( self::OPTION_DISABLE_XMLRPC, 'no' );
 	}
 
+	/** 幾乎每個沒登入的請求都會問：沒存過設定的站不為不存在的 option 查資料庫（YSLoginGuardSettings::autoloaded()，實作審查 A 線 P3-1）。 */
 	public static function app_passwords_disabled(): bool {
-		return 'yes' === get_option( self::OPTION_DISABLE_APP_PASSWORDS, 'no' );
+		return 'yes' === YSLoginGuardSettings::autoloaded( self::OPTION_DISABLE_APP_PASSWORDS, 'no' );
 	}
 
 	/**

@@ -81,10 +81,13 @@ final class YSLoginGuardNotices {
 			return [];
 		}
 		if ( ! YSLoginGuardSchema::is_ready() ) {
-			return [ self::notice( 'error', 'table_not_ready', '登入次數限制已經打開，但資料表還沒建好或版本不對，目前沒有作用（照常可以登入）。打開這個設定頁時會重試；一直出現時，請確認資料庫帳號有建表的權限。' ) ];
+			return [ self::notice( 'error', 'table_not_ready', '登入次數限制已經打開，但資料表還沒建好或版本不對，目前沒有作用（照常可以登入）。管理員打開後台時會重試（建表失敗之後隔 10 分鐘），在設定頁按儲存會馬上重試；一直出現時，請確認資料庫帳號有建表的權限。' ) ];
 		}
 		$out    = [];
 		$status = YSLoginGuard::status();
+		if ( in_array( 'query_failed', $status['reasons'], true ) ) {
+			$out[] = self::notice( 'error', 'query_failed', '登入次數限制最近一小時有查詢失敗（資料表可能被刪掉，或資料庫帳號沒有權限），失敗的那幾次沒有作用（照常可以登入）。資料表不見時，管理員下一次打開後台會自動重建；一直出現時，請確認資料庫。' );
+		}
 		if ( in_array( 'shared_bucket', $status['reasons'], true ) ) {
 			$key   = (string) ( YSLoginGuardHealth::get( 'shared_bucket' )['data']['key'] ?? '' );
 			$path  = '' !== $key && self::is_shared( $key ) ? self::describe_key( $key ) : '分不出訪客位址的登入';
@@ -103,7 +106,10 @@ final class YSLoginGuardNotices {
 			}
 			$out[] = self::notice( 'warning', 'overflow', '最近一小時有登入失敗改用網段一起計算（計數空間滿了，或同一個網段的位址太多）。表裡沒有自己紀錄的人，會跟同網段的人一起算。' . ( [] === $items ? '' : '目前被鎖住的網段：' ), $items );
 		}
-		if ( self::recent( 'reserved_row_missing', $now, self::RECENT_SECONDS ) || self::recent( 'reserved_row_recreated', $now, self::RECENT_SECONDS ) ) {
+		// 保留列讀不到是因為查詢失敗時，上面 query_failed 那一條已經說了；這一條只講真的不見、補回來的情況。
+		$missing_row = YSLoginGuardHealth::get( 'reserved_row_missing' );
+		$missing_now = null !== $missing_row && $now - (int) $missing_row['last'] < self::RECENT_SECONDS && 'query' !== ( $missing_row['data']['why'] ?? '' );
+		if ( $missing_now || self::recent( 'reserved_row_recreated', $now, self::RECENT_SECONDS ) ) {
 			$out[] = self::notice( 'warning', 'reserved', '登入防護的計數資料有一部分不見了，已經改用最保守的方式處理並重建。' );
 		}
 		if ( self::recent( 'cf_worker', $now, self::DAY_SECONDS ) ) {

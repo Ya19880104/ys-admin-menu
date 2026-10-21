@@ -306,6 +306,16 @@ final class YSLoginSecurityAdmin {
 		$allow    = get_option( YSLoginGuardSettings::OPTION_ALLOWLIST, '' );
 		$origins  = get_option( YSLoginGuardSettings::OPTION_CROSS_ORIGINS, '' );
 		$auto     = YSLoginGuard::auto_origins();
+		// 核心的 allowed_http_origins 預設就有本站自己的 http 與 https（後台與首頁的主機）：那只是本站，列出來像是設錯了，
+		// 唯讀清單裡不列（實作審查 A 線 P3-7）。判斷跨站時照樣算。
+		$own = [];
+		foreach ( [ admin_url(), home_url() ] as $own_url ) {
+			$own_host = (string) wp_parse_url( $own_url, PHP_URL_HOST );
+			if ( '' !== $own_host ) {
+				$own[] = YSLoginGuardSettings::normalize_origin( 'http://' . $own_host );
+				$own[] = YSLoginGuardSettings::normalize_origin( 'https://' . $own_host );
+			}
+		}
 		$status   = YSLoginGuardSchema::is_ready() ? YSLoginGuard::status() : [ 'effective' => false, 'reasons' => [ 'table_not_ready' ], 'stats' => [] ];
 		$numbers  = [];
 		foreach ( self::NUMBER_FIELDS as $field => $name ) {
@@ -326,7 +336,7 @@ final class YSLoginSecurityAdmin {
 			'allowlist_raw'     => is_string( $allow ) ? $allow : '',
 			'origins_raw'       => is_string( $origins ) ? $origins : '',
 			'auto_yscart'       => $auto['yscart'],
-			'auto_core'         => $auto['core'],
+			'auto_core'         => array_values( array_diff( $auto['core'], $own ) ),
 			'message'           => (string) get_option( YSLoginGuardSettings::OPTION_MESSAGE, '' ),
 			'notify'            => YSLoginGuardSettings::notify(),
 			'notify_email'      => (string) get_option( YSLoginGuardSettings::OPTION_NOTIFY_EMAIL, '' ),
@@ -349,8 +359,10 @@ final class YSLoginSecurityAdmin {
 		}
 		$filter = isset( $get['lg_ip'] ) && is_string( $get['lg_ip'] ) ? self::clean_filter( $get['lg_ip'] ) : '';
 		$page   = isset( $get['lg_page'] ) && is_scalar( $get['lg_page'] ) && 1 === preg_match( '/^\d{1,6}$/', (string) $get['lg_page'] ) ? max( 1, (int) $get['lg_page'] ) : 1;
-		$locked = [];
-		foreach ( YSLoginGuardStore::list_rows( $now, true, '', self::LOCKED_LIST ) as $row ) {
+		$locked   = [];
+		$rows     = YSLoginGuardStore::list_rows( $now, true, '', self::LOCKED_LIST );
+		$accounts = YSLoginGuardStore::acct_counts( array_map( static fn( $row ) => (string) $row['ip_key'], $rows ) ); // 一句，不是每一列各查一次
+		foreach ( $rows as $row ) {
 			$key      = (string) $row['ip_key'];
 			$locked[] = [
 				'key'      => $key,
@@ -359,7 +371,7 @@ final class YSLoginSecurityAdmin {
 				'last_ip'  => YSClientIp::normalize( (string) $row['last_ip'] ),
 				'until'    => (int) $row['locked_until'],
 				'failures' => (int) $row['total_failures'],
-				'accounts' => YSLoginGuardStore::acct_count( $key ),
+				'accounts' => $accounts[ $key ] ?? 0,
 				'blocked'  => (int) $row['blocked_count'],
 				'username' => YSLoginGuardStore::sanitize_username( (string) $row['last_username'] ),
 				'source'   => (string) preg_replace( '/[^a-z0-9_-]/', '', (string) $row['last_source'] ),
