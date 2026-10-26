@@ -4,9 +4,13 @@
  *
  * 結構（WP 原生左側 sidebar 頂層）：
  *   ┌─ YS 選單管理（add_menu_page，icon dashicons-menu-alt3）
- *   │  ├─ 選單與權限（= 頂層 slug，YSPermissionAdmin：全部選單 / 子選單 / 使用者覆寫）
+ *   │  ├─ 選單與權限（= 頂層 slug，YSPermissionAdmin：主選單 / 全部選單 / 使用者覆寫 / 外掛使用權限）
  *   │  ├─ 原生選單樣式（YSAdminThemeAdmin）
- *   │  └─ 白牌設定（YSWhiteLabelAdmin）
+ *   │  ├─ 白牌設定（YSWhiteLabelAdmin）
+ *   │  ├─ 登入安全（YSLoginSecurityAdmin，v1.6.0）
+ *   │  └─ 後台精簡（YSDeclutterAdmin，v1.7.0：關閉留言、控制台小工具）
+ *
+ * v1.7.0：整組選單只給能使用本外掛的帳號（YSAccess::can_manage()）。
  *
  * 若使用者已上傳白牌 LOGO（option `ys_admin_menu_logo_url`），
  * 頂層選單 icon 會以該 LOGO URL 取代 dashicon。

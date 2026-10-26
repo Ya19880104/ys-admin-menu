@@ -1180,3 +1180,281 @@
 .ys-am-access .ys-am-access__form code {
     font-size: 12px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * v1.7.0 — 「誰看得到」面板、圖示／開新分頁／顯示在、自訂連結、子選單標題、預設行為、試算
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* 面板打開時由 JS 依表格外框的空間決定往下或往上開、要不要往左移與限高（positionPanel()）。 */
+.ys-ec-permission-admin [hidden] {
+    display: none !important;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access .ys-ec-roles__panel {
+    gap: 6px;
+    min-width: 250px;
+    max-width: 320px;
+    max-height: 380px;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__modes label {
+    padding: 2px 0;
+    font-weight: 600;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access[data-mode="any"] .ys-ec-access__roles,
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access[data-mode="any"] .ys-ec-access__users,
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access[data-mode="any"] .ys-ec-access__opt {
+    opacity: .45;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__roles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 8px;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__users {
+    position: relative;
+    display: grid;
+    gap: 4px;
+    padding-top: 6px;
+    border-top: 1px solid #e5e7eb;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__chips:empty {
+    display: none;
+}
+.ys-ec-permission-admin .ys-ec-user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 1px 2px 1px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 11px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.ys-ec-permission-admin .ys-ec-user-chip__x {
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+.ys-ec-permission-admin .ys-ec-user-chip__x:hover,
+.ys-ec-permission-admin .ys-ec-user-chip__x:focus-visible {
+    background: #c7d2fe;
+}
+.ys-ec-permission-admin .ys-ec-access-user-search,
+.ys-ec-permission-admin #ys-ec-preview-search {
+    width: 100%;
+    max-width: 280px;
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.ys-ec-permission-admin .ys-ec-access__results {
+    margin: 0;
+    padding: 4px 0;
+    max-height: 180px;
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+}
+.ys-ec-permission-admin .ys-ec-access__results li {
+    margin: 0;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+.ys-ec-permission-admin .ys-ec-access__results li:hover,
+.ys-ec-permission-admin .ys-ec-access__results li:focus-visible {
+    background: #eef2ff;
+    color: #3730a3;
+    outline: none;
+}
+.ys-ec-permission-admin .ys-ec-access__results li.no-results {
+    color: #9ca3af;
+    cursor: default;
+    font-style: italic;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__opt {
+    padding: 2px 0;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__note {
+    margin: 0;
+    color: #b45309;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access-apply-children {
+    justify-self: start;
+}
+
+/* 圖示、開新分頁、顯示在 */
+.ys-ec-permission-admin .ys-ec-row-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #4b5563;
+}
+.ys-ec-permission-admin .ys-ec-row-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.ys-ec-permission-admin .ys-ec-display-parent {
+    max-width: 180px;
+    min-height: 26px;
+    padding: 0 22px 0 6px;
+    font-size: 12px;
+    line-height: 24px;
+}
+
+/* 自訂連結 */
+.ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge.level-custom {
+    background: #ecfdf5;
+    color: #047857;
+}
+.ys-ec-permission-admin .ys-ec-custom-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+.ys-ec-permission-admin .ys-ec-custom-fields input {
+    flex: 1 1 160px;
+    min-width: 0;
+    padding: 3px 8px;
+    font-size: 12px;
+}
+.ys-ec-permission-admin .ys-ec-custom-fields .ys-ec-custom-url {
+    flex-basis: 240px;
+    font-family: Consolas, Monaco, monospace;
+}
+
+/* 子選單標題列 */
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-subhead-row > td {
+    background: #f8fafc;
+}
+.ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-subhead-row .ysca-separator-title {
+    padding-left: 20px;
+}
+
+/* 預設行為、試算列 */
+.ys-ec-permission-admin .ys-ec-defaults,
+.ys-ec-permission-admin .ys-ec-preview-bar {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 13px;
+}
+.ys-ec-permission-admin .ys-ec-defaults label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.ys-ec-permission-admin .ys-ec-defaults .description,
+.ys-ec-permission-admin .ys-ec-preview-bar .description {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 12px;
+}
+.ys-ec-permission-admin .ys-ec-defaults__check {
+    flex-basis: 100%;
+}
+.ys-ec-permission-admin .ys-ec-preview-bar > label {
+    font-weight: 600;
+}
+.ys-ec-permission-admin .ys-ec-preview-bar #ys-ec-preview-results {
+    position: absolute;
+    top: 100%;
+    left: 12px;
+    z-index: 40;
+    width: min(360px, calc(100% - 24px));
+}
+.ys-ec-permission-admin .ys-ec-preview-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: 4px;
+}
+.ys-ec-permission-admin .ys-ec-pv {
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.7;
+    white-space: nowrap;
+}
+.ys-ec-permission-admin .ys-ec-pv--ok {
+    background: #dcfce7;
+    color: #166534;
+}
+.ys-ec-permission-admin .ys-ec-pv--no {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.ys-ec-permission-admin .ys-ec-self-mismatch {
+    margin: 8px 0;
+}
+
+@media (max-width: 782px) {
+    .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access .ys-ec-roles__panel {
+        min-width: 0;
+        width: calc(100vw - 32px);
+        max-width: 320px;
+    }
+    .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__roles {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* v1.7.0：YS CART V3 寫入的可見規則（本外掛保留、不執行） */
+.ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge.level-core {
+    background: #fff7ed;
+    color: #9a3412;
+}
+
+/* v1.7.0：面板摘要的文字太長時省略（inline-flex 時文字是匿名項目，省略號不會出現；▾ 改成貼在右側，不被擠出去） */
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-roles__sum {
+    position: relative;
+    display: inline-block;
+    max-width: 170px;
+    padding-right: 20px;
+    vertical-align: middle;
+}
+.ys-ec-permission-admin .ys-ec-permission-table .ys-ec-roles__sum::after {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    transform: translateY(-50%);
+}

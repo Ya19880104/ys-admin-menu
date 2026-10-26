@@ -4,7 +4,8 @@
  *
  * 選項：
  *   - ys_admin_menu_dashboard_widgets（autoload yes）：{ version: 1, hidden: string[], hide_welcome: bool }
- *   - ys_admin_menu_dashboard_widgets_seen（autoload no，最多 200 筆）：{ items: { id: { title, context, priority } }, updated_at }
+ *   - ys_admin_menu_dashboard_widgets_seen（autoload no，最多 200 筆）：{ items: { id: { title, context, priority, seen_at } }, updated_at }
+ *     （各管理員看到的合併記下；90 天沒出現的拿掉）
  *
  * 列舉：可以使用 YS 選單管理的人打開控制台時，在 wp_dashboard_setup 很晚的優先序讀 $wp_meta_boxes['dashboard']，
  * 內容有變才寫入。不在設定頁執行 wp_dashboard_setup()（那等於在設定頁跑每個外掛的控制台程式）。
@@ -83,18 +84,20 @@ final class YSDashboardWidgets {
 	/**
 	 * 記下的小工具清單（設定頁用）。
 	 *
-	 * @return array{items:array<string,array{title:string,context:string,priority:string}>,updated_at:int}
+	 * @return array{items:array<string,array{title:string,context:string,priority:string,seen_at:int}>,updated_at:int}
 	 */
 	public static function seen(): array {
 		$raw   = get_option( self::SEEN_OPTION, [] );
 		$raw   = is_array( $raw ) ? $raw : [];
 		$items = [];
 		foreach ( is_array( $raw['items'] ?? null ) ? $raw['items'] : [] as $id => $row ) {
+			$id = (string) $id; // 純數字的 id 在 PHP 陣列裡是整數鍵。
 			if ( self::valid_id( $id ) && is_array( $row ) && count( $items ) < self::MAX_ITEMS ) {
 				$items[ $id ] = [
 					'title'    => (string) ( $row['title'] ?? '' ),
 					'context'  => (string) ( $row['context'] ?? '' ),
 					'priority' => (string) ( $row['priority'] ?? '' ),
+					'seen_at'  => (int) ( $row['seen_at'] ?? ( $raw['updated_at'] ?? 0 ) ),
 				];
 			}
 		}
@@ -103,6 +106,12 @@ final class YSDashboardWidgets {
 			'updated_at' => (int) ( $raw['updated_at'] ?? 0 ),
 		];
 	}
+
+	/** v1.7.0：記錄裡多久沒在任何人的控制台出現就拿掉（秒，90 天）。 */
+	private const FORGET_AFTER = 90 * 86400;
+
+	/** v1.7.0：同一個小工具多久更新一次「最後出現時間」（秒，7 天；避免每次打開控制台都寫入）。 */
+	private const TOUCH_AFTER = 7 * 86400;
 
 	/**
 	 * 存檔（後台精簡頁）。
@@ -129,12 +138,13 @@ final class YSDashboardWidgets {
 		if ( [] === $hidden ) {
 			return;
 		}
+		// 同一個 id 出現在好幾欄時（少見）每一欄都拿掉。
 		foreach ( $hidden as $id ) {
 			foreach ( $boxes as $context => $priorities ) {
 				foreach ( is_array( $priorities ) ? $priorities : [] as $list ) {
 					if ( is_array( $list ) && ! empty( $list[ $id ] ) ) {
 						remove_meta_box( $id, self::SCREEN, (string) $context );
-						continue 3;
+						continue 2;
 					}
 				}
 			}
@@ -142,31 +152,60 @@ final class YSDashboardWidgets {
 	}
 
 	/**
-	 * 把目前控制台上的小工具寫進記錄（id、去 HTML 的標題、欄、優先序）；跟已存的相同就不寫。
+	 * 把目前控制台上的小工具併進記錄（id、去 HTML 的標題、欄、優先序、最後出現時間）。
+	 *
+	 * 各管理員看到的小工具不一定一樣（權限、外掛依角色顯示），所以是合併、不是整份取代；90 天沒在任何人的控制台出現的才拿掉。
+	 * 沒有新的小工具、名稱與位置也沒變（名稱只差數字的算沒變，例如帶待處理數量的標題）、最後出現時間也還新，就不寫。
 	 *
 	 * @param array<string, mixed> $boxes $wp_meta_boxes['dashboard']
 	 */
 	public static function remember( array $boxes ): void {
-		$items = [];
+		$now   = time();
+		$old   = self::seen()['items'];
+		$items = $old;
+		$dirty = false;
+		$same  = static fn( string $a, string $b ): bool => preg_replace( '/\d+/', '#', $a ) === preg_replace( '/\d+/', '#', $b );
 		foreach ( $boxes as $context => $priorities ) {
 			foreach ( is_array( $priorities ) ? $priorities : [] as $priority => $list ) {
 				foreach ( is_array( $list ) ? $list : [] as $id => $box ) {
-					if ( ! is_array( $box ) || ! self::valid_id( (string) $id ) || count( $items ) >= self::MAX_ITEMS ) {
+					$id = (string) $id;
+					if ( ! is_array( $box ) || ! self::valid_id( $id ) ) {
 						continue; // 別人已經拿掉的（false）不記
 					}
-					$title         = trim( wp_strip_all_tags( (string) ( $box['title'] ?? '' ) ) );
-					$items[ $id ] = [
-						'title'    => '' !== $title ? $title : (string) $id,
+					$title = trim( html_entity_decode( wp_strip_all_tags( (string) ( $box['title'] ?? '' ) ), ENT_QUOTES, 'UTF-8' ) );
+					$title = function_exists( 'mb_substr' ) ? mb_substr( $title, 0, 200 ) : substr( $title, 0, 600 );
+					$row   = [
+						'title'    => '' !== $title ? $title : $id,
 						'context'  => (string) $context,
 						'priority' => (string) $priority,
+						'seen_at'  => $now,
 					];
+					$prev = $old[ $id ] ?? null;
+					if ( null === $prev ) {
+						if ( count( $items ) >= self::MAX_ITEMS ) {
+							continue;
+						}
+						$dirty = true;
+					} elseif ( ! $same( $prev['title'], $row['title'] ) || $prev['context'] !== $row['context'] || $prev['priority'] !== $row['priority']
+						|| $now - $prev['seen_at'] >= self::TOUCH_AFTER ) {
+						$dirty = true;
+					} else {
+						continue; // 沒變：保留原本那一筆（包含原本的最後出現時間）。
+					}
+					$items[ $id ] = $row;
 				}
 			}
 		}
-		if ( self::seen()['items'] === $items ) {
+		foreach ( $items as $id => $row ) {
+			if ( $now - $row['seen_at'] > self::FORGET_AFTER ) {
+				unset( $items[ $id ] );
+				$dirty = true;
+			}
+		}
+		if ( ! $dirty ) {
 			return;
 		}
-		update_option( self::SEEN_OPTION, [ 'items' => $items, 'updated_at' => time() ], false );
+		update_option( self::SEEN_OPTION, [ 'items' => $items, 'updated_at' => $now ], false );
 	}
 
 	/** load-index.php：設定要藏歡迎面板時，拿掉核心的 wp_welcome_panel。 */

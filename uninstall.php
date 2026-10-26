@@ -158,6 +158,8 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_comments',
 	'ys_admin_menu_dashboard_widgets',
 	'ys_admin_menu_dashboard_widgets_seen',
+	// v1.7.0：第一次用 1.7.0 存檔前的原本設定（第 1 版）備份。
+	'ys_admin_menu_config_v1_backup',
 ];
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；

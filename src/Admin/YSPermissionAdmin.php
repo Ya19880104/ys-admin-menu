@@ -115,17 +115,6 @@ class YSPermissionAdmin {
 	}
 
 	/**
-	 * 渲染權限設置頁
-	 *
-	 * 分頁 ?tab=：
-	 *   - wp_native      （預設）動態列出所有 sidebar top-level
-	 *   - ys_cart        列出 YS CART top + 全部 sub-page
-	 *   - user_overrides v2.39.0 完整重做（search user + card list + REST save）
-	 *
-	 * v2.45.20 Phase R2.4-H：cap check 後統一 YSAdminApp::open() / close()。
-	 * Capability matrix nonce / cap_check / REST save 邏輯**完全不變**，只動 wrapper。
-	 */
-	/**
 	 * 分頁 → 名稱（四個分頁的導覽列共用）。v1.7.0：加「外掛使用權限」（YSAccessAdmin）。
 	 *
 	 * @return array<string, string>
@@ -139,6 +128,18 @@ class YSPermissionAdmin {
 		];
 	}
 
+	/**
+	 * 渲染權限設置頁
+	 *
+	 * 分頁 ?tab=：
+	 *   - wp_native      （預設）動態列出所有 sidebar top-level
+	 *   - ys_cart        列出 YS CART top + 全部 sub-page
+	 *   - user_overrides v2.39.0 完整重做（search user + card list + REST save）
+	 *   - access         v1.7.0：誰能使用本外掛（YSAccessAdmin）
+	 *
+	 * v2.45.20 Phase R2.4-H：cap check 後統一 YSAdminApp::open() / close()。
+	 * Capability matrix nonce / cap_check / REST save 邏輯**完全不變**，只動 wrapper。
+	 */
 	public static function render(): void {
 		if ( ! YSAccess::can_manage() ) {
 			wp_die( '權限不足。' );
@@ -209,7 +210,12 @@ class YSPermissionAdmin {
 			'nonce'      => wp_create_nonce( 'wp_rest' ),
 			'currentUserId' => get_current_user_id(),
 			// v1.7.0：動態新增的列（複製、移到主選單）也用站上全部角色畫角色面板。[ [ key, 顯示名稱 ], … ]
-			'roles'      => array_map( static fn( $key, $label ): array => [ $key, $label ], array_keys( $role_choices ), array_values( $role_choices ) ),
+			'roles'      => array_map( static fn( $key, $label ): array => [ (string) $key, $label ], array_keys( $role_choices ), array_values( $role_choices ) ),
+			// v1.7.0：「顯示在」下拉選單的頂層選單 [ [ slug, 名稱 ], … ]（側欄目前的順序）。
+			'tops'       => array_map(
+				static fn( array $it ): array => [ (string) $it['slug'], '' !== (string) $it['title'] ? (string) $it['title'] : (string) $it['slug'] ],
+				YSPermissionController::get_all_admin_menu_items()
+			),
 		] );
 
 		wp_enqueue_style(
@@ -334,6 +340,14 @@ class YSPermissionAdmin {
 				}
 			}
 		}
+		// v1.7.0：「顯示在」下拉選單的頂層名稱（JS 也用同一份 cfg.tops）。
+		self::$top_titles_for_select = [];
+		foreach ( YSPermissionController::get_all_admin_menu_items() as $it ) {
+			self::$top_titles_for_select[ (string) $it['slug'] ] = '' !== (string) $it['title'] ? (string) $it['title'] : (string) $it['slug'];
+		}
+		$defaults     = (array) ( $saved_config['defaults'] ?? [] );
+		$self_mismatch = self::self_only_mismatch_count( $saved_config );
+		self::$self_only_map = YSMenuRouter::sidebar_self_only_map( $saved_config );
 		?>
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
@@ -366,11 +380,54 @@ class YSPermissionAdmin {
 						可拖拉每列最左側的 <code>⋮⋮</code> 圖示調整順序，或直接修改「順序」數字；調整後記得按「儲存設定」。
 					</p>
 
+					<?php if ( $self_mismatch > 0 ) : ?>
+						<div class="notice notice-warning inline ys-ec-self-mismatch">
+							<p><?php echo esc_html( '有 ' . $self_mismatch . ' 個選單的「僅限本人」在兩個分頁設得不一樣（側欄看得到的人跟直接開網址進得去的人不同）。表上顯示的是側欄實際的設定，按一次「儲存設定」兩個分頁就會統一。' ); ?></p>
+						</div>
+					<?php endif; ?>
+
+					<?php if ( 'wp_native' === $tab ) : // v1.7.0：預設行為。 ?>
+						<div class="ys-ec-defaults" id="ys-ec-defaults">
+							<label>
+								新出現的頂層選單
+								<select id="ys-ec-new-items-visibility">
+									<option value="show"<?php echo 'managers_only' !== ( $defaults['new_items_visibility'] ?? '' ) ? ' selected' : ''; ?>>所有人照一般規則</option>
+									<option value="managers_only"<?php echo 'managers_only' === ( $defaults['new_items_visibility'] ?? '' ) ? ' selected' : ''; ?>>先只給能使用本外掛的帳號看</option>
+								</select>
+							</label>
+							<span class="description">新裝的外掛加的頂層選單，在這裡存一次之前只有你們看得到（只管側欄，網址照樣能開）。</span>
+							<label class="ys-ec-defaults__check">
+								<input type="checkbox" id="ys-ec-rename-page-titles" <?php checked( ! empty( $defaults['rename_page_titles'] ) ); ?>>
+								改名時頁面標題也跟著改（瀏覽器分頁標題與外掛頁面的標題）
+							</label>
+						</div>
+					<?php endif; ?>
+
+					<div class="ys-ec-preview-bar" id="ys-ec-preview-bar">
+						<label for="ys-ec-preview-search">以某位使用者試算</label>
+						<input type="search" id="ys-ec-preview-search" placeholder="輸入名稱或 email" autocomplete="off">
+						<ul id="ys-ec-preview-results" class="ys-ec-access__results" hidden></ul>
+						<span id="ys-ec-preview-status" aria-live="polite"></span>
+						<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-preview-clear" hidden>清除試算</button>
+						<span class="description">照「已儲存」的設定算出這個帳號的側欄與直接網址，不會切換身分。</span>
+					</div>
+
 					<p>
 						<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-add-separator">
 							<span class="dashicons dashicons-plus ysca-icon-align-middle"></span>
 							新增空白標題（分隔列）
 						</button>
+						<?php if ( 'wp_native' === $tab ) : ?>
+							<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-add-custom-link">
+								<span class="dashicons dashicons-admin-links ysca-icon-align-middle"></span>
+								新增自訂連結
+							</button>
+						<?php else : ?>
+							<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost" id="ys-ec-add-subhead" title="新增一列子選單標題，拖到某個選單的子選單之間">
+								<span class="dashicons dashicons-editor-textcolor ysca-icon-align-middle"></span>
+								新增子選單標題
+							</button>
+						<?php endif; ?>
 						<button type="button" class="ysca-btn ysca-btn--primary ysca-btn--sm" id="ys-ec-save-permissions">
 							儲存設定
 						</button>
@@ -394,7 +451,7 @@ class YSPermissionAdmin {
 								<th class="ysca-table__drag"></th>
 								<th class="ysca-table__order">順序</th>
 								<th>選單</th>
-								<th class="ysca-table__roles">角色可見</th>
+								<th class="ysca-table__roles">誰看得到</th>
 								<?php if ( 'wp_native' === $tab ) : ?>
 									<th class="ysca-table__color">顏色</th>
 								<?php else : ?>
@@ -469,12 +526,24 @@ class YSPermissionAdmin {
 			}
 		);
 
+		// v1.7.0：自訂連結（側欄上的代稱＝YSMenuRouter::custom_menu_key()）。只認側欄上真的是自訂連結的那一項：
+		// 網址跟現有選單相同而沒加進側欄的，不會把那個真的選單畫成自訂連結。
+		$custom_by_key = [];
+		foreach ( YSPermissionController::sanitize_custom_items( (array) ( YSMenuRouter::get_config()['custom_items']['items'] ?? [] ) ) as $ci ) {
+			$custom_by_key[ YSMenuRouter::slug_key( YSMenuRouter::custom_menu_key( $ci['url'] ) ) ] = $ci;
+		}
+
 		foreach ( $render_list as $entry ) {
 			if ( 'separator' === $entry['kind'] ) {
 				self::render_separator_row( 'wp_native', $entry['title'], $entry['order'] );
 				continue;
 			}
-			$extra = [ 'copy' => $copy_entries[ (string) ( $entry['item']['slug'] ?? '' ) ] ?? null ];
+			$item_slug = (string) ( $entry['item']['slug'] ?? '' );
+			$copy      = $copy_entries[ $item_slug ] ?? null;
+			$extra     = [
+				'copy'   => $copy,
+				'custom' => ( null === $copy && ! empty( $entry['item']['custom'] ) ) ? ( $custom_by_key[ YSMenuRouter::slug_key( $item_slug ) ] ?? null ) : null,
+			];
 			self::render_item_row( 'wp_native', $entry['item'], $entry['saved'], $entry['order'], $promoted_urls, $extra );
 		}
 	}
@@ -580,9 +649,10 @@ class YSPermissionAdmin {
 		}
 		foreach ( $saved_separators as $sep ) {
 			$skeleton[] = [
-				'kind'  => 'separator',
-				'order' => (int) ( $sep['order'] ?? 0 ),
-				'title' => (string) ( $sep['title'] ?? '' ),
+				'kind'    => 'separator',
+				'order'   => (int) ( $sep['order'] ?? 0 ),
+				'title'   => (string) ( $sep['title'] ?? '' ),
+				'subhead' => ! empty( $sep['subhead'] ), // v1.7.0：子選單分組標題。
 			];
 		}
 		usort(
@@ -682,11 +752,19 @@ class YSPermissionAdmin {
 			array_splice( $tokens, $at, 0, [ [ 'type' => $d['kind'], 'owner' => $d['key'], 'desc' => $d ] ] );
 		}
 
+		// v1.7.0：有子選單的頂層（不能降為子選單顯示，display_parent 只給沒有其他子選單的頂層）。
+		$has_subs = [];
+		foreach ( $tokens as $token ) {
+			if ( 'sub' === $token['type'] ) {
+				$has_subs[ (string) $token['owner'] ] = true;
+			}
+		}
+
 		// 5) 輸出。
 		foreach ( $tokens as $token ) {
 			switch ( $token['type'] ) {
 				case 'separator':
-					self::render_separator_row( 'ys_cart', (string) $token['entry']['title'], (int) $token['entry']['order'] );
+					self::render_separator_row( 'ys_cart', (string) $token['entry']['title'], (int) $token['entry']['order'], ! empty( $token['entry']['subhead'] ) );
 					break;
 				case 'self':
 					$s = $token['self'];
@@ -713,7 +791,8 @@ class YSPermissionAdmin {
 					self::render_item_row( 'ys_cart', $item, $token['entry']['saved'], (int) $token['entry']['order'], [], $extra );
 					break;
 				default:
-					self::render_item_row( 'ys_cart', $token['entry']['item'], $token['entry']['saved'], (int) $token['entry']['order'], [], [] );
+					$top_slug = (string) ( $token['entry']['item']['slug'] ?? '' );
+					self::render_item_row( 'ys_cart', $token['entry']['item'], $token['entry']['saved'], (int) $token['entry']['order'], [], [ 'can_demote' => ! isset( $has_subs[ $top_slug ] ) ] );
 			}
 		}
 	}
@@ -942,7 +1021,35 @@ class YSPermissionAdmin {
 		$copied    = ! empty( $extra['copied'] );
 		$copy_icon = (string) ( $saved['icon'] ?? '' );
 
+		// v1.7.0：逐項目權限、開新分頁、自訂連結、換到別的上層顯示。
+		$access         = YSMenuRouter::sanitize_access( $saved['access'] ?? null );
+		$new_tab        = '_blank' === ( $saved['target'] ?? null );
+		$custom         = ( 'wp_native' === $tab && is_array( $extra['custom'] ?? null ) ) ? $extra['custom'] : null;
+		$own_page       = YSMenuRouter::is_own_page( $slug );
+		$display_parent = (string) ( $saved['display_parent'] ?? '' );
+		$can_move       = 'wp_native' !== $tab && ! $own_page && ( 'sub' === $level || ! empty( $extra['can_demote'] ) );
+		// v1.7.0：「僅限本人」顯示側欄實際生效的綁定（同一個選單在兩個分頁都有列時，後面的列蓋前面）；存檔時兩個分頁一起改。
+		// 複製項只看自己的列（它只管複製項）。
+		if ( null === $copy ) {
+			$self_only_uid = self::$self_only_map[ YSMenuRouter::slug_key( $slug ) ] ?? 0;
+		}
+
 		$attrs = '';
+		if ( isset( $item['cap'] ) && '' !== (string) $item['cap'] ) {
+			$attrs .= ' data-cap="' . esc_attr( (string) $item['cap'] ) . '"';
+		}
+		if ( null !== $custom ) {
+			// data-slug 是選單代稱（YSMenuRouter::custom_menu_key()），data-custom-url 是網址（存檔時分辨刪掉的與沒列出來的）。
+			$attrs .= ' data-custom="1" data-custom-url="' . esc_attr( (string) $custom['url'] ) . '"';
+		}
+		// v1.7.0：YS CART V3 寫進這一列的可見規則（visibility）：本外掛保留、不執行；移除這一列會一起刪掉，表上標出來。
+		$core_rules = isset( $saved['visibility'] );
+		if ( $core_rules ) {
+			$attrs .= ' data-core-rules="1"';
+		}
+		if ( 'wp_native' === $tab && 'sub' !== $level && null === $copy ) {
+			$attrs .= ' data-default-icon="' . esc_attr( (string) ( $item['icon'] ?? '' ) ) . '"';
+		}
 		if ( null !== $parent_slug ) {
 			$attrs .= ' data-parent="' . esc_attr( $parent_slug ) . '"';
 		}
@@ -974,7 +1081,7 @@ class YSPermissionAdmin {
 						<span class="menu-indent">&#8627;</span>
 					<?php endif; ?>
 					<strong><?php echo esc_html( $title ); ?></strong>
-					<code><?php echo esc_html( null !== $copy ? $copy['slug'] : $slug ); ?></code>
+					<code><?php echo esc_html( null !== $copy ? $copy['slug'] : ( null !== $custom ? (string) $custom['url'] : $slug ) ); ?></code>
 					<span class="level-badge<?php echo $is_sub ? ' level-sub' : ''; ?>"><?php echo $is_sub ? '子頁' : '頂層'; ?></span>
 					<?php if ( $is_promoted_top ) : ?>
 						<span class="level-badge level-promoted" title="此項由「全部選單（含子選單）」的子頁提升而來；到該分頁取消勾選「升頂層」即可還原">已提升</span>
@@ -983,24 +1090,64 @@ class YSPermissionAdmin {
 						<span class="level-badge level-copy" title="從子選單複製到主選單的項目，連到同一頁；原子選單仍在原位">複製</span>
 						<span class="ys-ec-copy-source">原位置：<?php echo esc_html( $copy['parent_title'] ); ?> › <?php echo esc_html( $copy['title'] ); ?></span>
 					<?php endif; ?>
+					<?php if ( null !== $custom ) : ?>
+						<span class="level-badge level-custom" title="自己加的連結（不是外掛或 WordPress 註冊的選單）">自訂連結</span>
+					<?php endif; ?>
+					<?php if ( $core_rules ) : ?>
+						<span class="level-badge level-core" title="這一列有 YS CART 寫入的可見規則：本外掛原樣保留、不執行。從清單移除這一列會一起刪掉。">YS CART 規則</span>
+					<?php endif; ?>
+					<?php if ( ! empty( $item['access_hidden'] ) ) : ?>
+						<span class="level-badge level-core" title="「誰看得到」把你也排除了：你的側欄看不到這一項，這裡照樣列出，改回來後按「儲存設定」。">你目前看不到</span>
+					<?php endif; ?>
+					<span class="ys-ec-preview-badges" aria-live="polite"></span>
 				</div>
-				<input type="text" class="title-override-inline ys-ec-title-override"
-					value="<?php echo esc_attr( $title_override ); ?>"
-					placeholder="自訂顯示名稱（留空保留原名）">
-				<?php if ( null !== $copy ) : ?>
+				<?php if ( null !== $custom ) : ?>
+					<div class="ys-ec-custom-fields">
+						<input type="text" class="ys-ec-custom-title" value="<?php echo esc_attr( (string) $custom['title'] ); ?>"
+							placeholder="連結名稱（必填）" aria-label="連結名稱">
+						<input type="text" class="ys-ec-custom-url" value="<?php echo esc_attr( (string) $custom['url'] ); ?>"
+							placeholder="網址：https://… 或 edit.php?post_status=draft" aria-label="連結網址" spellcheck="false">
+					</div>
+				<?php else : ?>
+					<input type="text" class="title-override-inline ys-ec-title-override"
+						value="<?php echo esc_attr( $title_override ); ?>"
+						placeholder="自訂顯示名稱（留空保留原名）">
+				<?php endif; ?>
+				<?php if ( 'wp_native' === $tab ) : // v1.7.0：任何頂層項都可以換圖示（以前只有複製項）。 ?>
 					<div class="ys-ec-icon-field">
 						<button type="button" class="ys-ec-icon-btn" aria-expanded="false" title="選擇圖示">
 							<span class="ys-ec-icon-preview" aria-hidden="true"></span>
 							<span class="screen-reader-text">選擇圖示</span>
 						</button>
 						<input type="text" class="ys-ec-icon-input" value="<?php echo esc_attr( $copy_icon ); ?>"
-							placeholder="圖示：留空沿用原父選單（dashicons-… 或圖片網址）" spellcheck="false">
+							placeholder="<?php echo esc_attr( null !== $copy ? '圖示：留空沿用原父選單（dashicons-… 或圖片網址）' : '圖示：留空沿用原本的圖示（dashicons-… 或圖片網址）' ); ?>" spellcheck="false">
 					</div>
 				<?php endif; ?>
+				<div class="ys-ec-row-options">
+					<label class="ys-ec-newtab-label" title="點這個選單時在新分頁打開">
+						<input type="checkbox" class="ys-ec-newtab" <?php checked( $new_tab ); ?>>
+						開新分頁
+					</label>
+					<?php if ( $can_move ) : ?>
+						<label class="ys-ec-display-parent-field" title="<?php echo esc_attr( 'sub' === $level ? '把這個子選單放到別的頂層選單底下顯示（連結與權限不變）' : '把這個頂層選單放到別的頂層選單底下，變成子選單顯示（只限沒有其他子選單的頂層）' ); ?>">
+							顯示在
+							<select class="ys-ec-display-parent">
+								<option value=""><?php echo esc_html( 'sub' === $level ? '原本的位置' : '主選單（不搬）' ); ?></option>
+								<?php if ( '' !== $display_parent ) : ?>
+									<option value="<?php echo esc_attr( $display_parent ); ?>" selected><?php echo esc_html( self::$top_titles_for_select[ $display_parent ] ?? $display_parent ); ?></option>
+								<?php endif; ?>
+							</select>
+						</label>
+					<?php endif; ?>
+				</div>
 			</td>
 			<td>
 				<div class="role-cb-group">
-					<?php echo self::role_picker_html( $roles ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- role_picker_html() 內已逐欄 escape ?>
+					<?php
+					// v1.7.0：「誰看得到」面板；本外掛自己的頁面只有角色（access 對它不生效，誰能用本外掛由「外掛使用權限」管）。
+					// 複製項、自訂連結的規則只管側欄上的那個連結，面板不提供「只藏選單」。
+					echo $own_page ? self::role_picker_html( $roles ) : self::access_picker_html( $roles, $access, null !== $copy || null !== $custom ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- 兩個函式內已逐欄 escape
+					?>
 				</div>
 					<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）">
 						<input type="checkbox" class="ys-ec-self-only" <?php checked( $self_only_uid > 0 ); ?>>
@@ -1021,7 +1168,7 @@ class YSPermissionAdmin {
 			<?php endif; ?>
 			<td class="ys-ec-hide-cb">
 				<input type="checkbox" class="ys-ec-hide-checkbox"
-					title="<?php echo esc_attr( null !== $copy ? '對管理員以外的帳號隱藏這個複製項（原子選單與頁面不受影響）' : '勾選後完全隱藏（含 sidebar + 直接訪問）' ); ?>"
+					title="<?php echo esc_attr( null !== $copy ? '對管理員以外的帳號隱藏這個複製項（原子選單與頁面不受影響）' : ( null !== $custom ? '對管理員以外的帳號隱藏這個連結（那一頁本身不受影響）' : '勾選後完全隱藏（含 sidebar + 直接訪問）' ) ); ?>"
 					<?php checked( $hide ); ?>>
 			</td>
 			<td class="ys-ec-row-actions">
@@ -1149,6 +1296,9 @@ class YSPermissionAdmin {
 		$title_override  = (string) ( $own['title_override'] ?? '' );
 		$icon           = (string) ( $own['icon'] ?? '' );
 		$after          = isset( $own['after'] ) ? (string) $own['after'] : '';
+		// v1.7.0：逐項目權限（複製列用自己的列，提升列用子選單列，跟角色一樣）、開新分頁（存在頂層那一列）。
+		$access         = YSMenuRouter::sanitize_access( $source['access'] ?? null );
+		$new_tab        = '_blank' === ( $own['target'] ?? null );
 
 		$attrs  = ' data-row-kind="' . esc_attr( $d['kind'] ) . '"';
 		$attrs .= ' data-copy-key="' . esc_attr( $d['key'] ) . '"';
@@ -1194,10 +1344,16 @@ class YSPermissionAdmin {
 					<input type="text" class="ys-ec-icon-input" value="<?php echo esc_attr( $icon ); ?>"
 						placeholder="圖示：留空沿用原父選單（dashicons-… 或圖片網址）" spellcheck="false">
 				</div>
+				<div class="ys-ec-row-options">
+					<label class="ys-ec-newtab-label" title="點這個選單時在新分頁打開">
+						<input type="checkbox" class="ys-ec-newtab" <?php checked( $new_tab ); ?>>
+						開新分頁
+					</label>
+				</div>
 			</td>
 			<td>
 				<div class="role-cb-group">
-					<?php echo self::role_picker_html( $roles ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- role_picker_html() 內已逐欄 escape ?>
+					<?php echo self::access_picker_html( $roles, $access, $is_copy ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- access_picker_html() 內已逐欄 escape ?>
 				</div>
 				<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）">
 					<input type="checkbox" class="ys-ec-self-only" <?php checked( $self_only_uid > 0 ); ?>>
@@ -1230,13 +1386,13 @@ class YSPermissionAdmin {
 	/**
 	 * 渲染 separator row（v2.39.0：與 main row colspan 對齊）
 	 */
-	private static function render_separator_row( string $tab, string $title, int $order ): void {
+	private static function render_separator_row( string $tab, string $title, int $order, bool $subhead = false ): void {
 		// 主 row column 數：兩 tab 皆 7（wp_native: drag/order/menu/role/color/hide/del；
 		// ys_cart: drag/order/menu/role/升頂層/hide/del）
 		// separator 的 colspan = main 中間欄（menu+role+color|promote+hide）= 4
 		$colspan = 4;
 		?>
-		<tr data-separator="1" class="ys-ec-separator-row ysca-separator-row">
+		<tr data-separator="1" class="ys-ec-separator-row ysca-separator-row<?php echo $subhead ? ' ys-ec-subhead-row' : ''; ?>"<?php echo $subhead ? ' data-subhead="1"' : ''; ?>>
 			<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>
 			<td>
 				<input type="number" class="ys-ec-order-input" value="<?php echo esc_attr( (string) $order ); ?>"
@@ -1248,7 +1404,11 @@ class YSPermissionAdmin {
 						value="<?php echo esc_attr( $title ); ?>"
 						placeholder="標題文字">
 					&mdash;</strong>
-				<em class="ysca-separator-note ysca-text-muted">(分隔列)</em>
+				<?php if ( $subhead ) : // v1.7.0：子選單分組標題：拖到某個頂層選單的子選單之間，側欄子選單裡會顯示成不可點的小標。 ?>
+					<em class="ysca-separator-note ysca-text-muted">(子選單標題：拖到某個選單的子選單之間；後面沒有子選單時不顯示)</em>
+				<?php else : ?>
+					<em class="ysca-separator-note ysca-text-muted">(分隔列)</em>
+				<?php endif; ?>
 			</td>
 			<td>
 				<button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-delete-row" title="從清單移除">×</button>
@@ -1628,7 +1788,8 @@ class YSPermissionAdmin {
 		$labels  = [];
 		$html    = '';
 		foreach ( $choices as $key => $label ) {
-			$on = in_array( $key, $roles, true );
+			$key = (string) $key; // 純數字的角色鍵在 PHP 陣列裡是整數鍵，存下的是字串。
+			$on  = in_array( $key, $roles, true );
 			if ( $on ) {
 				$labels[] = $label;
 			}
@@ -1642,6 +1803,160 @@ class YSPermissionAdmin {
 			$html    .= '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' . esc_attr( $key ) . '"' . checked( true, true, false ) . '> ' . esc_html( $key . '（角色已不存在）' ) . '</label>';
 		}
 		return '<details class="ys-ec-roles"><summary class="ys-ec-roles__sum" title="沒有勾選＝不限角色">' . esc_html( self::role_summary( $labels ) ) . '</summary><div class="ys-ec-roles__panel">' . $html . '</div></details>';
+	}
+
+	/** v1.7.0：「誰看得到」面板的流水號（每一列的單選鈕 name 要不同）。 */
+	private static int $access_seq = 0;
+
+	/** v1.7.0：「顯示在」下拉選單用的頂層名稱：slug => 名稱（render_rest_ui() 準備）。 @var array<string,string> */
+	private static array $top_titles_for_select = [];
+
+	/** v1.7.0：側欄「僅限本人」實際生效的帳號：鍵 => 帳號（render_rest_ui() 準備；YSMenuRouter::sidebar_self_only_map()）。 @var array<string,int> */
+	private static array $self_only_map = [];
+
+	/** v1.7.0：複製項、自訂連結的「誰看得到」面板說明（JS 的 LINK_ONLY_NOTE 相同）。 */
+	private const LINK_ONLY_NOTE = '這一列只管側欄上的這個連結；直接開網址照那一頁原本的設定。';
+
+	/**
+	 * v1.7.0：「僅限本人」兩個分頁不一致的選單數：側欄實際生效的綁定（後面的列蓋前面）跟直接開網址看的綁定（第一列）不同。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function self_only_mismatch_count( array $config ): int {
+		$slugs = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $row ) {
+				if ( is_array( $row ) && empty( $row['separator'] ) && (int) ( $row['self_only_uid'] ?? 0 ) > 0 && is_string( $row['slug'] ?? null ) ) {
+					$slugs[ YSMenuRouter::slug_key( $row['slug'] ) ] = true;
+				}
+			}
+		}
+		$n = 0;
+		foreach ( array_keys( $slugs ) as $slug ) {
+			if ( YSMenuRouter::effective_self_only_uid( (string) $slug, $config ) !== YSMenuRouter::url_self_only_uid( (string) $slug, $config ) ) {
+				++$n;
+			}
+		}
+		return $n;
+	}
+
+	/** v1.7.0：帳號 ID → 面板上顯示的名稱（同一個請求查一次）。 @var array<int,string> */
+	private static array $user_labels = [];
+
+	/**
+	 * v1.7.0：「誰看得到」面板（取代角色面板）：不限／只有／除了 × 角色＋帳號，加上「也套用到管理員」「只藏選單」。
+	 *
+	 * 角色勾選框跟角色面板同一個寫法（.ys-ec-role-cb＋data-role），勾的是目前模式那一邊的角色。存檔時（JS readAccess()）
+	 * 只在舊欄位表達不了時才送 access；「只有這些角色」照舊存 roles。這一列的 access 同時有「只有」與「除了」兩邊的名單時
+	 * （匯入或手動寫入），面板標示 data-complex，沒動過就原樣送回。本外掛自己的頁面不用這個面板（access 對它不生效）。
+	 *
+	 * @param array<int, mixed>        $roles     這一列存的角色（舊欄位）。
+	 * @param array<string,mixed>|null $access    這一列存的 access（YSMenuRouter::sanitize_access() 清過的）。
+	 * @param bool                     $link_only 複製項、自訂連結：規則只管側欄上的這個連結（直接開網址照那一頁原本的設定），
+	 *                                            不提供「只藏選單」，改放一行說明。
+	 */
+	private static function access_picker_html( array $roles, ?array $access, bool $link_only = false ): string {
+		$choices = self::role_choices();
+		if ( null !== $access ) {
+			$mode      = 'deny' === $access['others'] ? 'only' : 'except';
+			$side      = 'only' === $mode ? $access['allow'] : $access['deny'];
+			$other     = 'only' === $mode ? $access['deny'] : $access['allow'];
+			$picked    = $side['roles'];
+			$users     = $side['users'];
+			$admins    = 'apply' === $access['super_admin'];
+			$menu_only = ! $link_only && 'menu_only' === $access['scope'];
+			$complex   = [] !== $other['roles'] || [] !== $other['users'];
+		} else {
+			$picked    = array_values( array_filter( $roles, static fn( $r ): bool => is_string( $r ) && '' !== $r ) );
+			$mode      = [] !== $picked ? 'only' : 'any';
+			$users     = [];
+			$admins    = false;
+			$menu_only = false;
+			$complex   = false;
+		}
+
+		$labels = [];
+		$boxes  = '';
+		foreach ( $choices as $key => $label ) {
+			$key = (string) $key;
+			$on  = in_array( $key, $picked, true );
+			if ( $on ) {
+				$labels[] = $label;
+			}
+			$boxes .= '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' . esc_attr( $key ) . '"' . checked( $on, true, false ) . '> ' . esc_html( $label ) . '</label>';
+		}
+		foreach ( $picked as $key ) {
+			if ( isset( $choices[ $key ] ) ) {
+				continue;
+			}
+			$labels[] = $key;
+			$boxes   .= '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' . esc_attr( $key ) . '"' . checked( true, true, false ) . '> ' . esc_html( $key . '（角色已不存在）' ) . '</label>';
+		}
+		$chips = '';
+		foreach ( $users as $uid ) {
+			$name     = self::user_label( (int) $uid );
+			$labels[] = $name;
+			$chips   .= '<span class="ys-ec-user-chip" data-uid="' . (int) $uid . '" data-name="' . esc_attr( $name ) . '">' . esc_html( $name )
+				. '<button type="button" class="ys-ec-user-chip__x" aria-label="' . esc_attr( '移除 ' . $name ) . '">×</button></span>';
+		}
+
+		$n     = ++self::$access_seq;
+		$modes = '';
+		foreach ( [ 'any' => '不限', 'only' => '只有', 'except' => '除了' ] as $value => $text ) {
+			$modes .= '<label><input type="radio" class="ys-ec-access-mode" name="ys-ec-access-mode-' . $n . '" value="' . $value . '"' . checked( $mode, $value, false ) . '> ' . esc_html( $text ) . '</label>';
+		}
+
+		return '<details class="ys-ec-roles ys-ec-access" data-mode="' . esc_attr( $mode ) . '"'
+			. ( null !== $access ? ' data-access="' . esc_attr( (string) wp_json_encode( $access ) ) . '"' : '' )
+			. ( $complex ? ' data-complex="1"' : '' ) . '>'
+			. '<summary class="ys-ec-roles__sum" title="誰看得到這個選單">' . esc_html( self::access_summary( $mode, $labels, $admins, $menu_only ) ) . '</summary>'
+			. '<div class="ys-ec-roles__panel">'
+			. '<div class="ys-ec-access__modes" role="radiogroup" aria-label="誰看得到">' . $modes . '</div>'
+			. '<div class="ys-ec-access__roles">' . $boxes . '</div>'
+			. '<div class="ys-ec-access__users"><span class="ys-ec-access__chips">' . $chips . '</span>'
+			. '<input type="search" class="ys-ec-access-user-search" placeholder="加帳號：輸入名稱或 email" autocomplete="off" aria-label="加帳號">'
+			. '<ul class="ys-ec-access__results" hidden></ul></div>'
+			. '<label class="ys-ec-access__opt"><input type="checkbox" class="ys-ec-access-admins"' . checked( $admins, true, false ) . '> 也套用到管理員</label>'
+			. ( $link_only
+				? '<p class="ys-ec-access__note">' . esc_html( self::LINK_ONLY_NOTE ) . '</p>'
+				: '<label class="ys-ec-access__opt"><input type="checkbox" class="ys-ec-access-menu-only"' . checked( $menu_only, true, false ) . '> 只藏選單（網址照樣進得去）</label>' )
+			. ( $complex ? '<p class="ys-ec-access__note">這一列同時有「只有」與「除了」兩種名單（匯入或手動寫入的規則）；沒改動就照原樣保留，改動後改成上面選的模式。</p>' : '' )
+			. '</div></details>';
+	}
+
+	/**
+	 * v1.7.0：「誰看得到」面板收合時的摘要（JS 的 accessSummary() 同一套規則）。
+	 *
+	 * @param array<int, string> $labels 勾選的角色名稱與帳號名稱。
+	 */
+	private static function access_summary( string $mode, array $labels, bool $admins, bool $menu_only ): string {
+		if ( 'any' === $mode ) {
+			return '不限';
+		}
+		if ( [] === $labels ) {
+			$text = 'only' === $mode ? ( $admins ? '沒有人' : '只有管理員' ) : '不限';
+		} else {
+			$list = count( $labels ) <= 2 ? implode( '、', $labels ) : $labels[0] . ' 等 ' . count( $labels ) . ' 項';
+			$text = ( 'only' === $mode ? '只有 ' : '除了 ' ) . $list;
+		}
+		if ( $admins && ! ( 'only' === $mode && [] === $labels ) ) {
+			$text .= '（含管理員）';
+		}
+		if ( $menu_only ) {
+			$text .= '・只藏選單';
+		}
+		return $text;
+	}
+
+	/** v1.7.0：帳號在面板上的名稱：顯示名稱（登入名稱）；站上沒有這個帳號時標示出來。 */
+	private static function user_label( int $uid ): string {
+		if ( ! isset( self::$user_labels[ $uid ] ) ) {
+			$user                      = $uid > 0 ? get_userdata( $uid ) : false;
+			self::$user_labels[ $uid ] = $user
+				? ( (string) $user->display_name !== (string) $user->user_login ? $user->display_name . '（' . $user->user_login . '）' : (string) $user->user_login )
+				: '#' . $uid . '（帳號不存在）';
+		}
+		return self::$user_labels[ $uid ];
 	}
 
 	/**
@@ -1665,12 +1980,18 @@ class YSPermissionAdmin {
 	 * @return array<string, string>
 	 */
 	public static function role_choices(): array {
+		if ( null !== self::$role_choices_cache ) {
+			return self::$role_choices_cache;
+		}
 		$out = [];
 		foreach ( self::all_role_keys_with_label() as $key => $name ) {
 			$out[ $key ] = function_exists( 'translate_user_role' ) ? (string) translate_user_role( $name ) : $name;
 		}
-		return $out;
+		return self::$role_choices_cache = $out;
 	}
+
+	/** v1.7.0：role_choices() 的結果（每一列都會用到，同一個請求只算一次）。 @var array<string,string>|null */
+	private static ?array $role_choices_cache = null;
 
 	/**
 	 * 取得全部 WP role keys（含 display label）

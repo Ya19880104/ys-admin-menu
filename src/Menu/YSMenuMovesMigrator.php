@@ -812,6 +812,7 @@ final class YSMenuMovesMigrator {
 			} else {
 				$from      = $move['from'];
 				$p_rules   = self::effective_rules( $snapshot, $from );
+				$p_access  = self::parent_access( $snapshot, $from ); // v1.7.0：舊上層的 access（改成只藏選單帶給子選單）。
 				$from_rows = self::find_rows( $items, $slug, $from );
 				// 搬之前新上層底下就有的同一頁的列（例如搭配 1.4.0 時在新選單存過一次）。在搬這一筆的列之前先找好：
 				// 這一筆搬過去的列不算進來（同一頁兩列各自原樣搬過去，不互相合併）。
@@ -867,9 +868,13 @@ final class YSMenuMovesMigrator {
 							$inherited[ $slug ] = $merged['inherit'];
 							$log[]              = [ 'type' => 'bind', 'slug' => $slug, 'from' => $from, 'user_id' => $merged['inherit'] ];
 						}
+						if ( self::carry_access( $items, $native, $slug, $p_access ) ) {
+							$notice['rules'] = true;
+							$log[]           = [ 'type' => 'access', 'slug' => $slug, 'from' => $from ];
+						}
 						$gates[ $slug ] = [ 'from' => $from, 'to' => $to, 'sub' => true ];
 					}
-				} elseif ( $old && $first && self::rules_restrict( $p_rules ) && ! self::slug_has_rows( $items, $native, $slug, $gone ) ) {
+				} elseif ( $old && $first && ( self::rules_restrict( $p_rules ) || null !== $p_access ) && ! self::slug_has_rows( $items, $native, $slug, $gone ) ) {
 					// 子選單沒有任何已存的列，舊上層有規則，而且這一筆是舊分組時存下的：新增一列只帶規則、不寫順序。
 					$merged  = self::combine_rules( self::no_rules(), $p_rules );
 					[ $row ] = self::apply_merged( self::rules_only_row( $slug, $to, false ), $merged );
@@ -877,6 +882,9 @@ final class YSMenuMovesMigrator {
 					$notice['moved'][] = $slug;
 					$notice['rules']   = true;
 					$log[]             = [ 'type' => 'rules_row', 'slug' => $slug, 'from' => $from, 'to' => $to ];
+					if ( self::carry_access( $items, $native, $slug, $p_access ) ) {
+						$log[] = [ 'type' => 'access', 'slug' => $slug, 'from' => $from ];
+					}
 					if ( $merged['inherit'] > 0 ) {
 						$inherited[ $slug ] = $merged['inherit'];
 						$log[]              = [ 'type' => 'bind', 'slug' => $slug, 'from' => $from, 'user_id' => $merged['inherit'] ];
@@ -1217,6 +1225,63 @@ final class YSMenuMovesMigrator {
 	 */
 	private static function no_rules(): array {
 		return [ 'hide' => false, 'roles' => null, 'first' => 0, 'last' => 0, 'uids' => [] ];
+	}
+
+	/**
+	 * v1.7.0：舊上層的逐項目權限（access）。子選單原本跟著上層一起被藏（上層不在側欄，底下的子選單也不顯示），搬到新上層之後
+	 * 要照樣藏：把上層的 access 改成「只藏選單」帶給子選單（子選單的網址原本就不受上層的 access 影響，不會變嚴）。
+	 * 上層有好幾列不同的 access 時帶第一列。RULES_VERSION 不動：1.7.0 以前沒有 access，已套用的搬家照舊跳過。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,mixed>|null
+	 */
+	private static function parent_access( array $config, string $from ): ?array {
+		$key = YSMenuRouter::slug_key( $from );
+		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
+			foreach ( self::list_section( $config, $section ) as $row ) {
+				if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) || YSMenuRouter::slug_key( $row['slug'] ) !== $key ) {
+					continue;
+				}
+				$access = YSMenuRouter::sanitize_access( $row['access'] ?? null );
+				if ( null !== $access ) {
+					$access['scope'] = 'menu_only';
+					return $access;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * v1.7.0：子選單（兩個分頁）都沒有 access 時，把 parent_access() 寫到它在全部選單分頁的每一列（只加不減）。回傳有沒有寫。
+	 *
+	 * @param array<int,mixed>         $items
+	 * @param array<int,mixed>         $native
+	 * @param array<string,mixed>|null $access
+	 */
+	private static function carry_access( array &$items, array $native, string $slug, ?array $access ): bool {
+		if ( null === $access ) {
+			return false;
+		}
+		$key  = YSMenuRouter::slug_key( $slug );
+		$rows = [];
+		foreach ( [ $items, $native ] as $n => $list ) {
+			foreach ( $list as $i => $row ) {
+				if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) || YSMenuRouter::slug_key( $row['slug'] ) !== $key ) {
+					continue;
+				}
+				if ( null !== YSMenuRouter::sanitize_access( $row['access'] ?? null ) ) {
+					return false; // 子選單自己有 access：不動。
+				}
+				if ( 0 === $n ) {
+					$rows[] = $i;
+				}
+			}
+		}
+		foreach ( $rows as $i ) {
+			$items[ $i ]['access'] = $access;
+		}
+		return [] !== $rows;
 	}
 
 	/**
@@ -1936,7 +2001,7 @@ final class YSMenuMovesMigrator {
 	}
 
 	// ─────────────────────────────────────────────
-	// 後台提醒（只給 manage_options、可以關掉）
+	// 後台提醒（只給能使用本外掛的帳號（v1.7.0 起看 YSAccess::can_manage()）、可以關掉）
 	// ─────────────────────────────────────────────
 
 	/**

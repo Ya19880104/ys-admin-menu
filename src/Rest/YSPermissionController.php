@@ -42,10 +42,19 @@ class YSPermissionController {
 	private const MAX_TOP_COPIES = 100;
 
 	/** v1.7.0：sanitize_native_items() 認得的欄位（keep_unknown_fields() 用；其他欄位存檔時照已存的值保留）。 */
-	private const NATIVE_FIELDS = [ 'slug', 'title_override', 'order', 'color', 'roles', 'hide', 'self_only_uid', 'icon', 'after' ];
+	private const NATIVE_FIELDS = [ 'slug', 'title_override', 'order', 'color', 'roles', 'hide', 'self_only_uid', 'icon', 'after', 'access', 'target' ];
 
 	/** v1.7.0：sanitize_ys_cart_items() 認得的欄位。 */
-	private const YS_CART_FIELDS = [ 'slug', 'order', 'roles', 'level', 'parent_slug', 'hide', 'self_only_uid', 'promote_to_top', 'title_override' ];
+	private const YS_CART_FIELDS = [ 'slug', 'order', 'roles', 'level', 'parent_slug', 'hide', 'self_only_uid', 'promote_to_top', 'title_override', 'access', 'target', 'display_parent' ];
+
+	/** v1.7.0：設定格式版本。1.7.0 起用設定頁存檔或匯入時寫進設定（1.6.0 以前沒有這個鍵＝第 1 版）。 */
+	public const SCHEMA_VERSION = 2;
+
+	/** v1.7.0：第一次用 1.7.0 存檔前，原本（第 1 版）設定的備份。只寫一次、不自動載入；解除安裝時一併清除。 */
+	public const V1_BACKUP_OPTION = 'ys_admin_menu_config_v1_backup';
+
+	/** v1.7.0：以某位使用者試算一次最多幾列。 */
+	private const MAX_PREVIEW_ROWS = 600;
 
 	/**
 	 * 註冊路由（由 YSRouteRegistrar 在 rest_api_init 呼叫）
@@ -81,6 +90,13 @@ class YSPermissionController {
 		register_rest_route( self::NAMESPACE_NAME, '/admin/permissions/import', [
 			'methods'             => 'POST',
 			'callback'            => [ self::class, 'import_settings' ],
+			'permission_callback' => [ YSRestAuth::class, 'permission_admin' ],
+		] );
+
+		// v1.7.0：以某位使用者試算（只讀：照目前已存的設定算出每一列側欄看不看得到、網址進不進得去，不切換身分）。
+		register_rest_route( self::NAMESPACE_NAME, '/admin/permissions/preview', [
+			'methods'             => 'POST',
+			'callback'            => [ self::class, 'preview_for_user' ],
 			'permission_callback' => [ YSRestAuth::class, 'permission_admin' ],
 		] );
 	}
@@ -145,6 +161,7 @@ class YSPermissionController {
 		}
 
 		// 1. menu（選單+權限）
+		$warnings = [];
 		if ( isset( $payload['menu'] ) && is_array( $payload['menu'] ) ) {
 			$menu     = $payload['menu'];
 			$existing = [];
@@ -159,6 +176,15 @@ class YSPermissionController {
 			if ( ! empty( $copies ) ) {
 				$existing['top_copies']['items'] = $copies;
 			}
+			// v1.7.0：自訂連結、主選單分頁的預設行為。舊版匯出檔沒有＝沒有。
+			$custom = self::sanitize_custom_items( (array) ( $menu['custom_items']['items'] ?? [] ) );
+			if ( ! empty( $custom ) ) {
+				$existing['custom_items']['items'] = $custom;
+			}
+			$defaults = self::sanitize_defaults( $menu['defaults'] ?? null );
+			if ( ! empty( $defaults ) ) {
+				$existing['defaults'] = $defaults;
+			}
 
 			// 維持 v2.37.1 legacy fallback（與 save_menu_config 一致）
 			$legacy_map = [];
@@ -170,7 +196,9 @@ class YSPermissionController {
 			}
 			$existing['wp_native']['user_overrides'] = $legacy_map;
 
-			YSMenuConfigBridge::save_authoritative( $existing );
+			// v1.7.0：設定裡指到這個站上沒有的帳號（僅限本人、指定帳號、使用者覆寫）：照樣匯入，回傳提示讓管理員檢查。
+			$warnings = self::unknown_user_warnings( $existing );
+			YSMenuConfigBridge::save_authoritative( self::stamp_schema( $existing ) );
 		}
 
 		// 2. theme（原生選單樣式）
@@ -187,7 +215,282 @@ class YSPermissionController {
 			self::import_whitelabel_options( $payload['whitelabel'] );
 		}
 
-		return new \WP_REST_Response( [ 'success' => true, 'imported_at' => time() ], 200 );
+		$out = [ 'success' => true, 'imported_at' => time() ];
+		if ( ! empty( $warnings ) ) {
+			$out['warnings'] = $warnings;
+		}
+		return new \WP_REST_Response( $out, 200 );
+	}
+
+	/**
+	 * v1.7.0：設定裡指到的帳號 ID（僅限本人、逐項目權限的指定帳號、使用者覆寫），這個站上沒有的列成提示。
+	 * 匯入別的站的設定時，帳號 ID 通常對不上：規則照樣存，但不會套到預期的人。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<int,string>
+	 */
+	private static function unknown_user_warnings( array $config ): array {
+		$ids = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				if ( (int) ( $row['self_only_uid'] ?? 0 ) > 0 ) {
+					$ids[ (int) $row['self_only_uid'] ] = true;
+				}
+				$access = YSMenuRouter::sanitize_access( $row['access'] ?? null );
+				foreach ( null !== $access ? array_merge( $access['allow']['users'], $access['deny']['users'] ) : [] as $uid ) {
+					$ids[ (int) $uid ] = true;
+				}
+			}
+		}
+		foreach ( (array) ( $config['user_overrides']['items'] ?? [] ) as $uo ) {
+			if ( is_array( $uo ) && (int) ( $uo['user_id'] ?? 0 ) > 0 ) {
+				$ids[ (int) $uo['user_id'] ] = true;
+			}
+		}
+		$missing = [];
+		foreach ( array_keys( $ids ) as $uid ) {
+			if ( ! get_userdata( $uid ) ) {
+				$missing[] = $uid;
+			}
+		}
+		if ( [] === $missing ) {
+			return [];
+		}
+		sort( $missing );
+		return [ '設定裡有 ' . count( $missing ) . ' 個帳號在這個站上找不到（ID：' . implode( '、', array_slice( $missing, 0, 20 ) ) . ( count( $missing ) > 20 ? '…' : '' ) . '）。相關的「僅限本人」、指定帳號與使用者覆寫已照樣匯入，但不會套到任何人；請到各分頁檢查。' ];
+	}
+
+	/**
+	 * v1.7.0：用設定頁存檔或匯入時，設定標上格式版本（schema_version＝2）與寫入的外掛版本（_meta）。
+	 * 第一次寫第 2 版之前，把原本的第 1 版設定原樣備份到 V1_BACKUP_OPTION（只寫一次、不自動載入），降版或出問題時可以還原。
+	 * 只用舊功能的站，第 2 版跟第 1 版的差別只有這兩個鍵：1.6.0 以前的版本讀得懂、照舊運作。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,mixed>
+	 */
+	private static function stamp_schema( array $config ): array {
+		$current = YSMenuRouter::get_config();
+		if ( [] !== $current && ! isset( $current['schema_version'] ) && false === get_option( self::V1_BACKUP_OPTION, false ) ) {
+			// 存原本的選項值（舊站可能存成 JSON 字串），不是解開後的陣列。
+			update_option( self::V1_BACKUP_OPTION, get_option( YSMenuRouter::OPTION_KEY ), false );
+		}
+		$config['schema_version'] = self::SCHEMA_VERSION;
+		$config['_meta']          = [
+			'saved_by' => 'ys-admin-menu',
+			'version'  => defined( 'YS_ADMIN_MENU_VERSION' ) ? (string) YS_ADMIN_MENU_VERSION : '',
+		];
+		return $config;
+	}
+
+	/**
+	 * v1.7.0：主選單分頁的「預設行為」（defaults）。沒選任何一項回空陣列（不存這個鍵，舊設定的形狀不變）。
+	 *   - new_items_visibility：managers_only＝新出現的頂層選單只給能使用本外掛的帳號看（只管側欄）。
+	 *   - rename_page_titles：改名時頁面標題也跟著改。
+	 *
+	 * @param mixed $raw
+	 * @return array<string,mixed>
+	 */
+	public static function sanitize_defaults( $raw ): array {
+		$raw = is_array( $raw ) ? $raw : [];
+		$out = [];
+		if ( 'managers_only' === ( $raw['new_items_visibility'] ?? null ) ) {
+			$out['new_items_visibility'] = 'managers_only';
+		}
+		if ( ! empty( $raw['rename_page_titles'] ) ) {
+			$out['rename_page_titles'] = true;
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.7.0：自訂連結清單（custom_items.items[] = { url, title }）。網址照 YSMenuRouter::sanitize_custom_url() 清理，
+	 * 名稱必填（最多 100 字），同一個網址只留第一筆，最多 YSMenuRouter::MAX_CUSTOM_ITEMS 筆。
+	 *
+	 * @param array<int, mixed> $raw
+	 * @return array<int, array{url:string,title:string}>
+	 */
+	public static function sanitize_custom_items( array $raw ): array {
+		$out  = [];
+		$seen = [];
+		foreach ( $raw as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$url   = YSMenuRouter::sanitize_custom_url( is_scalar( $row['url'] ?? null ) ? (string) $row['url'] : '' );
+			$title = is_scalar( $row['title'] ?? null ) ? trim( wp_strip_all_tags( (string) $row['title'] ) ) : '';
+			if ( '' === $url || '' === $title ) {
+				continue;
+			}
+			$key = YSMenuRouter::slug_key( $url );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = [
+				'url'   => $url,
+				'title' => function_exists( 'mb_substr' ) ? mb_substr( $title, 0, 100 ) : substr( $title, 0, 300 ),
+			];
+			if ( count( $out ) >= YSMenuRouter::MAX_CUSTOM_ITEMS ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.7.0：自訂連結——同 merge_unrendered_items() 的做法，頁面上沒列出的（例如設了僅限本人給別的帳號）原樣保留。
+	 *
+	 * @param array<int, array{url:string,title:string}> $submitted
+	 * @param array<int, array{url:string,title:string}> $stored
+	 * @param mixed                                      $rendered 頁面載入時列出的網址；沒帶就整份取代。
+	 * @return array<int, array{url:string,title:string}>
+	 */
+	private static function merge_unrendered_custom( array $submitted, array $stored, $rendered ): array {
+		if ( ! is_array( $rendered ) ) {
+			return $submitted;
+		}
+		$known = [];
+		foreach ( $rendered as $url ) {
+			if ( is_string( $url ) && '' !== $url ) {
+				$known[ YSMenuRouter::slug_key( $url ) ] = true;
+			}
+		}
+		foreach ( $submitted as $row ) {
+			$known[ YSMenuRouter::slug_key( $row['url'] ) ] = true;
+		}
+		foreach ( $stored as $row ) {
+			if ( ! isset( $known[ YSMenuRouter::slug_key( $row['url'] ) ] ) ) {
+				$submitted[] = $row;
+			}
+		}
+		return self::sanitize_custom_items( $submitted );
+	}
+
+	/**
+	 * v1.7.0：「僅限本人」兩個分頁一致。這次送出的列，同一個選單在兩個分頁的每一列都改成同一個帳號：
+	 * 側欄看後面的列、直接網址看第一列（1.4.0 起），兩個分頁設得不一樣時會出現側欄看不到、網址卻進得去的情形。
+	 * 送出的列裡同一個選單有好幾列時，以側欄實際生效的值為準（後面的列蓋前面）。複製項自己的列不動（它只管複製項）。
+	 *
+	 * @param array<string,mixed> $config    已合併這次送出內容的設定。
+	 * @param array<int,mixed>    $submitted 這次送出的列（已清理）。
+	 * @return array<string,mixed>
+	 */
+	private static function sync_self_only( array $config, array $submitted ): array {
+		$copy = [];
+		foreach ( (array) ( $config['top_copies']['items'] ?? [] ) as $c ) {
+			if ( is_array( $c ) ) {
+				$key = YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( (string) ( $c['slug'] ?? '' ), (string) ( $c['parent_slug'] ?? '' ) ) );
+				if ( '' !== $key ) {
+					$copy[ $key ] = true;
+				}
+			}
+		}
+		$want = [];
+		foreach ( $submitted as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) || '' === $row['slug'] ) {
+				continue;
+			}
+			$key = YSMenuRouter::slug_key( $row['slug'] );
+			$uid = (int) ( $row['self_only_uid'] ?? 0 );
+			if ( '' !== $key && ! isset( $copy[ $key ] ) && ( $uid > 0 || ! isset( $want[ $key ] ) ) ) {
+				$want[ $key ] = $uid;
+			}
+		}
+		if ( [] === $want ) {
+			return $config;
+		}
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $i => $row ) {
+				if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) ) {
+					continue;
+				}
+				$key = YSMenuRouter::slug_key( $row['slug'] );
+				if ( isset( $want[ $key ] ) && ! ( 'wp_native' === $tab && isset( $copy[ $key ] ) )
+					&& (int) ( $row['self_only_uid'] ?? 0 ) !== $want[ $key ] ) {
+					$config[ $tab ]['items'][ $i ]['self_only_uid'] = $want[ $key ];
+				}
+			}
+		}
+		return $config;
+	}
+
+	/**
+	 * v1.7.0：POST /admin/permissions/preview — 以某位使用者試算。
+	 *
+	 * Body：{ user_id, rows: [ { kind: top|sub|copy, slug, parent, cap } ] }（設定頁表格上的列）。
+	 * 回傳每一列：sidebar＝側欄看不看得到、url＝直接開網址進不進得去（本外掛的規則＋WordPress 權限 cap）。
+	 * 照目前已存的設定算；不切換身分、不寫任何東西。WordPress 自己的規則（例如子選單全部沒權限時頂層也不顯示）不在試算範圍。
+	 */
+	public static function preview_for_user( \WP_REST_Request $request ): \WP_REST_Response {
+		$body = $request->get_json_params();
+		$uid  = is_array( $body ) && isset( $body['user_id'] ) && is_numeric( $body['user_id'] ) ? (int) $body['user_id'] : 0;
+		$user = $uid > 0 ? get_userdata( $uid ) : false;
+		// 多站網路：get_userdata() 不分站，不是這個站的成員就當成找不到（不透露其他站帳號的名稱與角色）。
+		if ( ! $user || ( is_multisite() && ! is_user_member_of_blog( $uid ) ) ) {
+			return new \WP_REST_Response( [ 'success' => false, 'error' => '找不到這個帳號' ], 404 );
+		}
+		$config = YSMenuRouter::get_config();
+		$rows   = is_array( $body['rows'] ?? null ) ? array_slice( $body['rows'], 0, self::MAX_PREVIEW_ROWS ) : [];
+		$out    = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$kind   = in_array( $row['kind'] ?? '', [ 'top', 'sub', 'copy' ], true ) ? (string) $row['kind'] : 'top';
+			$slug   = is_scalar( $row['slug'] ?? null ) ? wp_specialchars_decode( (string) $row['slug'] ) : '';
+			$parent = is_scalar( $row['parent'] ?? null ) ? wp_specialchars_decode( (string) $row['parent'] ) : '';
+			$cap    = is_scalar( $row['cap'] ?? null ) ? sanitize_key( (string) $row['cap'] ) : '';
+			if ( '' === $slug ) {
+				continue;
+			}
+			$can = '' === $cap || user_can( $uid, $cap );
+			if ( 'copy' === $kind ) {
+				$sidebar = YSMenuRouter::copy_allows( $slug, $parent, $config, $uid );
+			} elseif ( 'sub' === $kind ) {
+				$sidebar = YSMenuRouter::sidebar_allows( $parent, true, $config, $uid ) && YSMenuRouter::sidebar_allows( $slug, false, $config, $uid, [], $parent );
+			} else {
+				$sidebar = YSMenuRouter::sidebar_allows( $slug, true, $config, $uid );
+			}
+			$page  = YSMenuRouter::is_external_url( $slug ) ? '' : self::preview_page_of( $slug );
+			$out[] = [
+				'i'       => isset( $row['i'] ) && is_numeric( $row['i'] ) ? (int) $row['i'] : null,
+				'slug'    => $slug,
+				'parent'  => $parent,
+				'kind'    => $kind,
+				'sidebar' => $can && $sidebar,
+				'url'     => '' === $page ? null : ( $can && YSMenuRouter::url_allows( $page, $config, $uid ) ),
+			];
+		}
+		return new \WP_REST_Response(
+			[
+				'success' => true,
+				'user'    => [ 'id' => $uid, 'name' => (string) $user->display_name, 'roles' => array_values( (array) $user->roles ) ],
+				'rows'    => $out,
+			],
+			200
+		);
+	}
+
+	/**
+	 * v1.7.0：選單代稱直接開網址時，本外掛判斷用的頁面（跟 guard_hidden_pages() 看的 current_admin_request_slug() 同一種寫法）：
+	 * admin.php?page=X → X；edit.php?post_type=X、post-new.php?post_type=X 保留 post_type；其他 .php 頁只看檔名；外掛頁的代稱照舊。
+	 */
+	private static function preview_page_of( string $slug ): string {
+		$slug = ltrim( trim( $slug ), './' );
+		if ( preg_match( '/^[a-z0-9_\-]+\.php\?(?:.*&)?page=([^&#]+)/i', $slug, $m ) ) {
+			return urldecode( $m[1] );
+		}
+		if ( false === strpos( $slug, '.php' ) ) {
+			return $slug;
+		}
+		$file = explode( '?', $slug, 2 )[0];
+		if ( in_array( $file, [ 'edit.php', 'post-new.php' ], true ) && preg_match( '/[?&]post_type=([a-z0-9_\-]+)/i', $slug, $m ) && 'post' !== strtolower( $m[1] ) ) {
+			return $file . '?post_type=' . strtolower( $m[1] );
+		}
+		return $file;
 	}
 
 	/**
@@ -341,15 +644,43 @@ class YSPermissionController {
 
 		// wp_native slice
 		// v1.7.0：每一列先跟已存的同一列合併不認得的欄位（keep_unknown_fields()），例如 YS CART V3 寫的 visibility。
+		$synced = []; // v1.7.0：這次送出的列（「僅限本人」兩個分頁一致用，sync_self_only()）。
 		if ( isset( $payload['wp_native'] ) && is_array( $payload['wp_native'] ) ) {
 			$slice = $payload['wp_native'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
 				$stored                         = (array) ( $existing['wp_native']['items'] ?? [] );
+				$submitted                      = self::sanitize_native_items( $slice['items'] );
+				$synced[]                       = $submitted;
 				$existing['wp_native']['items'] = self::merge_unrendered_items(
-					self::keep_unknown_fields( self::sanitize_native_items( $slice['items'] ), $stored, 'wp_native' ),
+					self::keep_unknown_fields( $submitted, $stored, 'wp_native' ),
 					$stored,
 					$slice['rendered_slugs'] ?? null
 				);
+			}
+		}
+
+		// v1.7.0：主選單分頁的預設行為（新出現的頂層選單、改名時頁面標題也跟著改）。都沒選就拿掉這個鍵。
+		if ( isset( $payload['defaults'] ) && is_array( $payload['defaults'] ) ) {
+			$defaults = self::sanitize_defaults( $payload['defaults'] );
+			if ( [] === $defaults ) {
+				unset( $existing['defaults'] );
+			} else {
+				$existing['defaults'] = $defaults;
+			}
+		}
+
+		// v1.7.0：自訂連結。只動頁面載入時列出的（rendered），其餘原樣保留。
+		if ( isset( $payload['custom_items'] ) && is_array( $payload['custom_items'] )
+			&& isset( $payload['custom_items']['items'] ) && is_array( $payload['custom_items']['items'] ) ) {
+			$custom = self::merge_unrendered_custom(
+				self::sanitize_custom_items( $payload['custom_items']['items'] ),
+				self::sanitize_custom_items( (array) ( $existing['custom_items']['items'] ?? [] ) ),
+				$payload['custom_items']['rendered'] ?? null
+			);
+			if ( [] === $custom ) {
+				unset( $existing['custom_items'] );
+			} else {
+				$existing['custom_items'] = [ 'items' => $custom ];
 			}
 		}
 
@@ -358,8 +689,10 @@ class YSPermissionController {
 			$slice = $payload['ys_cart'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
 				$stored                       = (array) ( $existing['ys_cart']['items'] ?? [] );
+				$submitted                    = self::sanitize_ys_cart_items( $slice['items'] );
+				$synced[]                     = $submitted;
 				$existing['ys_cart']['items'] = self::merge_unrendered_items(
-					self::keep_unknown_fields( self::sanitize_ys_cart_items( $slice['items'] ), $stored, 'ys_cart' ),
+					self::keep_unknown_fields( $submitted, $stored, 'ys_cart' ),
 					$stored,
 					$slice['rendered_slugs'] ?? null
 				);
@@ -431,7 +764,12 @@ class YSPermissionController {
 			$existing['wp_native']['user_overrides'] = $legacy_map;
 		}
 
-		YSMenuConfigBridge::save_authoritative( $existing );
+		// v1.7.0：「僅限本人」兩個分頁一致（這次送出的列，同一個選單在另一個分頁的列改成同一個帳號）。
+		foreach ( $synced as $rows ) {
+			$existing = self::sync_self_only( $existing, $rows );
+		}
+
+		YSMenuConfigBridge::save_authoritative( self::stamp_schema( $existing ) );
 
 		return new \WP_REST_Response(
 			[ 'success' => true, 'saved_at' => time() ],
@@ -476,10 +814,14 @@ class YSPermissionController {
 			$key = self::row_identity( $row, $section );
 			if ( isset( $extra[ $key ] ) ) {
 				$submitted[ $i ] = $row + $extra[ $key ];
+				unset( $extra[ $key ] ); // 只帶給第一列：送來的同一列有好幾筆時，不會每一筆都複製一份（設定不會被撐大）。
 			}
 		}
 		return $submitted;
 	}
+
+	/** v1.7.0：每個分頁最多收幾列（防止異常 payload 把設定撐大；正常的站遠低於這個數）。 */
+	private const MAX_ROWS = 1000;
 
 	/** v1.7.0：keep_unknown_fields() 判斷「同一列」用的鍵。 */
 	private static function row_identity( array $row, string $section ): string {
@@ -699,10 +1041,34 @@ class YSPermissionController {
 	 *
 	 * @return array<int, array{slug:string,title:string,icon:string,position:mixed}>
 	 */
-	public static function get_all_admin_menu_items(): array {
-		global $menu;
+	/**
+	 * v1.7.0：列舉用的側欄：目前帳號的側欄，加上這次被「誰看得到」拿掉的項目（標 access_hidden）。設定頁要列得出來，
+	 * 管理員把自己排除之後才改得回去；它們接在最後面（表格照已存的順序排）。
+	 *
+	 * @return array{0:array<int|string,mixed>,1:array<string,mixed>}
+	 */
+	private static function listing_menus(): array {
+		global $menu, $submenu;
+		$m      = is_array( $menu ) ? $menu : [];
+		$s      = is_array( $submenu ) ? $submenu : [];
+		$hidden = YSMenuRouter::access_hidden_items();
+		foreach ( $hidden['top'] as $item ) {
+			$item['ys_access_hidden'] = true;
+			$m[]                      = $item;
+		}
+		foreach ( $hidden['sub'] as $parent => $rows ) {
+			foreach ( $rows as $row ) {
+				$row['ys_access_hidden'] = true;
+				$s[ $parent ][]          = $row;
+			}
+		}
+		return [ $m, $s ];
+	}
 
-		if ( empty( $menu ) || ! is_array( $menu ) ) {
+	public static function get_all_admin_menu_items(): array {
+		[ $menu ] = self::listing_menus();
+
+		if ( empty( $menu ) ) {
 			return [];
 		}
 
@@ -735,7 +1101,10 @@ class YSPermissionController {
 				'title'    => wp_strip_all_tags( (string) ( $item[0] ?? '' ) ),
 				'icon'     => (string) ( $item[6] ?? '' ),
 				'position' => $item[5] ?? '',
-			];
+				'cap'      => (string) ( $item[1] ?? '' ), // v1.7.0：以某位使用者試算時一起看 WordPress 權限。
+			] + ( empty( $item['ys_access_hidden'] ) ? [] : [ 'access_hidden' => true ] )
+				// v1.7.0：本外掛加的自訂連結（YSMenuRouter::insert_custom_items()），設定頁畫成自訂連結列。
+				+ ( false !== strpos( $classes, 'ys-am-custom' ) ? [ 'custom' => true ] : [] );
 		}
 
 		return $out;
@@ -751,10 +1120,10 @@ class YSPermissionController {
 	 * @return array<int, array{slug:string,title:string,level:string,parent_slug:?string}>
 	 */
 	public static function get_all_ys_cart_endpoints(): array {
-		global $menu, $submenu;
+		[ $menu, $submenu ] = self::listing_menus(); // v1.7.0：含這次被「誰看得到」拿掉的項目。
 
 		$out = [];
-		if ( empty( $menu ) || ! is_array( $menu ) ) {
+		if ( empty( $menu ) ) {
 			return $out;
 		}
 
@@ -795,7 +1164,8 @@ class YSPermissionController {
 				'title'       => wp_strip_all_tags( (string) ( $item[0] ?? '' ) ),
 				'level'       => 'top',
 				'parent_slug' => null,
-			];
+				'cap'         => (string) ( $item[1] ?? '' ),
+			] + ( empty( $item['ys_access_hidden'] ) ? [] : [ 'access_hidden' => true ] );
 
 			// 接上 sub-pages（若有）
 			if ( ! empty( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
@@ -813,7 +1183,8 @@ class YSPermissionController {
 						'title'       => wp_strip_all_tags( (string) ( $sub[0] ?? '' ) ),
 						'level'       => 'sub',
 						'parent_slug' => $slug,
-					];
+						'cap'         => (string) ( $sub[1] ?? '' ),
+					] + ( empty( $sub['ys_access_hidden'] ) ? [] : [ 'access_hidden' => true ] );
 				}
 			}
 		}
@@ -928,6 +1299,9 @@ class YSPermissionController {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
+			if ( count( $out ) >= self::MAX_ROWS ) {
+				break;
+			}
 			$is_separator = ! empty( $row['separator'] );
 			$order        = isset( $row['order'] ) ? (int) $row['order'] : 0;
 
@@ -982,9 +1356,37 @@ class YSPermissionController {
 				$item['after'] = sanitize_text_field( $row['after'] );
 			}
 
-			$out[] = $item;
+			$out[] = self::with_row_extras( $item, $row );
 		}
 		return $out;
+	}
+
+	/**
+	 * v1.7.0：列上的逐項目權限（access）與開新分頁（target）。沒設定就不存這兩個欄位，舊設定的形狀不變。
+	 *   - access 照 YSMenuRouter::sanitize_access() 清理。清完等於「只有這些角色、管理員不受限、側欄與網址都擋」、而且這一列
+	 *     沒有角色時，改存成舊的 roles：1.6.0 以前的版本也看得懂，降版不會變寬。
+	 *   - target 只存 _blank（開新分頁）。
+	 *
+	 * @param array<string,mixed> $item 已清理的列。
+	 * @param array<string,mixed> $row  送來的原始列。
+	 * @return array<string,mixed>
+	 */
+	private static function with_row_extras( array $item, array $row ): array {
+		$access = YSMenuRouter::sanitize_access( $row['access'] ?? null );
+		if ( null !== $access ) {
+			$only_roles = 'deny' === $access['others'] && 'exempt' === $access['super_admin'] && 'block' === $access['scope']
+				&& [] !== $access['allow']['roles'] && [] === $access['allow']['users']
+				&& [] === $access['deny']['roles'] && [] === $access['deny']['users'];
+			if ( $only_roles && empty( $item['roles'] ) ) {
+				$item['roles'] = $access['allow']['roles'];
+			} else {
+				$item['access'] = $access;
+			}
+		}
+		if ( '_blank' === ( $row['target'] ?? null ) ) {
+			$item['target'] = '_blank';
+		}
+		return $item;
 	}
 
 	/**
@@ -1030,7 +1432,14 @@ class YSPermissionController {
 			$key = YSMenuRouter::slug_key( (string) $row['slug'] );
 			if ( isset( $submitted_by_key[ $key ] ) ) {
 				if ( empty( $seen[ $key ] ) ) {
-					$out[]        = $submitted_by_key[ $key ];
+					// v1.7.0：全部選單分頁沒有顏色與順序欄（top_rows 不送），沿用主選單分頁存的值（1.3.2～1.6.0 存一次就被清掉）。
+					$new = $submitted_by_key[ $key ];
+					foreach ( [ 'color', 'order' ] as $field ) {
+						if ( array_key_exists( $field, $row ) ) {
+							$new[ $field ] = $row[ $field ];
+						}
+					}
+					$out[]        = $new;
 					$seen[ $key ] = true;
 				}
 				continue;
@@ -1063,6 +1472,9 @@ class YSPermissionController {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
+			if ( count( $out ) >= self::MAX_ROWS ) {
+				break;
+			}
 			// v2.38.2：YS CART tab 也支援 separator（與 wp_native 一致）
 			$is_separator = ! empty( $row['separator'] );
 			$order        = isset( $row['order'] ) ? (int) $row['order'] : 0;
@@ -1072,11 +1484,20 @@ class YSPermissionController {
 				if ( '' === $title ) {
 					continue;
 				}
-				$out[] = [
+				$sep = [
 					'separator' => true,
 					'title'     => $title,
 					'order'     => $order,
 				];
+				// v1.7.0：子選單分組標題（「新增子選單標題」的列）：記下它在哪個上層的子選單之間。沒有 subhead 的分隔列照舊。
+				if ( ! empty( $row['subhead'] ) ) {
+					$sep['subhead'] = true;
+					$parent         = isset( $row['parent_slug'] ) && is_scalar( $row['parent_slug'] ) ? sanitize_text_field( (string) $row['parent_slug'] ) : '';
+					if ( '' !== $parent ) {
+						$sep['parent_slug'] = $parent;
+					}
+				}
+				$out[] = $sep;
 				continue;
 			}
 
@@ -1119,7 +1540,14 @@ class YSPermissionController {
 			if ( ! isset( $row['order'] ) ) {
 				unset( $item['order'] );
 			}
-			$out[] = $item;
+			// v1.7.0：換到別的上層顯示（display_parent＝新上層的 slug）。已移到主選單的列不用（它已經是頂層）；沒設定就不存。
+			$display_parent = isset( $row['display_parent'] ) && is_scalar( $row['display_parent'] ) ? sanitize_text_field( (string) $row['display_parent'] ) : '';
+			if ( '' !== $display_parent && empty( $item['promote_to_top'] )
+				&& YSMenuRouter::slug_key( $display_parent ) !== YSMenuRouter::slug_key( $slug )
+				&& ( null === $parent_slug || YSMenuRouter::slug_key( $display_parent ) !== YSMenuRouter::slug_key( $parent_slug ) ) ) {
+				$item['display_parent'] = $display_parent;
+			}
+			$out[] = self::with_row_extras( $item, $row );
 		}
 		return $out;
 	}

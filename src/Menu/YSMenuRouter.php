@@ -58,6 +58,13 @@ class YSMenuRouter {
 		// filter 之後還會用 get_admin_page_parent() 重算父選單，伺服器端改不動）。
 		add_filter( 'parent_file', [ self::class, 'fix_copy_highlight' ], 11 );
 		add_action( 'admin_footer', [ self::class, 'print_copy_highlight_fix' ], 5 );
+		// v1.7.0：換到別的上層顯示的選單（display_parent），目前頁的高亮改標在新位置。
+		add_filter( 'parent_file', [ self::class, 'fix_moved_highlight' ], 12 );
+		add_filter( 'submenu_file', [ self::class, 'fix_moved_submenu_file' ], 10, 2 );
+		add_action( 'admin_footer', [ self::class, 'print_moved_highlight_fix' ], 5 );
+		// v1.7.0：開新分頁的選單、子選單分組標題、改名時頁面標題也跟著改。
+		add_action( 'admin_footer', [ self::class, 'print_menu_link_fix' ], 5 );
+		add_filter( 'admin_title', [ self::class, 'filter_admin_title' ], 10, 2 );
 	}
 
 	/** 目前請求是否為「已提升」頁（由 fix_promoted_highlight 判定後設定）。 */
@@ -147,6 +154,10 @@ class YSMenuRouter {
 			// 側欄收成圖示列時（手動收合，或 783–960px 被 WordPress 自動收合）標籤沒有文字可顯示，整列收掉。
 			. '@media screen and (min-width:783px){.folded #adminmenu li.ys-am-section-label{display:none;}}'
 			. '@media screen and (min-width:783px) and (max-width:960px){.auto-fold #adminmenu li.ys-am-section-label{display:none;}}'
+			// v1.7.0：子選單分組標題（不可點的小標，字色淡化、字級縮小；收合側欄的浮出子選單照樣顯示）。
+			. '#adminmenu .wp-submenu li.ys-am-subhead>a{pointer-events:none;cursor:default;font-size:11px !important;font-weight:600;'
+			. 'letter-spacing:.06em;text-transform:uppercase;opacity:.62;padding-top:8px !important;box-shadow:none !important;background:transparent !important;}'
+			. '#adminmenu .wp-submenu li.ys-am-subhead:first-child>a{padding-top:4px !important;}'
 			. '</style>';
 	}
 
@@ -214,6 +225,9 @@ class YSMenuRouter {
 			self::promote_submenus_to_top( $ys_cart_items );
 		}
 
+		// 1.55 v1.7.0：自訂連結（custom_items）。在所有過濾之前加進側欄，角色、隱藏、僅限本人、access 跟一般頂層項一樣套用。
+		self::insert_custom_items( $config );
+
 		// 1.6 v1.3.0：記下各頂層選單的圖示與名稱。複製項預設沿用原父選單的圖示；原父選單對這個帳號
 		//     隱藏時，過濾之後就查不到了，所以在過濾之前先記。
 		self::remember_parent_menus( $config );
@@ -242,11 +256,17 @@ class YSMenuRouter {
 		// ─────────────────────────────────────────────
 		if ( ! is_super_admin( $current_user_id ) ) {
 			self::apply_hide_flags( $config );
-			self::filter_menus_by_current_access();
+			self::filter_menus_by_current_access( $config, $current_user_id );
 		}
 
 		// 5.「僅限本人」：不分 super-admin，綁定特定帳號的選單只有該帳號的 sidebar 看得到
 		self::apply_self_only_filter( $config, $current_user_id );
+
+		// 5.2 v1.7.0：逐項目權限（列上的 access）。每個帳號都套；管理員只在列上選了「也套用到管理員」或帳號被指定時才會被擋。
+		self::apply_access_rules( $config, $current_user_id, $user_roles );
+
+		// 5.3 v1.7.0：新出現的頂層選單只給能使用本外掛的帳號看（defaults.new_items_visibility＝managers_only；預設關）。
+		self::hide_new_top_items( $config );
 
 		// 5.5 v1.3.0：子選單「複製到主選單」（top_copies）。放在所有過濾之後：原子選單對這個帳號
 		//     還在（沒被隱藏、角色、僅限本人、白名單拿掉），複製項才會出現；複製項自己的
@@ -273,7 +293,15 @@ class YSMenuRouter {
 		// ─────────────────────────────────────────────
 		if ( ! empty( $ys_cart_items ) ) {
 			self::reorder_submenus( $ys_cart_items );
+			// v1.7.0：子選單分組標題（全部選單分頁「新增子選單標題」的列）。
+			self::insert_submenu_headings( $ys_cart_items );
 		}
+
+		// 6.5 v1.7.0：任何頂層列換圖示、開新分頁、頁面標題跟著改名；換到別的上層顯示的選單（輸出側欄前才搬）。
+		self::apply_top_level_icons( $config );
+		self::mark_new_tab_items( $config );
+		self::apply_page_titles( $config );
+		self::collect_display_moves( $ys_cart_items );
 
 		// ─────────────────────────────────────────────
 		// 7. v1.5.1：外部網址的子選單存了「移到主選單」、因為是外部網址而留在原位：「主選單」分頁替移上去的那一項
@@ -507,13 +535,17 @@ class YSMenuRouter {
 	 *
 	 * 這個時間點 WordPress 已經做完權限檢查、也算好 page hook，可以安全地：
 	 *   1. 把已提升的子選單列從原父層拿掉（頂層已有對應項）。
-	 *   2. 拿掉底下沒有任何選單的分組標籤（這個身分看不到該組的選單時）。
+	 *   2. v1.7.0：拿掉只藏選單、留到這時才拿掉的目前這一頁（detach_deferred_rows()）。
+	 *   3. 拿掉底下沒有任何選單的分組標籤（這個身分看不到該組的選單時）。
 	 *
 	 * @param string $parent_file WP 推導的父層檔案（原樣回傳）。
 	 */
 	public static function prepare_menu_for_render( $parent_file ) {
 		self::detach_promoted_rows();
+		self::detach_deferred_rows();
+		self::perform_display_moves();
 		self::prune_empty_section_labels();
+		self::prune_empty_submenu_headings();
 		return $parent_file;
 	}
 
@@ -572,7 +604,7 @@ class YSMenuRouter {
 	 */
 	public static function print_section_label_fix(): void {
 		echo '<script id="ys-am-section-label-fix">'
-			. 'document.querySelectorAll("#adminmenu li.ys-am-section-label > a").forEach(function(a){'
+			. 'document.querySelectorAll("#adminmenu li.ys-am-section-label > a, #adminmenu li.ys-am-subhead > a").forEach(function(a){'
 			. 'a.removeAttribute("href");a.removeAttribute("aria-haspopup");a.setAttribute("tabindex","-1");});'
 			. '</script>';
 	}
@@ -724,6 +756,9 @@ class YSMenuRouter {
 				continue; // 原子選單不在（外掛停用，或這個帳號看不到、進不去）。
 			}
 			[ $row, $real_parent ] = $source;
+			if ( self::is_deferred( $real_parent, (string) ( $row[2] ?? '' ) ) ) {
+				continue; // v1.7.0：原子選單對這個帳號只藏選單（輸出前才拿掉），複製項跟著不出現。
+			}
 
 			// v1.5.1：原子選單或它的上層是用鍵對到的（網址帶 %xx），連結改用側欄上實際的 slug 與上層組（存下的字串少了 %xx）。
 			// 上層照原字串找得到（或是 WordPress 換過代稱的 $_wp_real_parent_file）時照 1.5.0 用存下的上層。
@@ -741,6 +776,11 @@ class YSMenuRouter {
 			$own     = $native_rows[ self::slug_key( $key ) ] ?? [];
 			$own_uid = (int) ( $own['self_only_uid'] ?? 0 );
 			if ( $own_uid > 0 && $own_uid !== $user_id ) {
+				continue;
+			}
+			// v1.7.0：複製項自己的 access（管理員只在「也套用到管理員」或帳號被指定時擋）。
+			$own_access = self::sanitize_access( $own['access'] ?? null );
+			if ( null !== $own_access && ! self::access_allows( $own_access, $user_id, $user_roles, self::is_super_user( $user_id ) ) ) {
 				continue;
 			}
 			if ( ! $is_super ) {
@@ -1495,7 +1535,12 @@ class YSMenuRouter {
 			return true;
 		}
 
-		return self::access_decision( $slug, self::get_config(), $user_id, $parent );
+		$config = self::get_config();
+		// v1.7.0：逐項目權限（access）另外疊一道。側欄與工具列用這個判斷，只藏選單的列也算（直接網址看 page_access_decision()）。
+		if ( self::access_denies( $slug, $config, $user_id, false, $parent ) ) {
+			return false;
+		}
+		return self::access_decision( $slug, $config, $user_id, $parent );
 	}
 
 	/**
@@ -1683,6 +1728,10 @@ class YSMenuRouter {
 				}
 			}
 		}
+		// v1.7.0：逐項目權限（access），管理員也看（跟側欄 apply_access_rules() 一樣）。
+		if ( self::access_denies( $slug, $config, $user_id, false, $under ) ) {
+			return false;
+		}
 		if ( is_super_admin( $user_id ) ) {
 			return true;
 		}
@@ -1755,6 +1804,11 @@ class YSMenuRouter {
 		}
 		$own_uid = (int) ( $own['self_only_uid'] ?? 0 );
 		if ( $own_uid > 0 && $own_uid !== $user_id ) {
+			return false;
+		}
+		// v1.7.0：複製項自己的 access（跟 insert_top_level_copies() 一樣）。
+		$own_access = self::sanitize_access( $own['access'] ?? null );
+		if ( null !== $own_access && ! self::access_allows( $own_access, $user_id, self::user_roles_of( $user_id ), self::is_super_user( $user_id ) ) ) {
 			return false;
 		}
 		if ( is_super_admin( $user_id ) ) {
@@ -1992,8 +2046,21 @@ class YSMenuRouter {
 		);
 	}
 
-	private static function filter_menus_by_current_access(): void {
+	/**
+	 * 非管理員的側欄：本外掛原本的規則（current_user_can_access_admin_slug() 去掉 access 的部分：僅限本人、隱藏、角色、
+	 * 白名單、「僅允許存取受保護的管理選單」）。
+	 * v1.7.0：access 一律交給 apply_access_rules()（每個帳號都套）：被拿掉的項目設定頁照樣列得出來；只藏選單的目前這一頁
+	 * 留到輸出前才拿掉（WordPress 在 admin_menu 之後靠那一列找回外掛頁的上層）；同一項不用判斷兩次。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function filter_menus_by_current_access( array $config, int $user_id ): void {
 		global $menu, $submenu;
+
+		$allows = static function ( string $slug, ?string $parent ) use ( $config, $user_id ): bool {
+			$key = self::normalize_admin_slug( $slug );
+			return '' === $key || self::access_decision( $key, $config, $user_id, $parent );
+		};
 
 		if ( is_array( $menu ) ) {
 			foreach ( $menu as $position => $menu_item ) {
@@ -2001,7 +2068,7 @@ class YSMenuRouter {
 					continue;
 				}
 				$slug = isset( $menu_item[2] ) ? (string) $menu_item[2] : '';
-				if ( '' !== $slug && ! self::current_user_can_access_admin_slug( $slug ) ) {
+				if ( '' !== $slug && ! $allows( $slug, null ) ) {
 					unset( $menu[ $position ] );
 				}
 			}
@@ -2017,7 +2084,7 @@ class YSMenuRouter {
 						continue;
 					}
 					$slug = isset( $sub[2] ) ? (string) $sub[2] : '';
-					if ( '' !== $slug && ! self::current_user_can_access_admin_slug( $slug, null, (string) $parent ) ) {
+					if ( '' !== $slug && ! $allows( $slug, (string) $parent ) ) {
 						unset( $submenu[ $parent ][ $idx ] );
 					}
 				}
@@ -2378,6 +2445,11 @@ class YSMenuRouter {
 		if ( $bound > 0 && $bound !== $user_id ) {
 			return true;
 		}
+		// v1.7.0：那一列的 access。
+		$access = self::sanitize_access( $row['access'] ?? null );
+		if ( null !== $access && ! self::access_allows( $access, $user_id, $user_roles, $is_super ) ) {
+			return true;
+		}
 		if ( $is_super ) {
 			return false;
 		}
@@ -2572,6 +2644,11 @@ class YSMenuRouter {
 			return false;
 		}
 
+		// v1.7.0：逐項目權限（access）在管理員放行之前判斷（列上選了「也套用到管理員」時管理員也擋）；只藏選單的列不擋網址。
+		if ( $user_id > 0 && self::access_denies( $page, $config, $user_id, true, null, $is_super ) ) {
+			return false;
+		}
+
 		if ( $is_super || $user_id <= 0 ) {
 			return true;
 		}
@@ -2676,9 +2753,11 @@ class YSMenuRouter {
 			}
 			$slug    = (string) ( $item[2] ?? '' );
 			$classes = (string) ( $item[4] ?? '' );
+			// v1.7.0：自訂連結不算（可能是站外網址，也不是這個帳號「進得去的頁面」）。
 			if ( '' === $slug || 'index.php' === $slug
 				|| false !== strpos( $classes, 'wp-menu-separator' )
-				|| false !== strpos( $classes, 'ys-am-section-label' ) ) {
+				|| false !== strpos( $classes, 'ys-am-section-label' )
+				|| false !== strpos( $classes, 'ys-am-custom' ) ) {
 				continue;
 			}
 			if ( ! current_user_can( (string) ( $item[1] ?? 'read' ) ) ) {
@@ -2695,8 +2774,8 @@ class YSMenuRouter {
 					$parent = $slug;
 				}
 			}
-			if ( ! self::current_user_can_access_admin_slug( $target, null, $parent ) ) {
-				continue;
+			if ( self::is_external_url( $target ) || ! self::current_user_can_access_admin_slug( $target, null, $parent ) ) {
+				continue; // v1.7.0：站外網址（外部網址的複製項）組不成後台網址，跳過。
 			}
 
 			$target = wp_specialchars_decode( $target );
@@ -2886,5 +2965,967 @@ class YSMenuRouter {
 		echo "<style id=\"ys-ec-menu-colors\">\n";
 		echo implode( "\n", $rules ); // already escaped above
 		echo "\n</style>\n";
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：逐項目權限（列上的 access 欄位）
+	//
+	// 舊的隱藏、角色、僅限本人、白名單照舊，access 另外疊一道（兩邊都過才看得到）：
+	//   - 形狀：{ v:1, allow:{roles[],users[]}, deny:{roles[],users[]}, others:inherit|deny, super_admin:exempt|apply, scope:block|menu_only }
+	//   - 判斷（access_allows()）：帳號在 deny.users → 擋；在 allow.users → 過；管理員且 exempt → 過；角色在 deny.roles → 擋；
+	//     在 allow.roles → 過；最後看 others（deny＝擋）。
+	//   - scope：block＝側欄、工具列與直接網址都擋；menu_only＝只藏選單，網址照樣進得去。
+	//   - 本外掛自己的頁面（ys-admin-menu…）不看 access：誰能用本外掛由「外掛使用權限」管，不會把自己鎖在設定頁外面。
+	//   - 複製項自己的列只管複製項（跟隱藏、角色一樣），插入複製項時判斷。
+	// ─────────────────────────────────────────────
+
+	/** v1.7.0：access 每份名單（角色、帳號）最多幾筆。 */
+	public const ACCESS_MAX_ENTRIES = 100;
+
+	/**
+	 * v1.7.0：清理 access 欄位。什麼都不擋（others＝inherit、沒有拒絕名單）回 null＝沒有限制。
+	 *
+	 * @param mixed $raw
+	 * @return array{v:int,allow:array{roles:array<int,string>,users:array<int,int>},deny:array{roles:array<int,string>,users:array<int,int>},others:string,super_admin:string,scope:string}|null
+	 */
+	public static function sanitize_access( $raw ): ?array {
+		if ( ! is_array( $raw ) ) {
+			return null;
+		}
+		$side = static function ( $part ): array {
+			$part  = is_array( $part ) ? $part : [];
+			$roles = [];
+			foreach ( is_array( $part['roles'] ?? null ) ? $part['roles'] : [] as $role ) {
+				$role = is_string( $role ) ? sanitize_key( $role ) : '';
+				if ( '' !== $role && ! in_array( $role, $roles, true ) ) {
+					$roles[] = $role;
+				}
+			}
+			$users = [];
+			foreach ( is_array( $part['users'] ?? null ) ? $part['users'] : [] as $uid ) {
+				$uid = ( is_int( $uid ) || ( is_string( $uid ) && ctype_digit( $uid ) ) ) ? (int) $uid : 0;
+				if ( $uid > 0 && ! in_array( $uid, $users, true ) ) {
+					$users[] = $uid;
+				}
+			}
+			return [
+				'roles' => array_slice( $roles, 0, self::ACCESS_MAX_ENTRIES ),
+				'users' => array_slice( $users, 0, self::ACCESS_MAX_ENTRIES ),
+			];
+		};
+		$out = [
+			'v'           => 1,
+			'allow'       => $side( $raw['allow'] ?? null ),
+			'deny'        => $side( $raw['deny'] ?? null ),
+			'others'      => 'deny' === ( $raw['others'] ?? null ) ? 'deny' : 'inherit',
+			'super_admin' => 'apply' === ( $raw['super_admin'] ?? null ) ? 'apply' : 'exempt',
+			'scope'       => 'menu_only' === ( $raw['scope'] ?? null ) ? 'menu_only' : 'block',
+		];
+		if ( 'inherit' === $out['others'] && [] === $out['deny']['roles'] && [] === $out['deny']['users'] ) {
+			return null;
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.7.0：access（sanitize_access() 清過的）放不放行這個帳號。
+	 *
+	 * @param array<string,mixed> $access
+	 * @param array<int,string>   $user_roles
+	 */
+	public static function access_allows( array $access, int $user_id, array $user_roles, bool $is_super ): bool {
+		if ( in_array( $user_id, $access['deny']['users'], true ) ) {
+			return false;
+		}
+		if ( in_array( $user_id, $access['allow']['users'], true ) ) {
+			return true;
+		}
+		if ( $is_super && 'apply' !== $access['super_admin'] ) {
+			return true;
+		}
+		if ( [] !== array_intersect( $user_roles, $access['deny']['roles'] ) ) {
+			return false;
+		}
+		if ( [] !== array_intersect( $user_roles, $access['allow']['roles'] ) ) {
+			return true;
+		}
+		return 'deny' !== $access['others'];
+	}
+
+	/** v1.7.0：本外掛自己的頁面（access 不管；admin.php?page=… 的寫法也算）。 */
+	public static function is_own_page( string $slug ): bool {
+		foreach ( [ self::slug_key( $slug ), self::admin_page_of( $slug ) ] as $s ) {
+			if ( 'ys-admin-menu' === $s || str_starts_with( $s, 'ys-admin-menu-' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * v1.7.0：設定裡帶 access 的列：鍵 => [ 清過的 access, … ]（兩個分頁都收；複製項自己的列不收，跟 rule_rows() 一樣）。
+	 * 主選單分頁替「已移到主選單」的項目存的列（slug＝promoted_menu_url()）另外收在那一頁的鍵底下：直接開網址看的是那一頁
+	 * （admin.php?page=x 的 x），不收的話在主選單分頁設的「誰看得到」只藏側欄、擋不了網址。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string, array<int, array<string,mixed>>>
+	 */
+	private static function access_rows( array $config ): array {
+		$out       = [];
+		$copy_keys = null;
+		$promoted  = null; // 移到主選單的頂層連結的鍵 => 那一頁的鍵
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $item ) {
+				if ( ! is_array( $item ) || ! isset( $item['access'] ) || ! empty( $item['separator'] ) || ! is_string( $item['slug'] ?? null ) ) {
+					continue;
+				}
+				$access = self::sanitize_access( $item['access'] );
+				$key    = self::slug_key( $item['slug'] );
+				if ( null === $access || '' === $key ) {
+					continue;
+				}
+				if ( 'wp_native' === $tab ) {
+					$copy_keys ??= self::copy_row_keys( $config );
+					if ( isset( $copy_keys[ $key ] ) ) {
+						continue;
+					}
+					$promoted ??= self::promoted_page_keys( $config );
+					if ( isset( $promoted[ $key ] ) && $promoted[ $key ] !== $key ) {
+						$out[ $promoted[ $key ] ][] = $access;
+					}
+				}
+				$out[ $key ][] = $access;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.7.0：已移到主選單的子選單：頂層連結（promoted_menu_url()）的鍵 => 那一頁的鍵（外部網址不移，不收）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,string>
+	 */
+	private static function promoted_page_keys( array $config ): array {
+		$out = [];
+		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $item ) {
+			if ( ! is_array( $item ) || empty( $item['promote_to_top'] ) || 'sub' !== (string) ( $item['level'] ?? 'top' ) || ! is_string( $item['slug'] ?? null ) ) {
+				continue;
+			}
+			$slug = $item['slug'];
+			if ( '' === $slug || self::is_external_url( $slug ) ) {
+				continue;
+			}
+			$link = self::slug_key( self::promoted_menu_url( $slug, (string) ( $item['parent_slug'] ?? '' ) ) );
+			if ( '' !== $link ) {
+				$out[ $link ] = self::slug_key( $slug );
+			}
+		}
+		return $out;
+	}
+
+	/** @return array<int,string> */
+	private static function user_roles_of( int $user_id ): array {
+		$user = $user_id > 0 ? get_userdata( $user_id ) : false;
+		return $user ? array_map( 'sanitize_key', (array) $user->roles ) : [];
+	}
+
+	/** v1.7.0：access 的「管理員」（跟 access_decision() 的放行條件相同）。 */
+	private static function is_super_user( int $user_id ): bool {
+		return is_super_admin( $user_id ) || user_can( $user_id, 'manage_network' );
+	}
+
+	/**
+	 * v1.7.0：這個帳號在這個選單或網址會不會被 access 擋下。
+	 *
+	 * 側欄、工具列（$for_url＝false）：只藏選單的列也算；導覽列（nav_target()）另外看它指向的那一頁會不會擋網址（點了也進不去，跟著藏）。
+	 * 直接網址（$for_url＝true）：只藏選單的列不算。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function access_denies( string $slug, array $config, int $user_id, bool $for_url, ?string $parent = null, ?bool $is_super = null ): bool {
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$index = self::access_rows( $config );
+		if ( [] === $index ) {
+			return false;
+		}
+		return self::index_denies( $index, $slug, $user_id, self::user_roles_of( $user_id ), $is_super ?? self::is_super_user( $user_id ), $for_url, $parent );
+	}
+
+	/**
+	 * @param array<string, array<int, array<string,mixed>>> $index access_rows()
+	 * @param array<int,string>                              $roles
+	 */
+	private static function index_denies( array $index, string $slug, int $user_id, array $roles, bool $is_super, bool $for_url, ?string $parent ): bool {
+		$key = self::slug_key( $slug );
+		if ( '' === $key || self::is_own_page( $key ) ) {
+			return false;
+		}
+		foreach ( $index[ $key ] ?? [] as $access ) {
+			if ( ( ! $for_url || 'block' === $access['scope'] ) && ! self::access_allows( $access, $user_id, $roles, $is_super ) ) {
+				return true;
+			}
+		}
+		if ( $for_url ) {
+			return false;
+		}
+		$target = self::nav_target( $key, $parent );
+		return $target !== $key && self::index_denies( $index, $target, $user_id, $roles, $is_super, true, null );
+	}
+
+	/**
+	 * v1.7.0：側欄套用 access（每個帳號都套；管理員只在列上選了「也套用到管理員」或帳號被指定時才會被擋）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<int,string>   $user_roles
+	 */
+	private static function apply_access_rules( array $config, int $user_id, array $user_roles ): void {
+		global $menu, $submenu;
+		self::$access_hidden = [ 'top' => [], 'sub' => [] ];
+		self::$deferred_rows = [];
+		$index               = self::access_rows( $config );
+		if ( [] === $index ) {
+			return;
+		}
+		$is_super = self::is_super_user( $user_id );
+		if ( is_array( $menu ) ) {
+			foreach ( $menu as $position => $item ) {
+				if ( is_array( $item ) && '' !== (string) ( $item[2] ?? '' )
+					&& self::index_denies( $index, (string) $item[2], $user_id, $user_roles, $is_super, false, null ) ) {
+					self::$access_hidden['top'][] = $item;
+					unset( $menu[ $position ] );
+				}
+			}
+		}
+		if ( is_array( $submenu ) ) {
+			foreach ( $submenu as $parent => $rows ) {
+				if ( ! is_array( $rows ) ) {
+					continue;
+				}
+				foreach ( $rows as $idx => $sub ) {
+					if ( is_array( $sub ) && '' !== (string) ( $sub[2] ?? '' )
+						&& self::index_denies( $index, (string) $sub[2], $user_id, $user_roles, $is_super, false, (string) $parent ) ) {
+						self::$access_hidden['sub'][ (string) $parent ][] = $sub;
+						// 只藏選單、而且就是目前這一頁：先留著。WordPress 在 admin_menu 之後靠這一列找回外掛頁（?page=）的上層，
+						// 拿掉的話 user_can_access_admin_page() 找不到 page hook，連照設定進得去的人都回 403。輸出側欄前才拿掉。
+						if ( self::copy_matches_request( (string) $sub[2] )
+							&& ! self::index_denies( $index, (string) $sub[2], $user_id, $user_roles, $is_super, true, (string) $parent ) ) {
+							self::$deferred_rows[] = [ (string) $parent, (string) $sub[2] ];
+							continue;
+						}
+						unset( $submenu[ $parent ][ $idx ] );
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * v1.7.0：只藏選單、留到輸出前才拿掉的子選單列：[ 上層, slug ]（apply_access_rules() 記、detach_deferred_rows() 拿掉）。
+	 *
+	 * @var array<int, array{0:string,1:string}>
+	 */
+	private static array $deferred_rows = [];
+
+	/** v1.7.0：這一列是不是只藏選單、等輸出前才拿掉（複製項不能拿它當來源）。 */
+	private static function is_deferred( string $parent, string $slug ): bool {
+		foreach ( self::$deferred_rows as [ $p, $s ] ) {
+			if ( $p === $parent && $s === $slug ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** v1.7.0：輸出側欄前拿掉 apply_access_rules() 留著的列；上層只剩它自己那一列或空了就不再展開（跟 WordPress 一樣）。 */
+	private static function detach_deferred_rows(): void {
+		global $submenu;
+		$rows                = self::$deferred_rows;
+		self::$deferred_rows = [];
+		if ( [] === $rows || ! is_array( $submenu ) ) {
+			return;
+		}
+		foreach ( $rows as [ $parent, $slug ] ) {
+			if ( ! is_array( $submenu[ $parent ] ?? null ) ) {
+				continue;
+			}
+			foreach ( $submenu[ $parent ] as $idx => $sub ) {
+				if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $slug ) {
+					unset( $submenu[ $parent ][ $idx ] );
+				}
+			}
+			$submenu[ $parent ] = array_values( $submenu[ $parent ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			if ( [] === $submenu[ $parent ] || ( 1 === count( $submenu[ $parent ] ) && (string) ( $submenu[ $parent ][0][2] ?? '' ) === $parent ) ) {
+				unset( $submenu[ $parent ] );
+			}
+		}
+	}
+
+	/**
+	 * v1.7.0：這次請求被 access 從側欄拿掉的項目。設定頁照樣列出它們（YSPermissionController 的列舉），
+	 * 不然管理員把自己排除之後（「也套用到管理員」、指定帳號），那一列就從表上消失、改不回來。
+	 *
+	 * @var array{top:array<int,array<int|string,mixed>>,sub:array<string,array<int,array<int|string,mixed>>>}
+	 */
+	private static array $access_hidden = [ 'top' => [], 'sub' => [] ];
+
+	/**
+	 * @return array{top:array<int,array<int|string,mixed>>,sub:array<string,array<int,array<int|string,mixed>>>}
+	 */
+	public static function access_hidden_items(): array {
+		return self::$access_hidden;
+	}
+
+	/**
+	 * v1.7.0：側欄「僅限本人」實際生效的帳號（同一個選單在兩個分頁都有列時，後面的列蓋前面；設定頁兩個分頁都顯示這個值）。
+	 *
+	 * @param array<string,mixed>|null $config
+	 */
+	public static function effective_self_only_uid( string $slug, ?array $config = null ): int {
+		return self::sidebar_self_only_uid( self::normalize_admin_slug( $slug ), $config ?? self::get_config() );
+	}
+
+	/**
+	 * v1.7.0：effective_self_only_uid() 整份一次算好：鍵 => 帳號（設定頁每一列都要查；逐列重掃整份設定，列一多就慢）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,int>
+	 */
+	public static function sidebar_self_only_map( array $config ): array {
+		$map = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $section ) {
+			foreach ( self::rule_rows( $config, $section ) as $item ) {
+				if ( is_array( $item ) && ! empty( $item['slug'] ) && (int) ( $item['self_only_uid'] ?? 0 ) > 0 ) {
+					$map[ self::normalize_admin_slug( (string) $item['slug'] ) ] = (int) $item['self_only_uid'];
+				}
+			}
+		}
+		return $map;
+	}
+
+	/**
+	 * v1.7.0：直接開網址時「僅限本人」看的帳號（1.4.0 起看第一列）。跟 effective_self_only_uid() 不同＝兩個分頁的設定不一致。
+	 *
+	 * @param array<string,mixed>|null $config
+	 */
+	public static function url_self_only_uid( string $slug, ?array $config = null ): int {
+		return self::self_only_uid_for_slug( $slug, $config ?? self::get_config() );
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：新出現的頂層選單（defaults.new_items_visibility）
+	// ─────────────────────────────────────────────
+
+	/** WordPress 核心的頂層選單（不算「新出現」）。 */
+	private const CORE_TOP_SLUGS = [
+		'index.php'               => true,
+		'edit.php'                => true,
+		'upload.php'              => true,
+		'link-manager.php'        => true,
+		'edit.php?post_type=page' => true,
+		'edit-comments.php'       => true,
+		'themes.php'              => true,
+		'site-editor.php'         => true,
+		'plugins.php'             => true,
+		'users.php'               => true,
+		'profile.php'             => true,
+		'tools.php'               => true,
+		'options-general.php'     => true,
+	];
+
+	/**
+	 * v1.7.0：「新出現的頂層選單只給管理者看」（defaults.new_items_visibility＝managers_only）。
+	 *
+	 * 設定裡兩個分頁都沒有這一列的頂層選單（主選單分頁存過之後才裝的外掛加的），只有能使用本外掛的帳號
+	 * （YSAccess::can_manage()）在側欄看得到；管理者在主選單分頁存一次（列進設定）之後照一般規則。只管側欄，網址照樣進得去。
+	 * 不算新的：WordPress 核心選單、分隔列與分組、已移到主選單的項目、自訂連結、本外掛的選單。
+	 * 主選單分頁從沒存過（沒有頂層列）時不做任何事。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function hide_new_top_items( array $config ): void {
+		global $menu;
+		if ( 'managers_only' !== ( $config['defaults']['new_items_visibility'] ?? null ) || ! is_array( $menu )
+			|| ! self::has_top_level_rows( (array) ( $config['wp_native']['items'] ?? [] ) )
+			|| \YangSheep\AdminMenu\Access\YSAccess::can_manage() ) {
+			return;
+		}
+		$known = self::known_top_keys( $config );
+		foreach ( $menu as $position => $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$slug    = (string) ( $item[2] ?? '' );
+			$classes = (string) ( $item[4] ?? '' );
+			if ( '' === $slug || false !== strpos( $classes, 'wp-menu-separator' ) || false !== strpos( $classes, 'ys-am-' ) ) {
+				continue;
+			}
+			$key = self::slug_key( $slug );
+			if ( isset( $known[ $key ] ) || array_key_exists( $key, self::CORE_TOP_SLUGS ) || self::is_own_page( $key ) ) {
+				continue;
+			}
+			unset( $menu[ $position ] );
+		}
+	}
+
+	/**
+	 * v1.7.0：設定裡已經有列的選單（兩個分頁的每一列，加上已移到主選單項目的頂層連結）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @return array<string,bool>
+	 */
+	private static function known_top_keys( array $config ): array {
+		$known = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $row ) {
+				if ( ! is_array( $row ) || ! is_string( $row['slug'] ?? null ) || '' === $row['slug'] ) {
+					continue;
+				}
+				$known[ self::slug_key( $row['slug'] ) ] = true;
+				if ( ! empty( $row['promote_to_top'] ) ) {
+					$known[ self::slug_key( self::promoted_menu_url( $row['slug'], (string) ( $row['parent_slug'] ?? '' ) ) ) ] = true;
+				}
+			}
+		}
+		return $known;
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：自訂連結（custom_items.items[] = { url, title }）
+	//
+	// 選單代稱（$menu[2]）是 custom_menu_key()：http(s) 網址照原樣，wp-admin 底下的頁面前面加 "./"。排序、圖示、角色、隱藏、
+	// 僅限本人、access、開新分頁都存在主選單分頁以代稱為 slug 的那一列，跟一般頂層項同一套欄位；這些規則只管這個連結，
+	// 不會套到網址相同的那一頁（連到 post-new.php 的自訂連結設了僅限本人，其他人的「新增文章」照舊）。
+	// ─────────────────────────────────────────────
+
+	/** v1.7.0：自訂連結最多幾個。 */
+	public const MAX_CUSTOM_ITEMS = 50;
+
+	/**
+	 * v1.7.0：自訂連結的網址：http(s) 完整網址，或 wp-admin 底下的頁面（例：edit.php?post_status=draft、admin.php?page=x）。
+	 * 其他寫法（javascript:、跳出 wp-admin 的相對路徑、含引號／角括號／空白／反斜線）回空字串。
+	 */
+	public static function sanitize_custom_url( string $url ): string {
+		$url = trim( wp_specialchars_decode( $url ) );
+		if ( '' === $url || strlen( $url ) > 2000 || preg_match( '/[\'"<>\s\\\\]/', $url ) ) {
+			return '';
+		}
+		if ( preg_match( '#^https?://[^/?\#]+#i', $url ) ) {
+			$clean = function_exists( 'esc_url_raw' ) ? (string) esc_url_raw( $url, [ 'http', 'https' ] ) : $url;
+			return ( '' !== $clean && ! preg_match( '/[\'"<>\s\\\\]/', $clean ) ) ? $clean : '';
+		}
+		return preg_match( '#^[a-z0-9_\-]+\.php(\?[^\#]*)?(\#.*)?$#i', $url ) ? $url : '';
+	}
+
+	/**
+	 * v1.7.0：自訂連結的選單代稱（$menu[2]，也是主選單分頁那一列的 slug）；網址不合規回空字串。
+	 *   - http(s) 網址：網址本身。
+	 *   - wp-admin 底下的頁面：前面加 "./"（同 copy_menu_key()）。瀏覽器解析出同一個網址，但字串跟原本那一頁不同，
+	 *     自訂連結那一列的規則只管這個連結；直接開網址照原本那一頁的設定。
+	 */
+	public static function custom_menu_key( string $url ): string {
+		$url = self::sanitize_custom_url( $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		return preg_match( '#^https?://#i', $url ) ? $url : './' . $url;
+	}
+
+	/**
+	 * v1.7.0：這次請求加進側欄的自訂連結：代稱 => 網址與名稱（設定頁認自訂連結列用；之後被規則拿掉的也算）。
+	 *
+	 * @var array<string, array{url:string,title:string}>
+	 */
+	private static array $custom_entries = [];
+
+	/** @return array<string, array{url:string,title:string}> */
+	public static function custom_entries(): array {
+		return self::$custom_entries;
+	}
+
+	/**
+	 * v1.7.0：把自訂連結加進側欄（頂層，排在最後；主選單分頁排過序的照順序）。
+	 * 網址已經是側欄上的頂層選單、或跟「複製到主選單」的項目同一個代稱時不加（同一個連結不出現兩次）。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function insert_custom_items( array $config ): void {
+		global $menu;
+		self::$custom_entries = [];
+		$items                = $config['custom_items']['items'] ?? [];
+		if ( empty( $items ) || ! is_array( $items ) || ! is_array( $menu ) ) {
+			return;
+		}
+		$present = [];
+		foreach ( $menu as $m ) {
+			if ( is_array( $m ) && isset( $m[2] ) ) {
+				$present[ self::slug_key( (string) $m[2] ) ] = true;
+			}
+		}
+		$copy_keys = self::copy_row_keys( $config );
+		foreach ( array_slice( array_values( $items ), 0, self::MAX_CUSTOM_ITEMS ) as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$url   = self::sanitize_custom_url( (string) ( $item['url'] ?? '' ) );
+			$title = trim( wp_strip_all_tags( (string) ( $item['title'] ?? '' ) ) );
+			$slug  = self::custom_menu_key( $url );
+			$key   = '' !== $slug ? self::slug_key( $slug ) : '';
+			if ( '' === $key || '' === $title || isset( $present[ $key ] ) || isset( $present[ self::slug_key( $url ) ] ) || isset( $copy_keys[ $key ] ) ) {
+				continue;
+			}
+			$present[ $key ] = true;
+			$id              = 'ys-am-custom-' . substr( md5( $url ), 0, 10 );
+			$menu[]          = [ $title, 'read', $slug, $title, 'menu-top ys-am-custom menu-top-' . $id, $id, 'dashicons-admin-links' ]; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
+
+			self::$custom_entries[ $slug ] = [ 'url' => $url, 'title' => $title ];
+		}
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：圖示、開新分頁、頁面標題
+	// ─────────────────────────────────────────────
+
+	/**
+	 * v1.7.0：主選單分頁任何頂層列都可以換圖示（以前只有複製項會用；已移到主選單的項目存了圖示也沒有套用，一併修正）。
+	 * 複製項的圖示在插入時已經套用（複製項自己的列不在 rule_rows() 裡）。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function apply_top_level_icons( array $config ): void {
+		global $menu;
+		if ( ! is_array( $menu ) ) {
+			return;
+		}
+		foreach ( self::rule_rows( $config, 'wp_native' ) as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) || ! isset( $row['icon'] ) ) {
+				continue;
+			}
+			$icon = self::sanitize_menu_icon( (string) $row['icon'] );
+			if ( '' === $icon ) {
+				continue;
+			}
+			foreach ( self::matching_rows( $menu, $row['slug'] ) as $k ) {
+				$menu[ $k ][6] = $icon; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
+			}
+		}
+	}
+
+	/** v1.7.0：這次請求有沒有要開新分頁的選單（有才輸出 footer script）。 */
+	private static bool $has_new_tab = false;
+
+	/**
+	 * v1.7.0：列上設了「開新分頁」（target＝_blank）的選單加上 ys-am-newtab class，footer 的 script 把連結改成開新分頁。
+	 * 頂層看主選單分頁的列（複製項、已移到主選單的項目、自訂連結都在這裡）與全部選單分頁的頂層列；子選單看全部選單分頁的子選單列。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function mark_new_tab_items( array $config ): void {
+		global $menu, $submenu;
+		self::$has_new_tab = false;
+		$top = [];
+		$sub = [];
+		foreach ( [ 'wp_native', 'ys_cart' ] as $tab ) {
+			foreach ( (array) ( $config[ $tab ]['items'] ?? [] ) as $row ) {
+				if ( ! is_array( $row ) || '_blank' !== ( $row['target'] ?? null ) || ! is_string( $row['slug'] ?? null ) ) {
+					continue;
+				}
+				if ( 'ys_cart' === $tab && 'sub' === (string) ( $row['level'] ?? 'top' ) ) {
+					$sub[ self::slug_key( $row['slug'] ) ] = true;
+				} else {
+					$top[ self::slug_key( $row['slug'] ) ] = true;
+				}
+			}
+		}
+		if ( [] === $top && [] === $sub ) {
+			return;
+		}
+		foreach ( is_array( $menu ) ? $menu : [] as $k => $m ) {
+			if ( is_array( $m ) && isset( $top[ self::slug_key( (string) ( $m[2] ?? '' ) ) ] ) ) {
+				$menu[ $k ][4]     = trim( (string) ( $m[4] ?? '' ) . ' ys-am-newtab' ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				self::$has_new_tab = true;
+			}
+		}
+		foreach ( is_array( $submenu ) ? $submenu : [] as $parent => $rows ) {
+			foreach ( is_array( $rows ) ? $rows : [] as $idx => $s ) {
+				if ( is_array( $s ) && isset( $sub[ self::slug_key( (string) ( $s[2] ?? '' ) ) ] ) ) {
+					$submenu[ $parent ][ $idx ][4] = trim( (string) ( $s[4] ?? '' ) . ' ys-am-newtab' ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+					self::$has_new_tab             = true;
+				}
+			}
+		}
+	}
+
+	/** v1.7.0：footer：開新分頁的選單連結加上 target 與 rel。 */
+	public static function print_menu_link_fix(): void {
+		if ( ! self::$has_new_tab ) {
+			return;
+		}
+		echo '<script id="ys-am-new-tab">document.querySelectorAll("#adminmenu a.ys-am-newtab").forEach(function(a){'
+			. 'a.setAttribute("target","_blank");a.setAttribute("rel","noopener noreferrer");});</script>';
+	}
+
+	/**
+	 * v1.7.0：「改名時頁面標題也跟著改」（defaults.rename_page_titles，預設關）：改過名稱的選單，頁面標題（$menu／$submenu 第 4 欄，
+	 * WordPress 拿它當外掛頁面的標題）也換成自訂名稱。瀏覽器分頁的標題另外在 admin_title 換（filter_admin_title()）。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function apply_page_titles( array $config ): void {
+		global $menu, $submenu;
+		if ( empty( $config['defaults']['rename_page_titles'] ) ) {
+			return;
+		}
+		$name_of = static fn( $row ): string => is_array( $row ) && ! empty( $row['title_override'] ) ? trim( wp_strip_all_tags( (string) $row['title_override'] ) ) : '';
+		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $row ) {
+			$name = $name_of( $row );
+			if ( '' === $name || ! is_string( $row['slug'] ?? null ) ) {
+				continue;
+			}
+			if ( 'sub' === (string) ( $row['level'] ?? 'top' ) ) {
+				$parent = self::submenu_parent( (string) ( $row['parent_slug'] ?? '' ) );
+				foreach ( null !== $parent && is_array( $submenu[ $parent ] ?? null ) ? self::matching_rows( $submenu[ $parent ], $row['slug'] ) : [] as $k ) {
+					$submenu[ $parent ][ $k ][3] = $name; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				}
+			} elseif ( is_array( $menu ) ) {
+				foreach ( self::matching_rows( $menu, $row['slug'] ) as $k ) {
+					$menu[ $k ][3] = $name; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				}
+			}
+		}
+		// 頂層的名稱以主選單分頁為準（跟側欄的改名一樣）。
+		foreach ( self::rule_rows( $config, 'wp_native' ) as $row ) {
+			$name = $name_of( $row );
+			if ( '' !== $name && is_string( $row['slug'] ?? null ) && is_array( $menu ) ) {
+				foreach ( self::matching_rows( $menu, $row['slug'] ) as $k ) {
+					$menu[ $k ][3] = $name; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				}
+			}
+		}
+	}
+
+	/**
+	 * v1.7.0：瀏覽器分頁的標題（admin_title）：目前這一頁的選單改過名稱時，換掉標題裡的原名。
+	 * WordPress 核心頁面（文章、設定…）的標題由頁面自己決定，只能在這裡換；外掛頁面在 apply_page_titles() 已經換好。
+	 *
+	 * @param mixed $admin_title
+	 * @param mixed $title
+	 * @return mixed
+	 */
+	public static function filter_admin_title( $admin_title, $title = '' ) {
+		if ( ! is_string( $admin_title ) || ! is_string( $title ) || '' === $title ) {
+			return $admin_title;
+		}
+		$config = self::get_config();
+		if ( empty( $config['defaults']['rename_page_titles'] ) ) {
+			return $admin_title;
+		}
+		$name = self::current_page_title_override( $config );
+		if ( '' === $name || $name === $title ) {
+			return $admin_title;
+		}
+		$pos = strpos( $admin_title, $title );
+		return false === $pos ? $admin_title : substr_replace( $admin_title, $name, $pos, strlen( $title ) );
+	}
+
+	/**
+	 * v1.7.0：目前這一頁的自訂名稱：子選單列優先，其次頂層列（主選單分頁的列蓋全部選單分頁的列）；沒有回空字串。
+	 *
+	 * @param array<string,mixed> $config
+	 */
+	private static function current_page_title_override( array $config ): string {
+		$page = self::current_admin_request_slug();
+		if ( '' === $page ) {
+			return '';
+		}
+		$match = static fn( $row ): bool => is_array( $row ) && empty( $row['separator'] ) && ! empty( $row['title_override'] )
+			&& is_string( $row['slug'] ?? null ) && self::slug_key( $row['slug'] ) === $page;
+		foreach ( (array) ( $config['ys_cart']['items'] ?? [] ) as $row ) {
+			if ( $match( $row ) && 'sub' === (string) ( $row['level'] ?? 'top' ) ) {
+				return trim( wp_strip_all_tags( (string) $row['title_override'] ) );
+			}
+		}
+		$name = '';
+		foreach ( [ 'ys_cart', 'wp_native' ] as $tab ) {
+			foreach ( self::rule_rows( $config, $tab ) as $row ) {
+				if ( $match( $row ) && 'sub' !== (string) ( $row['level'] ?? 'top' ) ) {
+					$name = trim( wp_strip_all_tags( (string) $row['title_override'] ) );
+				}
+			}
+		}
+		return $name;
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：子選單分組標題
+	// ─────────────────────────────────────────────
+
+	/**
+	 * v1.7.0：子選單分組標題：全部選單分頁「新增子選單標題」加的列（ys_cart.items 裡 separator＋subhead＋parent_slug）。
+	 * 依順序值插在那個上層的子選單之間：排在第一個順序值比它大的子選單前面（父選單自己那一列永遠在最前面）。
+	 * 標題不會排在第一個（WordPress 拿第一個子選單當頂層的連結）；後面沒有選單的標題在輸出前拿掉（prune_empty_submenu_headings()）。
+	 * 1.7.0 以前全部選單分頁的分隔列沒有 subhead，照舊只是設定頁上的分組，側欄不顯示。
+	 *
+	 * @param array<int, mixed> $ys_cart_items
+	 */
+	private static function insert_submenu_headings( array $ys_cart_items ): void {
+		global $submenu;
+		$any = false;
+		foreach ( $ys_cart_items as $item ) {
+			if ( is_array( $item ) && ! empty( $item['separator'] ) && ! empty( $item['subhead'] ) ) {
+				$any = true;
+				break;
+			}
+		}
+		if ( ! $any || ! is_array( $submenu ) ) {
+			return;
+		}
+		$heads  = []; // 實際上層 => [ [ order, 標題 ], … ]
+		$orders = []; // 實際上層 => [ 實際 slug => order ]
+		foreach ( $ys_cart_items as $item ) {
+			if ( ! is_array( $item ) || ! is_string( $item['parent_slug'] ?? null ) || '' === $item['parent_slug'] ) {
+				continue;
+			}
+			$parent = self::submenu_parent( $item['parent_slug'] );
+			if ( null === $parent || ! is_array( $submenu[ $parent ] ?? null ) ) {
+				continue;
+			}
+			if ( ! empty( $item['separator'] ) ) {
+				$title = trim( wp_strip_all_tags( (string) ( $item['title'] ?? '' ) ) );
+				if ( ! empty( $item['subhead'] ) && '' !== $title ) {
+					$heads[ $parent ][] = [ (int) ( $item['order'] ?? 0 ), $title ];
+				}
+				continue;
+			}
+			if ( 'sub' !== (string) ( $item['level'] ?? 'top' ) || ! isset( $item['order'] ) ) {
+				continue;
+			}
+			$hit = self::matching_rows( $submenu[ $parent ], (string) ( $item['slug'] ?? '' ) );
+			if ( [] !== $hit ) {
+				$orders[ $parent ][ (string) $submenu[ $parent ][ $hit[0] ][2] ] = (int) $item['order'];
+			}
+		}
+		foreach ( $heads as $parent => $list ) {
+			usort( $list, static fn( $a, $b ): int => $a[0] <=> $b[0] );
+			$rows  = array_values( $submenu[ $parent ] );
+			$order = static function ( $row ) use ( $parent, $orders ): int {
+				$slug = is_array( $row ) ? (string) ( $row[2] ?? '' ) : '';
+				if ( (string) $parent === $slug ) {
+					return PHP_INT_MIN;
+				}
+				return $orders[ $parent ][ $slug ] ?? PHP_INT_MAX;
+			};
+			$out = [];
+			$i   = 0;
+			$n   = count( $rows );
+			foreach ( $list as $j => [ $at, $title ] ) {
+				while ( $i < $n && $order( $rows[ $i ] ) < $at ) {
+					$out[] = $rows[ $i++ ];
+				}
+				if ( [] === $out ) {
+					continue; // 不排第一個。
+				}
+				$out[] = [ $title, 'read', 'ys-am-subhead-' . substr( md5( $parent . "\0" . $j . "\0" . $title ), 0, 8 ), $title, 'ys-am-subhead' ];
+			}
+			while ( $i < $n ) {
+				$out[] = $rows[ $i++ ];
+			}
+			$submenu[ $parent ] = $out; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+	}
+
+	/** v1.7.0：輸出側欄前拿掉後面沒有選單的子選單標題（這個帳號看不到那一組，或標題排到最前面）。 */
+	private static function prune_empty_submenu_headings(): void {
+		global $submenu;
+		if ( ! is_array( $submenu ) ) {
+			return;
+		}
+		foreach ( $submenu as $parent => $rows ) {
+			if ( ! is_array( $rows ) ) {
+				continue;
+			}
+			$keep    = [];
+			$pending = null;
+			$heads   = 0;
+			foreach ( $rows as $sub ) {
+				// 別的外掛可能在第 4 欄加 class：用包含比對（開新分頁也是在後面接 class）。
+				if ( is_array( $sub ) && false !== strpos( (string) ( $sub[4] ?? '' ), 'ys-am-subhead' ) ) {
+					++$heads;
+					$pending = [] !== $keep ? $sub : null;
+					continue;
+				}
+				if ( null !== $pending ) {
+					$keep[]  = $pending;
+					$pending = null;
+				}
+				$keep[] = $sub;
+			}
+			if ( $heads > 0 ) {
+				$submenu[ $parent ] = $keep; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+		}
+	}
+
+	// ─────────────────────────────────────────────
+	// v1.7.0：換到別的上層顯示（ys_cart 列的 display_parent）
+	//
+	// 跟「移到主選單」一樣，原本那一列先留在原處（WordPress 靠它判斷權限與 page hook），輸出側欄前才搬（perform_display_moves()）；
+	// 連結用它原本的網址（native_link()）。頂層降為子選單只限沒有其他子選單的頂層。新上層這個帳號看不到時留在原處。
+	// ─────────────────────────────────────────────
+
+	/**
+	 * @var array<int, array{from:string,slug:string,to:string,top:bool,link?:string,to_live?:string}>
+	 */
+	private static array $display_moves = [];
+
+	/** v1.7.0：目前頁搬過去之後的連結（fix_moved_highlight() 判斷後設定；submenu_file 用）。 */
+	private static string $current_moved = '';
+
+	/**
+	 * @param array<int, mixed> $ys_cart_items
+	 */
+	private static function collect_display_moves( array $ys_cart_items ): void {
+		global $menu, $submenu;
+		self::$display_moves = [];
+		self::$current_moved = '';
+		foreach ( $ys_cart_items as $item ) {
+			if ( ! is_array( $item ) || ! empty( $item['separator'] ) || ! empty( $item['promote_to_top'] )
+				|| ! is_string( $item['display_parent'] ?? null ) || '' === trim( $item['display_parent'] ) || ! is_string( $item['slug'] ?? null ) ) {
+				continue;
+			}
+			$slug = $item['slug'];
+			$to   = trim( $item['display_parent'] );
+			if ( '' === $slug || self::slug_key( $to ) === self::slug_key( $slug ) ) {
+				continue;
+			}
+			if ( 'sub' === (string) ( $item['level'] ?? 'top' ) ) {
+				$from = self::submenu_parent( (string) ( $item['parent_slug'] ?? '' ) );
+				if ( null === $from || self::slug_key( $from ) === self::slug_key( $to ) || ! is_array( $submenu[ $from ] ?? null ) ) {
+					continue;
+				}
+				$hit = self::matching_rows( $submenu[ $from ], $slug );
+				$raw = [] !== $hit ? (string) $submenu[ $from ][ $hit[0] ][2] : '';
+				if ( '' === $raw || $raw === $from ) {
+					continue; // 父選單自己那一列（頂層的連結）不搬。
+				}
+				self::$display_moves[] = [ 'from' => $from, 'slug' => $raw, 'to' => $to, 'top' => false ];
+			} elseif ( is_array( $menu ) ) {
+				$hit = self::matching_rows( $menu, $slug );
+				if ( [] !== $hit ) {
+					self::$display_moves[] = [ 'from' => '', 'slug' => (string) $menu[ $hit[0] ][2], 'to' => $to, 'top' => true ];
+				}
+			}
+		}
+	}
+
+	/** v1.7.0：搬到別的上層之後的連結：.php 頁與完整網址照舊，外掛頁組成它原本的網址（同 promoted_menu_url()）。 */
+	private static function native_link( string $slug, string $parent ): string {
+		if ( self::is_external_url( $slug ) || false !== strpos( $slug, '.php' ) ) {
+			return $slug;
+		}
+		return self::promoted_menu_url( $slug, '' === $parent ? 'admin.php' : $parent );
+	}
+
+	private static function perform_display_moves(): void {
+		global $menu, $submenu;
+		if ( [] === self::$display_moves || ! is_array( $menu ) ) {
+			return;
+		}
+		if ( ! is_array( $submenu ) ) {
+			$submenu = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+		foreach ( self::$display_moves as $i => $move ) {
+			$to_hit = self::matching_rows( $menu, $move['to'] );
+			if ( [] === $to_hit ) {
+				unset( self::$display_moves[ $i ] ); // 這個帳號看不到新上層：留在原處。
+				continue;
+			}
+			$to_key = $to_hit[0];
+			$to     = (string) $menu[ $to_key ][2];
+			if ( $move['top'] ) {
+				$own = self::matching_rows( $menu, $move['slug'] );
+				$key = [] !== $own ? $own[0] : null;
+				$subs = is_array( $submenu[ $move['slug'] ] ?? null ) ? $submenu[ $move['slug'] ] : [];
+				$others = array_filter( $subs, static fn( $s ): bool => is_array( $s ) && (string) ( $s[2] ?? '' ) !== $move['slug'] );
+				if ( null === $key || $key === $to_key || [] !== $others ) {
+					unset( self::$display_moves[ $i ] ); // 只搬沒有其他子選單的頂層。
+					continue;
+				}
+				$m   = $menu[ $key ];
+				$row = [ (string) ( $m[0] ?? '' ), (string) ( $m[1] ?? 'read' ), self::native_link( $move['slug'], '' ), (string) ( $m[3] ?? ( $m[0] ?? '' ) ) ];
+				unset( $menu[ $key ], $submenu[ $move['slug'] ] );
+			} else {
+				$from  = $move['from'];
+				$found = null;
+				foreach ( is_array( $submenu[ $from ] ?? null ) ? $submenu[ $from ] : [] as $idx => $sub ) {
+					if ( is_array( $sub ) && (string) ( $sub[2] ?? '' ) === $move['slug'] ) {
+						$found = $idx;
+						break;
+					}
+				}
+				if ( null === $found || $from === $to ) {
+					unset( self::$display_moves[ $i ] );
+					continue;
+				}
+				$row    = $submenu[ $from ][ $found ];
+				$row[2] = self::native_link( $move['slug'], $from );
+				unset( $submenu[ $from ][ $found ] );
+				$submenu[ $from ] = array_values( $submenu[ $from ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				if ( [] === $submenu[ $from ] || ( 1 === count( $submenu[ $from ] ) && (string) ( $submenu[ $from ][0][2] ?? '' ) === $from ) ) {
+					unset( $submenu[ $from ] );
+				}
+			}
+			if ( empty( $submenu[ $to ] ) || ! is_array( $submenu[ $to ] ) ) {
+				// 新上層原本沒有子選單：第一列放它自己（WordPress 拿第一個子選單當頂層的連結）。
+				$t              = $menu[ $to_key ];
+				$submenu[ $to ] = [ [ (string) ( $t[0] ?? '' ), (string) ( $t[1] ?? 'read' ), $to, (string) ( $t[3] ?? ( $t[0] ?? '' ) ) ] ]; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+			$submenu[ $to ][] = $row; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			self::$display_moves[ $i ]['link']    = (string) $row[2];
+			self::$display_moves[ $i ]['to_live'] = $to;
+		}
+	}
+
+	/**
+	 * v1.7.0：造訪換了上層的頁面時，高亮改標在新位置（WordPress 之後的 get_admin_page_parent() 在子選單裡找不到原本的寫法，
+	 * 不會蓋回去；.php 頁找到的就是新位置）。
+	 *
+	 * @param mixed $parent_file
+	 * @return mixed
+	 */
+	public static function fix_moved_highlight( $parent_file ) {
+		global $submenu_file;
+		self::$current_moved = '';
+		foreach ( self::$display_moves as $move ) {
+			if ( ! empty( $move['link'] ) && self::copy_matches_request( $move['slug'] ) ) {
+				self::$current_moved = (string) $move['link'];
+				$submenu_file        = self::$current_moved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				return (string) $move['to_live'];
+			}
+		}
+		return $parent_file;
+	}
+
+	/**
+	 * @param mixed $submenu_file
+	 * @param mixed $parent_file
+	 * @return mixed
+	 */
+	public static function fix_moved_submenu_file( $submenu_file, $parent_file = '' ) {
+		return '' !== self::$current_moved ? self::$current_moved : $submenu_file;
+	}
+
+	/** v1.7.0：原上層殘留的「目前所在」標記（WordPress 直接比對請求檔名，不經過 parent_file）拿掉。 */
+	public static function print_moved_highlight_fix(): void {
+		if ( '' === self::$current_moved ) {
+			return;
+		}
+		echo '<script id="ys-am-moved-highlight-fix">(function(){'
+			. 'var a=document.querySelector("#adminmenu .wp-submenu a[aria-current=\"page\"]");var keep=a?a.closest("li.menu-top"):null;if(!keep){return;}'
+			. 'document.querySelectorAll("#adminmenu li.wp-has-current-submenu").forEach(function(li){if(li===keep){return;}'
+			. '[li,li.querySelector(":scope > a")].forEach(function(el){if(el){el.classList.remove("wp-has-current-submenu","wp-menu-open");el.classList.add("wp-not-current-submenu");}});});'
+			. '})();</script>';
 	}
 }

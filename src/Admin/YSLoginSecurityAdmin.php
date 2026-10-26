@@ -635,7 +635,7 @@ final class YSLoginSecurityAdmin {
 	/* ─────────────────────────── 全後台的提醒（§4.10） ─────────────────────────── */
 
 	/**
-	 * admin_notices：只給 manage_options；總開關打開時才有。文字一律跳脫。
+	 * admin_notices：只給能使用本外掛的帳號（v1.7.0 起看 YSAccess::can_manage()，預設就是 manage_options）；總開關打開時才有。文字一律跳脫。
 	 */
 	public static function print_notices(): void {
 		if ( ! YSAccess::can_manage() ) {

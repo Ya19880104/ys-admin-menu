@@ -10,6 +10,8 @@
  *   5. v1.4.0 自訂登入頁 YSLoginPage、Cloudflare Turnstile 登入防護 YSTurnstile（wp-login.php）
  *   6. v1.5.0 YS CART 選單搬家配套 YSMenuMovesMigrator（admin_menu@9000）＋ WP-CLI `wp ys-admin-menu moves`
  *   7. v1.6.0 登入次數限制與訪客 IP 偵測的 WP-CLI：`wp ys-admin-menu login-guard`、`wp ys-admin-menu ip`
+ *   8. v1.7.0 誰能使用本外掛 YSAccess（＋`wp ys-admin-menu access`）、關閉留言 YSCommentsDisabler、
+ *      控制台小工具 YSDashboardWidgets、「後台精簡」頁 YSDeclutterAdmin；選單的逐項目權限、自訂連結等在 YSMenuRouter。
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -102,6 +104,9 @@ final class YSAdminMenuPlugin {
 
 		// v1.7.0：關閉留言（前台、REST、XML-RPC 都要；預設關，關著時一個 hook 都不掛）。
 		YSCommentsDisabler::register();
+		// v1.7.0：停用本外掛的最後一道關卡（REST、外掛市集也會停用外掛，它們不是 is_admin()）。只掛一個 action，
+		// 真的有人要停用本外掛時才讀設定。
+		YSAccess::register_deactivation_guard();
 
 		// 4. 後台設定頁 + 白牌 admin-post handler（僅後台）
 		if ( is_admin() ) {

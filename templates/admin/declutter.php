@@ -21,6 +21,9 @@ $ys_am_missing = array_values( array_diff( $dashboard['hidden'], array_keys( $se
 <div class="wrap ys-am-declutter">
 	<?php echo YSMenuPage::pagehead_html( 'dashboard', '後台精簡', '關閉留言、隱藏控制台小工具，讓後台只留需要的東西。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape ?>
 
+	<?php if ( ! empty( $healed ) ) : ?>
+		<div class="notice notice-warning"><p>這一頁的設定被改成「不自動載入」，本外掛會把它當成沒設定過；已經改回自動載入，設定恢復生效。</p></div>
+	<?php endif; ?>
 	<?php if ( $saved ) : ?>
 		<div class="notice notice-success is-dismissible"><p>已儲存。有頁面快取的網站，請清一次快取，訪客才會看到新的設定。</p></div>
 	<?php endif; ?>

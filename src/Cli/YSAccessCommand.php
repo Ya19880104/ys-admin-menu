@@ -32,6 +32,7 @@ final class YSAccessCommand {
 	 * @param array<string,string> $assoc_args
 	 */
 	public function status( $args, $assoc_args ): void {
+		self::heal();
 		$saved     = YSAccess::get();
 		$effective = YSAccess::effective();
 		\WP_CLI::line( '設定：' . ( 'users' === $saved['mode'] ? '只有指定的帳號' : '所有能管理網站的管理員（預設）' ) );
@@ -66,6 +67,7 @@ final class YSAccessCommand {
 	 * @param array<string,string> $assoc_args
 	 */
 	public function reset( $args, $assoc_args ): void {
+		self::heal();
 		$cfg                    = YSAccess::get();
 		$cfg['mode']            = 'capability';
 		$cfg['hide_plugin_row'] = false;
@@ -89,6 +91,7 @@ final class YSAccessCommand {
 	 * @param array<string,string> $assoc_args
 	 */
 	public function allow( $args, $assoc_args ): void {
+		self::heal();
 		$cfg   = YSAccess::get();
 		$added = [];
 		foreach ( (array) $args as $who ) {
@@ -109,6 +112,15 @@ final class YSAccessCommand {
 		update_option( YSAccess::OPTION, YSAccess::sanitize( $cfg ), true );
 		\WP_CLI::success( ( [] === $added ? '帳號本來就在清單裡。' : '已加進清單：ID ' . implode( ', ', $added ) . '。' )
 			. ( 'users' === $cfg['mode'] ? '' : '目前是「所有管理員都能使用」，清單要在設定頁切到「只有指定的帳號」才生效。' ) );
+	}
+
+	/**
+	 * v1.7.0：設定被改成不自動載入時，YSAccess::get() 會當成沒設定過（重設會把帳號清單寫成空的）；先改回自動載入。
+	 */
+	private static function heal(): void {
+		if ( YSAccess::heal_autoload( YSAccess::OPTION ) ) {
+			\WP_CLI::warning( '設定被改成「不自動載入」，已經改回自動載入。' );
+		}
 	}
 
 	/** 印到終端機前拿掉控制字元（帳號名稱是使用者輸入的）。 */

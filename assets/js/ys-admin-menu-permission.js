@@ -89,8 +89,46 @@
         var renderedSlugs = rowSlugs( tbody );
         var renderedTopKeys = topRowKeys( tbody );
         var renderedCopies = collectCopies( tab ); // 載入時的複製項（{slug,parent_slug}）。
+        var renderedCustom = customRowUrls( tbody ); // v1.7.0：載入時的自訂連結網址。
         syncCopyButtons();
+        if ( 'wp_native' !== tab ) {
+            addApplyChildrenButtons( tbody );
+        }
+        bootPreview( tbody );
         markClean();
+
+        // v1.7.0：新增自訂連結（主選單分頁）。
+        var addCustomBtn = document.getElementById( 'ys-ec-add-custom-link' );
+        if ( addCustomBtn ) {
+            addCustomBtn.addEventListener( 'click', function () {
+                var row = buildCustomRow( nextOrder( tbody ) );
+                tbody.appendChild( row );
+                if ( typeof window.jQuery !== 'undefined' && window.jQuery.fn.wpColorPicker ) {
+                    try { window.jQuery( row ).find( '.ys-ec-color-picker' ).wpColorPicker(); } catch ( e ) { /* swallow */ }
+                }
+                renderIconPreview( row.querySelector( '.ys-ec-icon-field' ) );
+                var titleInput = row.querySelector( '.ys-ec-custom-title' );
+                if ( titleInput ) { titleInput.focus(); }
+                if ( row.scrollIntoView ) { row.scrollIntoView( { behavior: 'smooth', block: 'center' } ); }
+                markDirty();
+            } );
+        }
+        // v1.7.0：新增子選單標題（全部選單分頁）：拖到某個選單的子選單之間。
+        var addSubheadBtn = document.getElementById( 'ys-ec-add-subhead' );
+        if ( addSubheadBtn ) {
+            addSubheadBtn.addEventListener( 'click', function () {
+                var temp = document.createElement( 'tbody' );
+                temp.innerHTML = renderSeparatorRow( '', nextOrder( tbody ), tab, true );
+                var newRow = temp.firstElementChild;
+                if ( newRow ) {
+                    tbody.appendChild( newRow );
+                    var titleInput = newRow.querySelector( '.ys-ec-separator-title' );
+                    if ( titleInput ) { titleInput.focus(); }
+                    if ( newRow.scrollIntoView ) { newRow.scrollIntoView( { behavior: 'smooth', block: 'center' } ); }
+                    markDirty();
+                }
+            } );
+        }
 
         // 「+ 新增空白標題」 separator — 直接插入一列可即時編輯的分隔列。
         if ( addSepBtn ) {
@@ -125,7 +163,8 @@
             }
 
             if ( btn.classList.contains( 'ys-ec-delete-row' ) ) {
-                if ( window.confirm( '確定要從清單移除？\n（不會真的刪除選單，只是不在管理範圍內）' ) ) {
+                var coreNote = row.getAttribute( 'data-core-rules' ) === '1' ? '\n這一列有 YS CART 寫入的可見規則，會一起刪掉。' : '';
+                if ( window.confirm( '確定要從清單移除？\n（不會真的刪除選單，只是不在管理範圍內）' + coreNote ) ) {
                     row.parentNode.removeChild( row );
                     markDirty();
                 }
@@ -175,19 +214,38 @@
 
         if ( saveBtn ) {
             saveBtn.addEventListener( 'click', function () {
+                // v1.7.0：自訂連結要有名稱與正確的網址，也不能跟主選單上已有的項目重複。
+                var bad = invalidCustomRow( tbody );
+                if ( bad ) {
+                    setStatus( saveStatus, bad.dup
+                        ? '這個自訂連結的網址已經在主選單上（或跟另一個自訂連結重複），不用另外加；請改網址或移除這一列'
+                        : '自訂連結要填名稱，網址要是 https://… 或 wp-admin 底下的頁面（例：edit.php?post_status=draft）', '#dc2626' );
+                    flashRow( bad.row );
+                    var focus = bad.row.querySelector( '.ys-ec-custom-title' );
+                    if ( bad.dup || ( focus && '' !== trimStr( focus.value ) ) ) { focus = bad.row.querySelector( '.ys-ec-custom-url' ); }
+                    if ( focus ) { focus.focus(); }
+                    return;
+                }
                 saveBtn.disabled = true;
                 setStatus( saveStatus, '儲存中…', '#6b7280' );
 
                 var payload = ( 'wp_native' === tab )
-                    ? buildWpNativePayload( tbody, renderedSlugs )
+                    ? buildWpNativePayload( tbody, renderedSlugs, renderedCustom )
                     : buildYsCartPayload( tbody, renderedSlugs, renderedTopKeys, renderedCopies );
 
                 postMenuConfig( payload )
                     .then( function ( ok ) {
                         if ( ok ) {
+                            // 自訂連結的網址改過的列，代稱與網址換成新的（下次儲存時 rendered 清單才對）。
+                            Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-custom="1"]' ), function ( row ) {
+                                var url = trimStr( ( row.querySelector( '.ys-ec-custom-url' ) || {} ).value );
+                                row.setAttribute( 'data-slug', customMenuKey( url ) );
+                                row.setAttribute( 'data-custom-url', url );
+                            } );
                             renderedSlugs   = rowSlugs( tbody );
                             renderedTopKeys = topRowKeys( tbody );
                             renderedCopies  = collectCopies( tab );
+                            renderedCustom  = customRowUrls( tbody );
                             markClean();
                             setStatus( saveStatus, '已儲存 ✓', '#16a34a', 3000 );
                         }
@@ -230,8 +288,7 @@
 
     // ── 建立 payload ──
     function readRowItem( row ) {
-        var roleCbs = row.querySelectorAll( '.ys-ec-role-cb:checked' );
-        var roles = Array.prototype.slice.call( roleCbs ).map( function ( cb ) { return cb.dataset.role; } );
+        var who     = readAccess( row );
         var colorEl = row.querySelector( '.ys-ec-color-picker' );
         var titleEl = row.querySelector( '.ys-ec-title-override' );
         var hideCb  = row.querySelector( '.ys-ec-hide-checkbox' );
@@ -239,10 +296,12 @@
         var existingSelfUid = parseInt( row.getAttribute( 'data-self-uid' ) || '0', 10 ) || 0;
         var selfOnlyUid = ( selfCb && selfCb.checked ) ? ( existingSelfUid || ( cfg.currentUserId | 0 ) ) : 0;
         var iconEl = row.querySelector( '.ys-ec-icon-input' );
+        var newTabCb = row.querySelector( '.ys-ec-newtab' );
+        var moveEl = row.querySelector( '.ys-ec-display-parent' );
         var item = {
-            slug:           row.getAttribute( 'data-slug' ),
+            slug:           row.getAttribute( 'data-custom' ) === '1' ? customMenuKey( ( row.querySelector( '.ys-ec-custom-url' ) || {} ).value ) : row.getAttribute( 'data-slug' ),
             order:          parseInt( ( row.querySelector( '.ys-ec-order-input' ) || {} ).value || '0', 10 ) || 0,
-            roles:          roles,
+            roles:          who.roles,
             color:          colorEl ? colorEl.value : null,
             title_override: titleEl ? titleEl.value : '',
             level:          row.getAttribute( 'data-level' ) || 'top',
@@ -254,11 +313,70 @@
         if ( iconEl ) {
             item.icon = iconEl.value.replace( /^\s+|\s+$/g, '' );
         }
+        // v1.7.0：逐項目權限（只在舊欄位表達不了時才有）、開新分頁、換到別的上層顯示。
+        if ( who.access ) {
+            item.access = who.access;
+        }
+        if ( newTabCb && newTabCb.checked ) {
+            item.target = '_blank';
+        }
+        if ( moveEl && moveEl.value ) {
+            item.display_parent = moveEl.value;
+        }
         return item;
     }
 
-    function buildWpNativePayload( tbody, renderedSlugs ) {
+    function trimStr( s ) {
+        return String( s == null ? '' : s ).replace( /^\s+|\s+$/g, '' );
+    }
+
+    // v1.7.0：自訂連結的網址（跟 PHP YSMenuRouter::sanitize_custom_url() 同一套：http(s) 網址，或 wp-admin 底下的 .php 頁面）。
+    // http(s) 網址也不收 ^ ` { }：伺服器端 esc_url_raw() 會拿掉它們，存下的網址就跟這一列對不上。
+    var CUSTOM_URL_RE = /^(https?:\/\/[^\s'"<>\\\/?#^`{}]+[^\s'"<>\\^`{}]*|[a-z0-9_\-]+\.php(\?[^\s'"<>\\#]*)?(#[^\s'"<>\\]*)?)$/i;
+
+    // v1.7.0：自訂連結的選單代稱（跟 PHP YSMenuRouter::custom_menu_key() 一樣）：http(s) 網址照原樣，wp-admin 底下的頁面前面加 ./
+    // （跟複製項一樣，這一列的規則只管這個連結，不會套到原本那一頁）。
+    function customMenuKey( url ) {
+        url = trimStr( url );
+        if ( '' === url ) { return ''; }
+        return /^https?:\/\//i.test( url ) ? url : './' + url;
+    }
+
+    // v1.7.0：自訂連結列：名稱與網址都要填、網址格式要對、不能跟主選單上已有的項目（或另一個自訂連結）重複；
+    // 有問題回傳 { row, dup }（不送出）。
+    function invalidCustomRow( tbody ) {
+        var taken = {};
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-slug]' ), function ( r ) {
+            if ( r.getAttribute( 'data-custom' ) !== '1' && r.getAttribute( 'data-slug' ) ) {
+                taken[ r.getAttribute( 'data-slug' ) ] = true;
+            }
+        } );
+        var rows = tbody.querySelectorAll( 'tr[data-custom="1"]' );
+        for ( var i = 0; i < rows.length; i++ ) {
+            var title = trimStr( ( rows[ i ].querySelector( '.ys-ec-custom-title' ) || {} ).value );
+            var url   = trimStr( ( rows[ i ].querySelector( '.ys-ec-custom-url' ) || {} ).value );
+            if ( '' === title || ! CUSTOM_URL_RE.test( url ) ) {
+                return { row: rows[ i ], dup: false };
+            }
+            var key = customMenuKey( url );
+            if ( taken[ url ] || taken[ key ] ) {
+                return { row: rows[ i ], dup: true };
+            }
+            taken[ key ] = true;
+        }
+        return null;
+    }
+
+    // 頁面載入（或上次儲存）時列出的自訂連結網址（伺服器據此分辨「刪掉的」與「這個帳號看不到、沒列出來的」）。
+    function customRowUrls( tbody ) {
+        return Array.prototype.map.call( tbody.querySelectorAll( 'tr[data-custom="1"]' ), function ( row ) {
+            return row.getAttribute( 'data-custom-url' ) || '';
+        } ).filter( function ( u ) { return '' !== u; } );
+    }
+
+    function buildWpNativePayload( tbody, renderedSlugs, renderedCustom ) {
         var items = [];
+        var custom = [];
         Array.prototype.forEach.call( tbody.querySelectorAll( 'tr' ), function ( row ) {
             if ( row.getAttribute( 'data-separator' ) === '1' ) {
                 var sepTitleInput = row.querySelector( '.ys-ec-separator-title' );
@@ -269,15 +387,33 @@
                 } );
                 return;
             }
+            if ( row.getAttribute( 'data-custom' ) === '1' ) {
+                var item = readRowItem( row );
+                custom.push( {
+                    url:   trimStr( ( row.querySelector( '.ys-ec-custom-url' ) || {} ).value ),
+                    title: trimStr( ( row.querySelector( '.ys-ec-custom-title' ) || {} ).value )
+                } );
+                item.title_override = '';
+                items.push( item );
+                return;
+            }
             if ( ! row.getAttribute( 'data-slug' ) ) {
                 return;
             }
             items.push( readRowItem( row ) );
         } );
         var copies = collectCopies( 'wp_native' );
+        var newItems = document.getElementById( 'ys-ec-new-items-visibility' );
+        var renameTitles = document.getElementById( 'ys-ec-rename-page-titles' );
         return {
-            wp_native:  { items: items, rendered_slugs: renderedSlugs },
-            top_copies: { items: copies, rendered: copies }
+            wp_native:    { items: items, rendered_slugs: renderedSlugs },
+            top_copies:   { items: copies, rendered: copies },
+            // v1.7.0：自訂連結（只動頁面載入時列出的）與主選單分頁的預設行為。
+            custom_items: { items: custom, rendered: renderedCustom || [] },
+            defaults:     {
+                new_items_visibility: newItems ? newItems.value : 'show',
+                rename_page_titles:   renameTitles ? !! renameTitles.checked : false
+            }
         };
     }
 
@@ -290,11 +426,17 @@
             // 分隔列 → ys_cart.items。
             if ( row.getAttribute( 'data-separator' ) === '1' ) {
                 var sepTitleInput = row.querySelector( '.ys-ec-separator-title' );
-                ysItems.push( {
+                var sep = {
                     separator: true,
                     title:     sepTitleInput ? sepTitleInput.value : '',
                     order:     parseInt( ( row.querySelector( '.ys-ec-order-input' ) || {} ).value || '0', 10 ) || 0
-                } );
+                };
+                // v1.7.0：子選單標題：記下它夾在哪個上層的子選單之間（依目前位置判斷）。
+                if ( row.getAttribute( 'data-subhead' ) === '1' ) {
+                    sep.subhead = true;
+                    sep.parent_slug = subheadParent( row );
+                }
+                ysItems.push( sep );
                 return;
             }
             // 父選單預設頁列：只提供複製，不是可管理的選單列。
@@ -337,7 +479,7 @@
     // 一個頂層複製／提升列的設定（寫回 wp_native.items 的 ./ 或原生代稱列）。
     function topRowSettings( row ) {
         var item = readRowItem( row );
-        return {
+        var out = {
             slug:           row.getAttribute( 'data-copy-key' ) || '',
             after:          computeAfter( row ),
             title_override: item.title_override,
@@ -346,6 +488,34 @@
             hide:           item.hide,
             self_only_uid:  item.self_only_uid
         };
+        if ( item.access ) {
+            out.access = item.access;
+        }
+        if ( item.target ) {
+            out.target = item.target;
+        }
+        return out;
+    }
+
+    // v1.7.0：子選單標題夾在哪個上層的子選單之間：下一列是子選單＝它的上層；不然看上一列（子選單＝它的上層，頂層＝它自己）。
+    function subheadParent( row ) {
+        var real = function ( r ) {
+            return r && r.getAttribute( 'data-separator' ) !== '1' && r.getAttribute( 'data-copy' ) !== '1' && r.getAttribute( 'data-promoted' ) !== '1';
+        };
+        var next = row.nextElementSibling;
+        while ( next && ! real( next ) ) { next = next.nextElementSibling; }
+        if ( next && ( next.getAttribute( 'data-level' ) === 'sub' || next.getAttribute( 'data-self-row' ) === '1' ) ) {
+            return next.getAttribute( 'data-parent' ) || '';
+        }
+        var prev = row.previousElementSibling;
+        while ( prev && ! real( prev ) ) { prev = prev.previousElementSibling; }
+        if ( ! prev ) {
+            return '';
+        }
+        if ( prev.getAttribute( 'data-level' ) === 'top' ) {
+            return prev.getAttribute( 'data-slug' ) || '';
+        }
+        return prev.getAttribute( 'data-parent' ) || '';
     }
 
     // 這個頂層列前面最靠近的「頂層錨點」代稱（真實頂層 data-slug，或另一個複製／提升列的 data-copy-key）；
@@ -432,6 +602,10 @@
                 .then( function ( r ) { return r.json().then( function ( d ) { return { ok: r.ok, data: d }; } ); } )
                 .then( function ( res ) {
                     if ( res.ok && res.data && res.data.success ) {
+                        // v1.7.0：設定裡指到這個站上沒有的帳號時，先提示再重新載入。
+                        if ( Array.isArray( res.data.warnings ) && res.data.warnings.length ) {
+                            window.alert( '已匯入，但請注意：\n' + res.data.warnings.join( '\n' ) );
+                        }
                         setStatus( statusEl, '已匯入 ✓ 重新載入中…', '#16a34a' );
                         setTimeout( function () { window.location.reload(); }, 800 );
                     } else {
@@ -496,7 +670,8 @@
             defaultIcon:  '',
             roles:        [],
             hide:         false,
-            selfUid:      0
+            selfUid:      0,
+            newTab:       false
         } );
         insertAfterGroup( tbody, parent, tr );
         renderIconPreview( tr.querySelector( '.ys-ec-icon-field' ) );
@@ -522,6 +697,8 @@
             icon:         '',
             defaultIcon:  '',
             roles:        checkedRoles( sub ),
+            panelHtml:    panelHtmlOf( sub ), // v1.7.0：「誰看得到」面板原樣帶過去。
+            newTab:       !! ( sub.querySelector( '.ys-ec-newtab' ) || {} ).checked,
             hide:         !! ( sub.querySelector( '.ys-ec-hide-checkbox' ) || {} ).checked,
             selfUid:      ( sub.querySelector( '.ys-ec-self-only' ) || {} ).checked ? ( parseInt( sub.getAttribute( 'data-self-uid' ) || '0', 10 ) || ( cfg.currentUserId | 0 ) ) : 0
         } );
@@ -544,6 +721,8 @@
             title:        rowTitle( top ),
             titleOverride: ( top.querySelector( '.ys-ec-title-override' ) || {} ).value || '',
             roles:        checkedRoles( top ),
+            panelHtml:    panelHtmlOf( top ),
+            newTab:       !! ( top.querySelector( '.ys-ec-newtab' ) || {} ).checked,
             hide:         !! ( top.querySelector( '.ys-ec-hide-checkbox' ) || {} ).checked,
             selfUid:      ( top.querySelector( '.ys-ec-self-only' ) || {} ).checked ? ( parseInt( top.getAttribute( 'data-self-uid' ) || '0', 10 ) || ( cfg.currentUserId | 0 ) ) : 0,
             copyKey:      copyKeyFromPromote( top.getAttribute( 'data-copy-key' ) || '' ),
@@ -572,8 +751,8 @@
         return Array.prototype.slice.call( row.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) { return c.dataset.role; } );
     }
 
-    // v1.7.0：角色面板（與 PHP role_picker_html() 同一套）。列出站上全部角色；已存但站上已經沒有的角色也列出並保持勾選，
-    // 不會因為表上看不到就在儲存時被清掉。
+    // v1.7.0：面板裡的文字跳脫。新增的列一律用「誰看得到」面板（accessPickerHtml()，列出站上全部角色；已存但站上已經沒有的
+    // 角色也列出並保持勾選，不會因為表上看不到就在儲存時被清掉）。只有角色的面板（本外掛自己的頁面）只會由 PHP 畫出來。
     function escHtml( s ) {
         return String( s ).replace( /[&<>"']/g, function ( ch ) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ ch ];
@@ -584,27 +763,19 @@
         if ( labels.length <= 2 ) { return labels.join( '、' ); }
         return labels[0] + ' 等 ' + labels.length + ' 個角色';
     }
-    function roleCheckboxesHtml( roles ) {
-        var opts = Array.isArray( cfg.roles ) && cfg.roles.length ? cfg.roles : [ [ 'administrator', '管理員' ], [ 'editor', '編輯' ] ];
-        var known = {};
-        var labels = [];
-        var html = opts.map( function ( o ) {
-            known[ o[0] ] = true;
-            var on = roles.indexOf( o[0] ) >= 0;
-            if ( on ) { labels.push( o[1] ); }
-            return '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( o[0] ) + '"' + ( on ? ' checked' : '' ) + '> ' + escHtml( o[1] ) + '</label>';
-        } ).join( '' );
-        roles.forEach( function ( r ) {
-            if ( 'string' !== typeof r || '' === r || known[ r ] ) { return; }
-            labels.push( r );
-            html += '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( r ) + '" checked> ' + escHtml( r + '（角色已不存在）' ) + '</label>';
-        } );
-        return '<details class="ys-ec-roles"><summary class="ys-ec-roles__sum" title="沒有勾選＝不限角色">' + escHtml( roleSummary( labels ) ) + '</summary><div class="ys-ec-roles__panel">' + html + '</div></details>';
-    }
     // 勾選改變時更新摘要；打開一個面板時收起其他面板。
     document.addEventListener( 'change', function ( e ) {
         var cb = e.target;
-        if ( ! cb || ! cb.classList || ! cb.classList.contains( 'ys-ec-role-cb' ) ) { return; }
+        if ( ! cb || ! cb.classList ) { return; }
+        // v1.7.0：「誰看得到」面板：模式、角色、也套用到管理員、只藏選單。
+        var accessBox = cb.closest && cb.closest( '.ys-ec-access' );
+        if ( accessBox && ( cb.classList.contains( 'ys-ec-role-cb' ) || cb.classList.contains( 'ys-ec-access-mode' )
+            || cb.classList.contains( 'ys-ec-access-admins' ) || cb.classList.contains( 'ys-ec-access-menu-only' ) ) ) {
+            accessBox.setAttribute( 'data-touched', '1' );
+            updateAccessSummary( accessBox );
+            return;
+        }
+        if ( ! cb.classList.contains( 'ys-ec-role-cb' ) ) { return; }
         var box = cb.closest( '.ys-ec-roles' );
         if ( ! box ) { return; }
         var labels = Array.prototype.slice.call( box.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) {
@@ -613,15 +784,557 @@
         var sum = box.querySelector( '.ys-ec-roles__sum' );
         if ( sum ) { sum.textContent = roleSummary( labels ); }
     } );
+
+    // ─────────────────────────────────────────────
+    // v1.7.0：「誰看得到」面板（與 PHP access_picker_html() 同一套）
+    //   不限／只有／除了 × 角色＋帳號，加上「也套用到管理員」「只藏選單」。存檔時只在舊欄位表達不了時才送 access：
+    //   「只有這些角色」（沒有帳號、不含管理員、不是只藏選單）照舊存 roles，1.6.0 也看得懂。
+    // ─────────────────────────────────────────────
+    var accessSeq = 0;
+    // 複製項、自訂連結的面板說明（與 PHP YSPermissionAdmin::LINK_ONLY_NOTE 相同）。
+    var LINK_ONLY_NOTE = '這一列只管側欄上的這個連結；直接開網址照那一頁原本的設定。';
+
+    function parseJson( s ) {
+        if ( ! s ) { return null; }
+        try { return JSON.parse( s ); } catch ( e ) { return null; }
+    }
+
+    function accessState( box ) {
+        var modeEl = box.querySelector( '.ys-ec-access-mode:checked' );
+        return {
+            mode:     modeEl ? modeEl.value : ( box.getAttribute( 'data-mode' ) || 'any' ),
+            roles:    Array.prototype.slice.call( box.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) { return c.dataset.role; } ),
+            users:    Array.prototype.slice.call( box.querySelectorAll( '.ys-ec-user-chip' ) ).map( function ( chip ) {
+                return { id: parseInt( chip.getAttribute( 'data-uid' ) || '0', 10 ) || 0, name: chip.getAttribute( 'data-name' ) || '' };
+            } ).filter( function ( u ) { return u.id > 0; } ),
+            admins:   !! ( box.querySelector( '.ys-ec-access-admins' ) || {} ).checked,
+            menuOnly: !! ( box.querySelector( '.ys-ec-access-menu-only' ) || {} ).checked
+        };
+    }
+
+    // 這一列要存的 roles 與 access（access＝null 表示不寫）。
+    function readAccess( row ) {
+        var box = row.querySelector( '.ys-ec-roles' );
+        if ( ! box ) {
+            return { roles: [], access: null };
+        }
+        if ( ! box.classList.contains( 'ys-ec-access' ) ) {
+            return { roles: checkedRoles( row ), access: null }; // 本外掛自己的頁面：只有角色。
+        }
+        if ( box.getAttribute( 'data-complex' ) === '1' && box.getAttribute( 'data-touched' ) !== '1' ) {
+            var original = parseJson( box.getAttribute( 'data-access' ) );
+            if ( original ) {
+                return { roles: [], access: original }; // 複合規則沒動過：原樣送回。
+            }
+        }
+        var s = accessState( box );
+        if ( 'any' === s.mode ) {
+            return { roles: [], access: null };
+        }
+        var ids = s.users.map( function ( u ) { return u.id; } );
+        if ( 'only' === s.mode && s.roles.length && ! ids.length && ! s.admins && ! s.menuOnly ) {
+            return { roles: s.roles, access: null };
+        }
+        var side = { roles: s.roles, users: ids };
+        var none = { roles: [], users: [] };
+        return {
+            roles:  [],
+            access: {
+                v:           1,
+                allow:       'only' === s.mode ? side : none,
+                deny:        'only' === s.mode ? none : side,
+                others:      'only' === s.mode ? 'deny' : 'inherit',
+                super_admin: s.admins ? 'apply' : 'exempt',
+                scope:       s.menuOnly ? 'menu_only' : 'block'
+            }
+        };
+    }
+
+    function accessSummary( mode, labels, admins, menuOnly ) {
+        if ( 'any' === mode ) {
+            return '不限';
+        }
+        var text;
+        if ( ! labels.length ) {
+            text = 'only' === mode ? ( admins ? '沒有人' : '只有管理員' ) : '不限';
+        } else {
+            var list = labels.length <= 2 ? labels.join( '、' ) : labels[0] + ' 等 ' + labels.length + ' 項';
+            text = ( 'only' === mode ? '只有 ' : '除了 ' ) + list;
+        }
+        if ( admins && ! ( 'only' === mode && ! labels.length ) ) {
+            text += '（含管理員）';
+        }
+        if ( menuOnly ) {
+            text += '・只藏選單';
+        }
+        return text;
+    }
+
+    function updateAccessSummary( box ) {
+        var s = accessState( box );
+        var labels = Array.prototype.slice.call( box.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) {
+            return ( c.parentNode.textContent || '' ).replace( /（角色已不存在）$/, '' ).replace( /^\s+|\s+$/g, '' );
+        } );
+        s.users.forEach( function ( u ) { labels.push( u.name || ( '#' + u.id ) ); } );
+        box.setAttribute( 'data-mode', s.mode );
+        var sum = box.querySelector( '.ys-ec-roles__sum' );
+        if ( sum ) {
+            sum.textContent = accessSummary( s.mode, labels, s.admins, s.menuOnly );
+        }
+    }
+
+    // 新面板（JS 新增的列）。access 有帳號時名稱未知，顯示 #ID。
+    // linkOnly：複製項、自訂連結（規則只管側欄上的這個連結，直接開網址照那一頁原本的設定），不提供「只藏選單」。
+    function accessPickerHtml( roles, access, linkOnly ) {
+        var mode = 'any', picked = roles || [], users = [], admins = false, menuOnly = false;
+        if ( access ) {
+            mode = 'deny' === access.others ? 'only' : 'except';
+            var side = 'only' === mode ? access.allow : access.deny;
+            picked = ( side && side.roles ) || [];
+            users = ( side && side.users ) || [];
+            admins = 'apply' === access.super_admin;
+            menuOnly = ! linkOnly && 'menu_only' === access.scope;
+        } else if ( picked.length ) {
+            mode = 'only';
+        }
+        var opts = Array.isArray( cfg.roles ) && cfg.roles.length ? cfg.roles : [ [ 'administrator', '管理員' ], [ 'editor', '編輯' ] ];
+        var known = {};
+        var labels = [];
+        var boxes = opts.map( function ( o ) {
+            var key = String( o[0] ); // 純數字的角色鍵在 JSON 裡可能是數字，存下的是字串。
+            known[ key ] = true;
+            var on = picked.indexOf( key ) >= 0;
+            if ( on ) { labels.push( o[1] ); }
+            return '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( key ) + '"' + ( on ? ' checked' : '' ) + '> ' + escHtml( o[1] ) + '</label>';
+        } ).join( '' );
+        picked.forEach( function ( r ) {
+            if ( 'string' !== typeof r || '' === r || known[ r ] ) { return; }
+            labels.push( r );
+            boxes += '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( r ) + '" checked> ' + escHtml( r + '（角色已不存在）' ) + '</label>';
+        } );
+        var chips = users.map( function ( id ) {
+            labels.push( '#' + ( id | 0 ) );
+            return userChipHtml( id | 0, '#' + ( id | 0 ) );
+        } ).join( '' );
+        var name = 'ys-ec-access-mode-js-' + ( ++accessSeq );
+        var modes = [ [ 'any', '不限' ], [ 'only', '只有' ], [ 'except', '除了' ] ].map( function ( m ) {
+            return '<label><input type="radio" class="ys-ec-access-mode" name="' + name + '" value="' + m[0] + '"' + ( mode === m[0] ? ' checked' : '' ) + '> ' + m[1] + '</label>';
+        } ).join( '' );
+        return '<details class="ys-ec-roles ys-ec-access" data-mode="' + mode + '">'
+            + '<summary class="ys-ec-roles__sum" title="誰看得到這個選單">' + escHtml( accessSummary( mode, labels, admins, menuOnly ) ) + '</summary>'
+            + '<div class="ys-ec-roles__panel">'
+            + '<div class="ys-ec-access__modes" role="radiogroup" aria-label="誰看得到">' + modes + '</div>'
+            + '<div class="ys-ec-access__roles">' + boxes + '</div>'
+            + '<div class="ys-ec-access__users"><span class="ys-ec-access__chips">' + chips + '</span>'
+            + '<input type="search" class="ys-ec-access-user-search" placeholder="加帳號：輸入名稱或 email" autocomplete="off" aria-label="加帳號">'
+            + '<ul class="ys-ec-access__results" hidden></ul></div>'
+            + '<label class="ys-ec-access__opt"><input type="checkbox" class="ys-ec-access-admins"' + ( admins ? ' checked' : '' ) + '> 也套用到管理員</label>'
+            + ( linkOnly
+                ? '<p class="ys-ec-access__note">' + escHtml( LINK_ONLY_NOTE ) + '</p>'
+                : '<label class="ys-ec-access__opt"><input type="checkbox" class="ys-ec-access-menu-only"' + ( menuOnly ? ' checked' : '' ) + '> 只藏選單（網址照樣進得去）</label>' )
+            + '</div></details>';
+    }
+
+    function userChipHtml( id, name ) {
+        return '<span class="ys-ec-user-chip" data-uid="' + ( id | 0 ) + '" data-name="' + escHtml( name ) + '">' + escHtml( name )
+            + '<button type="button" class="ys-ec-user-chip__x" aria-label="' + escHtml( '移除 ' + name ) + '">×</button></span>';
+    }
+
+    // 一列的面板（「誰看得到」或角色面板）原樣取出，移到主選單／移回原位、套用到底下的子選單時帶過去。
+    function panelHtmlOf( row ) {
+        var box = row.querySelector( '.ys-ec-roles' );
+        if ( ! box ) {
+            return '';
+        }
+        box.open = false;
+        // outerHTML 帶的是 checked「屬性」（頁面載入時的勾選）：畫面上改過、還沒存的勾選先寫回屬性，帶過去的才是現在的設定。
+        Array.prototype.forEach.call( box.querySelectorAll( 'input[type="checkbox"], input[type="radio"]' ), function ( input ) {
+            if ( input.checked ) {
+                input.setAttribute( 'checked', 'checked' );
+            } else {
+                input.removeAttribute( 'checked' );
+            }
+        } );
+        return box.outerHTML;
+    }
+
+    // 複製過來的面板換一組單選鈕 name（跟原本那一列分開）。
+    function freshRadioNames( html ) {
+        var name = 'ys-ec-access-mode-js-' + ( ++accessSeq );
+        return String( html ).replace( /name="ys-ec-access-mode-[^"]*"/g, 'name="' + name + '"' );
+    }
+
+    // 「開新分頁」與「顯示在」（JS 新增的列）。
+    function rowOptionsHtml( newTab, level ) {
+        var html = '<div class="ys-ec-row-options"><label class="ys-ec-newtab-label" title="點這個選單時在新分頁打開">'
+            + '<input type="checkbox" class="ys-ec-newtab"' + ( newTab ? ' checked' : '' ) + '> 開新分頁</label>';
+        if ( 'sub' === level ) {
+            html += '<label class="ys-ec-display-parent-field" title="把這個子選單放到別的頂層選單底下顯示（連結與權限不變）">顯示在 '
+                + '<select class="ys-ec-display-parent"><option value="">原本的位置</option></select></label>';
+        }
+        return html + '</div>';
+    }
+
+    // 帳號搜尋（wp/v2/users）。
+    function searchUsers( q ) {
+        var url = ( cfg.usersUrl || '/wp-json/wp/v2/users' )
+            + ( ( cfg.usersUrl || '' ).indexOf( '?' ) >= 0 ? '&' : '?' )
+            + 'search=' + encodeURIComponent( q ) + '&context=edit&per_page=10';
+        return fetch( url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'X-WP-Nonce': cfg.nonce, 'Accept': 'application/json' }
+        } ).then( function ( r ) { return r.ok ? r.json() : []; } ).catch( function () { return []; } );
+    }
+
+    function userDisplayName( u ) {
+        var login = u.slug || u.username || ( 'user-' + ( u.id | 0 ) );
+        return u.name && u.name !== login ? u.name + '（' + login + '）' : login;
+    }
+
+    function renderUserResults( list, users, onPick ) {
+        list.innerHTML = '';
+        if ( ! users || ! users.length ) {
+            var none = document.createElement( 'li' );
+            none.className = 'no-results';
+            none.textContent = '找不到符合的帳號';
+            list.appendChild( none );
+            list.hidden = false;
+            return;
+        }
+        users.forEach( function ( u ) {
+            var li = document.createElement( 'li' );
+            li.setAttribute( 'role', 'option' );
+            li.tabIndex = 0;
+            li.textContent = userDisplayName( u ) + ( u.email ? '　' + u.email : '' ) + '　#' + ( u.id | 0 );
+            var pick = function () { onPick( { id: u.id | 0, name: userDisplayName( u ) } ); };
+            li.addEventListener( 'click', pick );
+            li.addEventListener( 'keydown', function ( e ) {
+                if ( 'Enter' === e.key ) { e.preventDefault(); pick(); }
+            } );
+            list.appendChild( li );
+        } );
+        list.hidden = false;
+    }
+
+    // 面板裡的帳號搜尋（每個面板一個計時器）。
+    document.addEventListener( 'input', function ( e ) {
+        var input = e.target;
+        if ( ! input || ! input.classList || ! input.classList.contains( 'ys-ec-access-user-search' ) ) { return; }
+        var box = input.closest( '.ys-ec-access' );
+        var list = box ? box.querySelector( '.ys-ec-access__results' ) : null;
+        if ( ! list ) { return; }
+        clearTimeout( input._ysTimer );
+        var q = trimStr( input.value );
+        if ( q.length < 2 ) {
+            list.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+        input._ysTimer = setTimeout( function () {
+            searchUsers( q ).then( function ( users ) {
+                renderUserResults( list, users, function ( u ) {
+                    var chips = box.querySelector( '.ys-ec-access__chips' );
+                    if ( chips && ! chips.querySelector( '.ys-ec-user-chip[data-uid="' + u.id + '"]' ) ) {
+                        chips.insertAdjacentHTML( 'beforeend', userChipHtml( u.id, u.name ) );
+                    }
+                    // 選了帳號但還是「不限」時，自動改成「只有」。
+                    var any = box.querySelector( '.ys-ec-access-mode[value="any"]' );
+                    if ( any && any.checked ) {
+                        var only = box.querySelector( '.ys-ec-access-mode[value="only"]' );
+                        if ( only ) { only.checked = true; }
+                    }
+                    input.value = '';
+                    list.hidden = true;
+                    list.innerHTML = '';
+                    box.setAttribute( 'data-touched', '1' );
+                    updateAccessSummary( box );
+                    markDirty();
+                } );
+            } );
+        }, 300 );
+    } );
+
+    // 移除帳號、套用到底下的子選單。
+    document.addEventListener( 'click', function ( e ) {
+        var x = e.target && e.target.closest && e.target.closest( '.ys-ec-user-chip__x' );
+        if ( x ) {
+            var box = x.closest( '.ys-ec-access' );
+            var chip = x.closest( '.ys-ec-user-chip' );
+            if ( chip ) { chip.parentNode.removeChild( chip ); }
+            if ( box ) {
+                box.setAttribute( 'data-touched', '1' );
+                updateAccessSummary( box );
+            }
+            markDirty();
+            return;
+        }
+        var apply = e.target && e.target.closest && e.target.closest( '.ys-ec-access-apply-children' );
+        if ( apply ) {
+            applyToChildren( apply.closest( 'tr' ) );
+        }
+    } );
+
+    // 全部選單分頁：有子選單的頂層列，面板裡加「套用到底下的子選單」。
+    function addApplyChildrenButtons( tbody ) {
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-level="top"][data-slug]' ), function ( row ) {
+            var box = row.querySelector( '.ys-ec-access .ys-ec-roles__panel' );
+            if ( ! box || ! childRows( tbody, row.getAttribute( 'data-slug' ) ).length ) { return; }
+            box.insertAdjacentHTML( 'beforeend', '<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost ys-ec-access-apply-children">套用到底下的子選單</button>' );
+        } );
+    }
+
+    function childRows( tbody, parent ) {
+        return Array.prototype.filter.call( tbody.querySelectorAll( 'tr[data-level="sub"]' ), function ( r ) {
+            return r.getAttribute( 'data-parent' ) === parent && r.getAttribute( 'data-promoted' ) !== '1' && r.getAttribute( 'data-copy' ) !== '1';
+        } );
+    }
+
+    function applyToChildren( row ) {
+        var tbody = row ? row.closest( 'tbody' ) : null;
+        var source = row ? row.querySelector( '.ys-ec-access' ) : null;
+        if ( ! tbody || ! source ) { return; }
+        var kids = childRows( tbody, row.getAttribute( 'data-slug' ) );
+        var html = panelHtmlOf( row ).replace( /<button type="button" class="ysca-btn ysca-btn--sm ysca-btn--ghost ys-ec-access-apply-children">[^<]*<\/button>/, '' );
+        kids.forEach( function ( kid ) {
+            var group = kid.querySelector( '.role-cb-group' );
+            if ( ! group || ! group.querySelector( '.ys-ec-access' ) ) { return; } // 本外掛自己的頁面只有角色，不套。
+            group.innerHTML = freshRadioNames( html );
+            var box = group.querySelector( '.ys-ec-access' );
+            if ( box ) {
+                box.setAttribute( 'data-touched', '1' );
+                box.removeAttribute( 'data-complex' );
+            }
+            flashRow( kid );
+        } );
+        source.open = false;
+        markDirty();
+        setStatus( document.getElementById( 'ys-ec-save-status' ), '已套用到 ' + kids.length + ' 個子選單；按「儲存設定」生效', '#0f766e', 5000 );
+    }
+
+    // 「顯示在」下拉選單：第一次打開時才填入全部頂層選單（每一列都放完整清單太大）。
+    function fillDisplayParent( e ) {
+        var sel = e.target && e.target.closest && e.target.closest( '.ys-ec-display-parent' );
+        if ( ! sel || sel.getAttribute( 'data-filled' ) === '1' ) { return; }
+        sel.setAttribute( 'data-filled', '1' );
+        var row = sel.closest( 'tr' );
+        var own = row ? ( row.getAttribute( 'data-slug' ) || '' ) : '';
+        var parent = row ? ( row.getAttribute( 'data-parent' ) || '' ) : '';
+        var current = sel.value;
+        ( Array.isArray( cfg.tops ) ? cfg.tops : [] ).forEach( function ( t ) {
+            if ( ! t || t[0] === own || t[0] === parent || t[0] === current ) { return; }
+            var opt = document.createElement( 'option' );
+            opt.value = t[0];
+            opt.textContent = t[1];
+            sel.appendChild( opt );
+        } );
+    }
+    document.addEventListener( 'mousedown', fillDisplayParent, true );
+    document.addEventListener( 'focusin', fillDisplayParent );
+    document.addEventListener( 'keydown', fillDisplayParent, true );
+
+    // 自訂連結列（主選單分頁；與 PHP render_item_row() 的自訂連結列對齊）。
+    function buildCustomRow( order ) {
+        var html = '<tr data-slug="" data-level="top" data-self-uid="0" data-custom="1" data-custom-url="" data-default-icon="dashicons-admin-links">'
+            + '<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>'
+            + '<td><input type="number" class="ys-ec-order-input" value="' + ( order | 0 ) + '" min="0" max="9999"></td>'
+            + '<td><div class="menu-line"><strong>自訂連結</strong> <span class="level-badge level-custom">自訂連結</span>'
+                + '<span class="ys-ec-preview-badges" aria-live="polite"></span></div>'
+                + '<div class="ys-ec-custom-fields"><input type="text" class="ys-ec-custom-title" value="" placeholder="連結名稱（必填）" aria-label="連結名稱">'
+                + '<input type="text" class="ys-ec-custom-url" value="" placeholder="網址：https://… 或 edit.php?post_status=draft" aria-label="連結網址" spellcheck="false"></div>'
+                + '<div class="ys-ec-icon-field"><button type="button" class="ys-ec-icon-btn" aria-expanded="false" title="選擇圖示"><span class="ys-ec-icon-preview" aria-hidden="true"></span><span class="screen-reader-text">選擇圖示</span></button>'
+                + '<input type="text" class="ys-ec-icon-input" value="" placeholder="圖示：留空用連結圖示（dashicons-… 或圖片網址）" spellcheck="false"></div>'
+                + rowOptionsHtml( false, null ) + '</td>'
+            + '<td><div class="role-cb-group">' + accessPickerHtml( [], null, true ) + '</div>'
+                + '<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）"><input type="checkbox" class="ys-ec-self-only"> 僅限本人</label></td>'
+            + '<td><input type="text" class="ys-ec-color-picker" value="" data-default-color="" placeholder="#0073aa" maxlength="7"></td>'
+            + '<td class="ys-ec-hide-cb"><input type="checkbox" class="ys-ec-hide-checkbox" title="對管理員以外的帳號隱藏這個連結（那一頁本身不受影響）"></td>'
+            + '<td class="ys-ec-row-actions"><button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-delete-row" title="從清單移除">×</button></td>'
+            + '</tr>';
+        return parseRow( html );
+    }
+
+    // 新增列用的順序值：目前最大的＋10。
+    function nextOrder( tbody ) {
+        var max = 0;
+        Array.prototype.forEach.call( tbody.querySelectorAll( '.ys-ec-order-input' ), function ( inp ) {
+            var v = parseInt( inp.value || '0', 10 ) || 0;
+            if ( v > max ) { max = v; }
+        } );
+        return max + 10;
+    }
+
+    // ─────────────────────────────────────────────
+    // v1.7.0：以某位使用者試算（照已儲存的設定，不切換身分）
+    // ─────────────────────────────────────────────
+    function previewRows( tbody ) {
+        var out = [];
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr' ), function ( row ) {
+            if ( row.getAttribute( 'data-separator' ) === '1' || row.getAttribute( 'data-self-row' ) === '1' ) { return; }
+            var d = null;
+            if ( row.getAttribute( 'data-copy' ) === '1' ) {
+                d = { kind: 'copy', slug: row.getAttribute( 'data-copy-slug' ) || '', parent: row.getAttribute( 'data-copy-parent' ) || '' };
+            } else if ( row.getAttribute( 'data-promoted' ) === '1' ) {
+                d = { kind: 'top', slug: row.getAttribute( 'data-copy-key' ) || '' };
+            } else if ( row.getAttribute( 'data-custom' ) === '1' ) {
+                d = { kind: 'top', slug: row.getAttribute( 'data-slug' ) || '' };
+            } else if ( row.getAttribute( 'data-slug' ) ) {
+                d = row.getAttribute( 'data-level' ) === 'sub'
+                    ? { kind: 'sub', slug: row.getAttribute( 'data-slug' ), parent: row.getAttribute( 'data-parent' ) || '' }
+                    : { kind: 'top', slug: row.getAttribute( 'data-slug' ) };
+            }
+            if ( ! d || '' === d.slug ) { return; }
+            d.cap = row.getAttribute( 'data-cap' ) || '';
+            d.i = out.length;
+            out.push( { row: row, data: d } );
+        } );
+        return out;
+    }
+
+    function paintPreview( row, result ) {
+        var holder = row.querySelector( '.ys-ec-preview-badges' );
+        if ( ! holder ) {
+            var line = row.querySelector( '.menu-line' );
+            if ( ! line ) { return; }
+            holder = document.createElement( 'span' );
+            holder.className = 'ys-ec-preview-badges';
+            line.appendChild( holder );
+        }
+        var badge = function ( ok, label ) {
+            return '<span class="ys-ec-pv ' + ( ok ? 'ys-ec-pv--ok' : 'ys-ec-pv--no' ) + '">' + ( ok ? '✓ ' : '✕ ' ) + label + '</span>';
+        };
+        holder.innerHTML = badge( !! result.sidebar, result.sidebar ? '側欄看得到' : '側欄看不到' )
+            + ( null === result.url || undefined === result.url ? '' : badge( !! result.url, result.url ? '網址進得去' : '網址進不去' ) );
+    }
+
+    function clearPreview( tbody ) {
+        Array.prototype.forEach.call( tbody.querySelectorAll( '.ys-ec-preview-badges' ), function ( h ) { h.innerHTML = ''; } );
+    }
+
+    function bootPreview( tbody ) {
+        var input = document.getElementById( 'ys-ec-preview-search' );
+        var results = document.getElementById( 'ys-ec-preview-results' );
+        var status = document.getElementById( 'ys-ec-preview-status' );
+        var clear = document.getElementById( 'ys-ec-preview-clear' );
+        if ( ! input || ! results ) { return; }
+        var timer = null;
+        input.addEventListener( 'input', function () {
+            var q = trimStr( input.value );
+            clearTimeout( timer );
+            if ( q.length < 2 ) {
+                results.hidden = true;
+                results.innerHTML = '';
+                return;
+            }
+            timer = setTimeout( function () {
+                searchUsers( q ).then( function ( users ) { renderUserResults( results, users, run ); } );
+            }, 300 );
+        } );
+        if ( clear ) {
+            clear.addEventListener( 'click', function () {
+                clearPreview( tbody );
+                input.value = '';
+                clear.hidden = true;
+                setStatus( status, '', '' );
+            } );
+        }
+        function run( u ) {
+            input.value = u.name;
+            results.hidden = true;
+            results.innerHTML = '';
+            setStatus( status, '試算中…', '#6b7280' );
+            var rows = previewRows( tbody );
+            fetch( cfg.restUrl + '/preview', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-WP-Nonce': cfg.nonce, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify( { user_id: u.id, rows: rows.map( function ( r ) { return r.data; } ) } )
+            } )
+                .then( function ( r ) { return r.json().then( function ( d ) { return { ok: r.ok, data: d }; } ); } )
+                .then( function ( res ) {
+                    if ( ! res.ok || ! res.data || ! res.data.success ) {
+                        setStatus( status, '試算失敗：' + ( ( res.data && ( res.data.error || res.data.message ) ) || '未知錯誤' ), '#dc2626' );
+                        return;
+                    }
+                    clearPreview( tbody );
+                    ( res.data.rows || [] ).forEach( function ( result ) {
+                        var hit = rows[ result.i | 0 ];
+                        if ( hit && null !== result.i ) { paintPreview( hit.row, result ); }
+                    } );
+                    if ( clear ) { clear.hidden = false; }
+                    setStatus( status, '以「' + u.name + '」試算' + ( isDirty ? '（照已儲存的設定，表上還有沒存的變更）' : '' ), '#0f766e' );
+                } )
+                .catch( function ( err ) {
+                    setStatus( status, '試算失敗：' + err.message, '#dc2626' );
+                } );
+        }
+    }
     document.addEventListener( 'toggle', function ( e ) {
         var box = e.target;
         if ( ! box || ! box.classList || ! box.classList.contains( 'ys-ec-roles' ) || ! box.open ) { return; }
         Array.prototype.forEach.call( document.querySelectorAll( '.ys-ec-roles[open]' ), function ( other ) {
             if ( other !== box ) { other.open = false; }
         } );
+        positionPanel( box );
     }, true );
+
+    // v1.7.0：表格外框有捲軸（overflow），往下展開的面板在最後幾列會被切掉、外框多出垂直捲軸。打開時看外框（與視窗）裡
+    // 還有多少空間：下面放不下而上面比較寬就往上開，兩邊都放不下就限高；右邊超出外框就往左移。面板留在 details 裡用
+    // absolute 定位（新版 Chrome 的 details 內容有 containment，position:fixed 會變成相對 details，不能用）。
+    function positionPanel( box ) {
+        var sum = box.querySelector( '.ys-ec-roles__sum' );
+        var panel = box.querySelector( '.ys-ec-roles__panel' );
+        if ( ! sum || ! panel ) { return; }
+        panel.style.top = '';
+        panel.style.bottom = '';
+        panel.style.left = '';
+        panel.style.maxHeight = '';
+        var wrap = box.closest( '.ysca-table-wrap' ) || document.documentElement;
+        var w = wrap.getBoundingClientRect();
+        var view = {
+            top:    Math.max( 0, w.top ),
+            bottom: Math.min( window.innerHeight, w.bottom ),
+            left:   Math.max( 0, w.left ),
+            right:  Math.min( document.documentElement.clientWidth, w.right )
+        };
+        var s = sum.getBoundingClientRect();
+        var h = panel.offsetHeight;
+        var pw = panel.offsetWidth;
+        var below = view.bottom - s.bottom - 8;
+        var above = s.top - view.top - 8;
+        if ( h > below && above > below ) {
+            panel.style.top = 'auto';
+            panel.style.bottom = 'calc(100% + 4px)';
+            if ( h > above ) { panel.style.maxHeight = Math.max( 160, above ) + 'px'; }
+        } else if ( h > below ) {
+            panel.style.maxHeight = Math.max( 160, below ) + 'px';
+        }
+        var overflow = s.left + pw - ( view.right - 8 );
+        if ( overflow > 0 ) {
+            panel.style.left = -Math.min( overflow, Math.max( 0, s.left - view.left ) ) + 'px';
+        }
+    }
+    window.addEventListener( 'resize', function () {
+        Array.prototype.forEach.call( document.querySelectorAll( '.ys-ec-roles[open]' ), function ( box ) { box.open = false; } );
+    } );
+    // 鍵盤：Esc 收起面板、焦點回到摘要；用 Tab 離開面板時也收起。
+    document.addEventListener( 'keydown', function ( e ) {
+        if ( 'Escape' !== e.key ) { return; }
+        var box = e.target && e.target.closest && e.target.closest( '.ys-ec-roles[open]' );
+        if ( ! box ) { return; }
+        box.open = false;
+        var sum = box.querySelector( '.ys-ec-roles__sum' );
+        if ( sum ) { sum.focus(); }
+    } );
+    document.addEventListener( 'focusout', function ( e ) {
+        var box = e.target && e.target.closest && e.target.closest( '.ys-ec-roles[open]' );
+        if ( box && e.relatedTarget && ! box.contains( e.relatedTarget ) ) {
+            box.open = false;
+        }
+    } );
     document.addEventListener( 'click', function ( e ) {
-        if ( e.target && e.target.closest && e.target.closest( '.ys-ec-roles' ) ) { return; }
+        // v1.7.0：點了面板裡的搜尋結果後，那一項已經從畫面拿掉（isConnected＝false），不算點在面板外面。
+        if ( e.target && ( false === e.target.isConnected || ( e.target.closest && e.target.closest( '.ys-ec-roles' ) ) ) ) { return; }
         Array.prototype.forEach.call( document.querySelectorAll( '.ys-ec-roles[open]' ), function ( box ) { box.open = false; } );
     } );
 
@@ -658,11 +1371,13 @@
             + '<td class="ysca-text-center"><span class="ys-ec-order-drag ysca-text-muted" title="拖拉左側把手調整位置">&#x21C5;</span></td>'
             + '<td><div class="menu-line"><strong>' + escapeHtml( d.title ) + '</strong> <code>' + escapeHtml( code ) + '</code> '
                 + '<span class="level-badge ' + badgeCls + '">' + badge + '</span> '
-                + '<span class="ys-ec-copy-source">原位置：' + escapeHtml( d.parentTitle || '' ) + ' › ' + escapeHtml( d.title ) + '</span></div>'
+                + '<span class="ys-ec-copy-source">原位置：' + escapeHtml( d.parentTitle || '' ) + ' › ' + escapeHtml( d.title ) + '</span>'
+                + '<span class="ys-ec-preview-badges" aria-live="polite"></span></div>'
                 + '<input type="text" class="title-override-inline ys-ec-title-override" value="' + escapeAttr( d.titleOverride || '' ) + '" placeholder="自訂顯示名稱（留空保留原名）">'
                 + '<div class="ys-ec-icon-field"><button type="button" class="ys-ec-icon-btn" aria-expanded="false" title="選擇圖示"><span class="ys-ec-icon-preview" aria-hidden="true"></span><span class="screen-reader-text">選擇圖示</span></button>'
-                + '<input type="text" class="ys-ec-icon-input" value="' + escapeAttr( d.icon || '' ) + '" placeholder="圖示：留空沿用原父選單（dashicons-… 或圖片網址）" spellcheck="false"></div></td>'
-            + '<td><div class="role-cb-group">' + roleCheckboxesHtml( d.roles || [] ) + '</div>'
+                + '<input type="text" class="ys-ec-icon-input" value="' + escapeAttr( d.icon || '' ) + '" placeholder="圖示：留空沿用原父選單（dashicons-… 或圖片網址）" spellcheck="false"></div>'
+                + rowOptionsHtml( !! d.newTab, null ) + '</td>'
+            + '<td><div class="role-cb-group">' + ( d.panelHtml ? freshRadioNames( d.panelHtml ) : accessPickerHtml( d.roles || [], null, isCopy ) ) + '</div>'
                 + '<label class="ys-ec-self-only-label"><input type="checkbox" class="ys-ec-self-only"' + ( ( d.selfUid | 0 ) > 0 ? ' checked' : '' ) + '> 僅限本人</label></td>'
             + '<td class="ys-ec-promote-cell ysca-text-center"><span class="ysca-text-muted" aria-hidden="true">—</span></td>'
             + '<td class="ys-ec-hide-cb"><input type="checkbox" class="ys-ec-hide-checkbox"' + ( d.hide ? ' checked' : '' ) + '></td>'
@@ -683,9 +1398,11 @@
             + ' data-parent="' + escapeAttr( d.parent ) + '" data-parent-title="' + escapeAttr( d.parentTitle || '' ) + '"' + copyAttrs + '>'
             + '<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>'
             + '<td><input type="number" class="ys-ec-order-input" value="' + escapeAttr( String( d.order || 0 ) ) + '" min="0" max="9999"></td>'
-            + '<td><div class="menu-line"><span class="menu-indent">&#8627;</span> <strong>' + escapeHtml( d.title ) + '</strong> <code>' + escapeHtml( d.slug ) + '</code> <span class="level-badge level-sub">子頁</span></div>'
-                + '<input type="text" class="title-override-inline ys-ec-title-override" value="' + escapeAttr( d.titleOverride || '' ) + '" placeholder="自訂顯示名稱（留空保留原名）"></td>'
-            + '<td><div class="role-cb-group">' + roleCheckboxesHtml( d.roles || [] ) + '</div>'
+            + '<td><div class="menu-line"><span class="menu-indent">&#8627;</span> <strong>' + escapeHtml( d.title ) + '</strong> <code>' + escapeHtml( d.slug ) + '</code> <span class="level-badge level-sub">子頁</span>'
+                + '<span class="ys-ec-preview-badges" aria-live="polite"></span></div>'
+                + '<input type="text" class="title-override-inline ys-ec-title-override" value="' + escapeAttr( d.titleOverride || '' ) + '" placeholder="自訂顯示名稱（留空保留原名）">'
+                + rowOptionsHtml( !! d.newTab, 'sub' ) + '</td>'
+            + '<td><div class="role-cb-group">' + ( d.panelHtml ? freshRadioNames( d.panelHtml ) : accessPickerHtml( d.roles || [], null ) ) + '</div>'
                 + '<label class="ys-ec-self-only-label"><input type="checkbox" class="ys-ec-self-only"' + ( ( d.selfUid | 0 ) > 0 ? ' checked' : '' ) + '> 僅限本人</label></td>'
             + '<td class="ys-ec-promote-cell ysca-text-center"></td>'
             + '<td class="ys-ec-hide-cb"><input type="checkbox" class="ys-ec-hide-checkbox"' + ( d.hide ? ' checked' : '' ) + '></td>'
@@ -971,9 +1688,10 @@
     }
 
     // Separator row HTML — 客戶端動態新增用（7 欄；separator 主 cell colspan = 4）。
-    function renderSeparatorRow( title, order, tab ) {
+    // v1.7.0：subhead＝子選單標題（全部選單分頁「新增子選單標題」）。
+    function renderSeparatorRow( title, order, tab, subhead ) {
         var colspan = 4;
-        return '<tr data-separator="1" class="ys-ec-separator-row ysca-separator-row">'
+        return '<tr data-separator="1" class="ys-ec-separator-row ysca-separator-row' + ( subhead ? ' ys-ec-subhead-row" data-subhead="1"' : '"' ) + '>'
             + '<td class="ys-ec-drag-handle" title="拖拉以排序">&#x205E;&#x205E;</td>'
             + '<td><input type="number" class="ys-ec-order-input" value="' + escapeAttr( String( order ) )
                 + '" min="0" max="9999"></td>'
@@ -982,7 +1700,9 @@
                 + '<input type="text" class="ys-ec-separator-title ysca-separator-input" value="' + escapeAttr( title )
                     + '" placeholder="標題文字">'
                 + ' &mdash;</strong>'
-                + ' <em class="ysca-separator-note ysca-text-muted">(分隔列)</em>'
+                + ( subhead
+                    ? ' <em class="ysca-separator-note ysca-text-muted">(子選單標題：拖到某個選單的子選單之間；後面沒有子選單時不顯示)</em>'
+                    : ' <em class="ysca-separator-note ysca-text-muted">(分隔列)</em>' )
             + '</td>'
             + '<td class="ys-ec-row-actions"><button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-delete-row" title="從清單移除">×</button></td>'
             + '</tr>';
