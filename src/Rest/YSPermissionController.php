@@ -1158,6 +1158,10 @@ class YSPermissionController {
 			if ( false !== strpos( $classes, 'ys-am-copy' ) ) {
 				continue;
 			}
+			// v1.7.0：自訂連結只在「主選單（頂層）」分頁管理（名稱、網址在那裡改；這裡的改名不會套用）。
+			if ( false !== strpos( $classes, 'ys-am-custom' ) ) {
+				continue;
+			}
 
 			$out[] = [
 				'slug'        => $slug,

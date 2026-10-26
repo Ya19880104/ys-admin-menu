@@ -212,9 +212,15 @@ class YSPermissionAdmin {
 			// v1.7.0：動態新增的列（複製、移到主選單）也用站上全部角色畫角色面板。[ [ key, 顯示名稱 ], … ]
 			'roles'      => array_map( static fn( $key, $label ): array => [ (string) $key, $label ], array_keys( $role_choices ), array_values( $role_choices ) ),
 			// v1.7.0：「顯示在」下拉選單的頂層選單 [ [ slug, 名稱 ], … ]（側欄目前的順序）。
-			'tops'       => array_map(
-				static fn( array $it ): array => [ (string) $it['slug'], '' !== (string) $it['title'] ? (string) $it['title'] : (string) $it['slug'] ],
-				YSPermissionController::get_all_admin_menu_items()
+			// 自訂連結與複製項（代稱是 ./ 開頭或站外網址）不當上層：它們只是連結，底下不該掛別的選單。
+			'tops'       => array_values(
+				array_map(
+					static fn( array $it ): array => [ (string) $it['slug'], '' !== (string) $it['title'] ? (string) $it['title'] : (string) $it['slug'] ],
+					array_filter(
+						YSPermissionController::get_all_admin_menu_items(),
+						static fn( array $it ): bool => empty( $it['custom'] ) && ! str_starts_with( (string) $it['slug'], './' ) && ! YSMenuRouter::is_external_url( (string) $it['slug'] )
+					)
+				)
 			),
 		] );
 

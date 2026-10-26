@@ -3239,9 +3239,13 @@ class YSMenuRouter {
 		return false;
 	}
 
-	/** v1.7.0：輸出側欄前拿掉 apply_access_rules() 留著的列；上層只剩它自己那一列或空了就不再展開（跟 WordPress 一樣）。 */
+	/**
+	 * v1.7.0：輸出側欄前拿掉 apply_access_rules() 留著的列；上層只剩它自己那一列或空了就不再展開（跟 WordPress 一樣）。
+	 * WordPress 收尾時（wp-admin/includes/menu.php）上層因為還有這一列而留著：子選單空了、這個帳號又沒有上層本身的權限
+	 * （$_wp_menu_nopriv）時，跟 WordPress 一樣連上層一起拿掉，側欄才不會多一條空白的頂層列。
+	 */
 	private static function detach_deferred_rows(): void {
-		global $submenu;
+		global $submenu, $menu, $_wp_menu_nopriv;
 		$rows                = self::$deferred_rows;
 		self::$deferred_rows = [];
 		if ( [] === $rows || ! is_array( $submenu ) ) {
@@ -3259,6 +3263,13 @@ class YSMenuRouter {
 			$submenu[ $parent ] = array_values( $submenu[ $parent ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			if ( [] === $submenu[ $parent ] || ( 1 === count( $submenu[ $parent ] ) && (string) ( $submenu[ $parent ][0][2] ?? '' ) === $parent ) ) {
 				unset( $submenu[ $parent ] );
+				if ( isset( $_wp_menu_nopriv[ $parent ] ) && is_array( $menu ) ) {
+					foreach ( $menu as $k => $m ) {
+						if ( is_array( $m ) && (string) ( $m[2] ?? '' ) === $parent ) {
+							unset( $menu[ $k ] );
+						}
+					}
+				}
 			}
 		}
 	}
@@ -3434,18 +3445,6 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v1.7.0：這次請求加進側欄的自訂連結：代稱 => 網址與名稱（設定頁認自訂連結列用；之後被規則拿掉的也算）。
-	 *
-	 * @var array<string, array{url:string,title:string}>
-	 */
-	private static array $custom_entries = [];
-
-	/** @return array<string, array{url:string,title:string}> */
-	public static function custom_entries(): array {
-		return self::$custom_entries;
-	}
-
-	/**
 	 * v1.7.0：把自訂連結加進側欄（頂層，排在最後；主選單分頁排過序的照順序）。
 	 * 網址已經是側欄上的頂層選單、或跟「複製到主選單」的項目同一個代稱時不加（同一個連結不出現兩次）。
 	 *
@@ -3453,8 +3452,7 @@ class YSMenuRouter {
 	 */
 	private static function insert_custom_items( array $config ): void {
 		global $menu;
-		self::$custom_entries = [];
-		$items                = $config['custom_items']['items'] ?? [];
+		$items = $config['custom_items']['items'] ?? [];
 		if ( empty( $items ) || ! is_array( $items ) || ! is_array( $menu ) ) {
 			return;
 		}
@@ -3479,8 +3477,6 @@ class YSMenuRouter {
 			$present[ $key ] = true;
 			$id              = 'ys-am-custom-' . substr( md5( $url ), 0, 10 );
 			$menu[]          = [ $title, 'read', $slug, $title, 'menu-top ys-am-custom menu-top-' . $id, $id, 'dashicons-admin-links' ]; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- 選單管理外掛本來就在調整側欄。
-
-			self::$custom_entries[ $slug ] = [ 'url' => $url, 'title' => $title ];
 		}
 	}
 
