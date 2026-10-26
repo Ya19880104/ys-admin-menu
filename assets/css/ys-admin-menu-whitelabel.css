@@ -908,3 +908,37 @@ body.ysca-wl-active .ys-am-lg-pages {
     flex-wrap: wrap;
     gap: 8px;
 }
+
+/* v1.7.0：後台精簡（關閉留言、控制台小工具） */
+.ys-am-declutter .ys-am-declutter__modes {
+    margin: 10px 0 6px;
+    line-height: 2;
+}
+.ys-am-declutter .ys-am-declutter__types,
+.ys-am-declutter .ys-am-declutter__widgets {
+    display: grid;
+    gap: 4px;
+    max-height: 360px;
+    overflow-y: auto;
+    margin: 6px 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #fff;
+}
+.ys-am-declutter .ys-am-declutter__types label,
+.ys-am-declutter .ys-am-declutter__widgets label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 2px;
+}
+.ys-am-declutter .ys-am-declutter__notes {
+    margin: 8px 0 0 18px;
+    list-style: disc;
+    color: #50575e;
+}
+.ys-am-declutter .ys-am-declutter__notes li {
+    margin-bottom: 4px;
+}

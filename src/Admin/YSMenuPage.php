@@ -107,6 +107,16 @@ class YSMenuPage {
 			self::PARENT_SLUG,
 			[ YSPermissionAdmin::class, 'render' ]
 		);
+
+		// v1.7.0：關閉留言、控制台小工具。
+		add_submenu_page(
+			self::PARENT_SLUG,
+			__( '後台精簡', 'ys-admin-menu' ),
+			__( '後台精簡', 'ys-admin-menu' ),
+			$cap,
+			YSDeclutterAdmin::PAGE_SLUG,
+			[ YSDeclutterAdmin::class, 'render' ]
+		);
 	}
 
 	/**

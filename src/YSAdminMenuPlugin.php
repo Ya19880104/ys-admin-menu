@@ -19,7 +19,10 @@ namespace YangSheep\AdminMenu;
 
 use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Admin\YSAccessAdmin;
+use YangSheep\AdminMenu\Admin\YSDeclutterAdmin;
 use YangSheep\AdminMenu\Cli\YSAccessCommand;
+use YangSheep\AdminMenu\Comments\YSCommentsDisabler;
+use YangSheep\AdminMenu\Dashboard\YSDashboardWidgets;
 use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
 use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
@@ -97,6 +100,9 @@ final class YSAdminMenuPlugin {
 		YSLoginPage::register();
 		YSTurnstile::register();
 
+		// v1.7.0：關閉留言（前台、REST、XML-RPC 都要；預設關，關著時一個 hook 都不掛）。
+		YSCommentsDisabler::register();
+
 		// 4. 後台設定頁 + 白牌 admin-post handler（僅後台）
 		if ( is_admin() ) {
 			YSMenuPage::register();
@@ -104,6 +110,9 @@ final class YSAdminMenuPlugin {
 			// v1.7.0：誰能使用本外掛（外掛清單隱藏與停用、刪除防護）與「外掛使用權限」分頁的存檔。
 			YSAccess::register();
 			YSAccessAdmin::register();
+			// v1.7.0：控制台小工具（只在控制台動作）與「後台精簡」頁的存檔。
+			YSDashboardWidgets::register();
+			YSDeclutterAdmin::register();
 		}
 	}
 }
