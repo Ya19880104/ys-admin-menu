@@ -13,6 +13,8 @@
 
 namespace YangSheep\AdminMenu\Rest;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+
 defined( 'ABSPATH' ) || exit;
 
 final class YSRestAuth {
@@ -32,7 +34,8 @@ final class YSRestAuth {
 		if ( '' === $capability ) {
 			$capability = 'manage_options';
 		}
-		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( $capability ) ) {
+		// v1.7.0：「外掛使用權限」選了只有指定帳號時，其他管理員也不能用（YSAccess::can_manage() 包含 manage_options）。
+		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( $capability ) || ! YSAccess::can_manage() ) {
 			return new \WP_Error(
 				'ys_admin_menu_forbidden',
 				__( '權限不足。', 'ys-admin-menu' ),

@@ -22,6 +22,8 @@
 
 namespace YangSheep\AdminMenu\Menu;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+
 defined( 'ABSPATH' ) || exit;
 
 final class YSAdminBarFilter {
@@ -235,7 +237,7 @@ final class YSAdminBarFilter {
 	public static function remember_nodes(): void {
 		global $wp_admin_bar;
 
-		if ( ! is_object( $wp_admin_bar ) || ! method_exists( $wp_admin_bar, 'get_nodes' ) || ! current_user_can( 'manage_options' ) ) {
+		if ( ! is_object( $wp_admin_bar ) || ! method_exists( $wp_admin_bar, 'get_nodes' ) || ! YSAccess::can_manage() ) {
 			return;
 		}
 
@@ -392,7 +394,7 @@ final class YSAdminBarFilter {
 	 * @param array<string, mixed> $post 已 wp_unslash 的 $_POST。
 	 */
 	public static function save_settings( array $post ): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 

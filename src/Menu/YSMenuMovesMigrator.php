@@ -37,6 +37,8 @@
 
 namespace YangSheep\AdminMenu\Menu;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+
 defined( 'ABSPATH' ) || exit;
 
 final class YSMenuMovesMigrator {
@@ -1942,7 +1944,7 @@ final class YSMenuMovesMigrator {
 	 * 提醒其實沒有內容可畫（已經關掉、列的帳號都刪了）時，把標記上的 notice 拿掉，之後的頁面就不再讀紀錄。
 	 */
 	public static function maybe_render_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) || ! self::notice_flag() ) {
+		if ( ! YSAccess::can_manage() || ! self::notice_flag() ) {
 			return;
 		}
 		if ( ! self::render_notice() ) {
@@ -1954,7 +1956,7 @@ final class YSMenuMovesMigrator {
 	 * @return bool 有沒有畫出提醒。
 	 */
 	public static function render_notice(): bool {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return false;
 		}
 		$log = self::read_log( get_option( self::LOG_OPTION, null ) );
@@ -2051,7 +2053,7 @@ final class YSMenuMovesMigrator {
 	}
 
 	public static function handle_dismiss(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( esc_html__( '權限不足。', 'ys-admin-menu' ), '', [ 'response' => 403 ] );
 		}
 		check_admin_referer( self::DISMISS_ACTION );

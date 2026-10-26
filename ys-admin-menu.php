@@ -105,6 +105,10 @@ add_action( 'plugins_loaded', function () {
  * 外掛動作連結（設定頁快捷）
  * ────────────────────────────────────────────── */
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), function ( array $links ): array {
+	// v1.7.0：不能使用本外掛的管理員（外掛使用權限選了只有指定帳號）不顯示「設定」連結。
+	if ( ! \YangSheep\AdminMenu\Access\YSAccess::can_manage() ) {
+		return $links;
+	}
 	$url = admin_url( 'admin.php?page=' . \YangSheep\AdminMenu\Admin\YSMenuPage::PARENT_SLUG );
 	array_unshift(
 		$links,

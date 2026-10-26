@@ -18,6 +18,7 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Security\YSClientIp;
 use YangSheep\AdminMenu\Security\YSLoginEntrances;
 use YangSheep\AdminMenu\Security\YSLoginGuard;
@@ -78,7 +79,7 @@ final class YSLoginSecurityAdmin {
 	 * @param array<string, mixed> $post 已 wp_unslash 的 $_POST。
 	 */
 	public static function save_entrance_settings( array $post ): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 		update_option( YSLoginEntrances::OPTION_DISABLE_XMLRPC, ! empty( $post['disable_xmlrpc_login'] ) ? 'yes' : 'no', false );
@@ -107,7 +108,7 @@ final class YSLoginSecurityAdmin {
 	 * @return string[] 錯誤或提醒代碼。
 	 */
 	public static function save_ip_settings( array $post ): array {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return [];
 		}
 		$codes = [];
@@ -183,7 +184,7 @@ final class YSLoginSecurityAdmin {
 	 * @return string[] 錯誤或提醒代碼。
 	 */
 	public static function save_guard_settings( array $post ): array {
-		if ( ! current_user_can( 'manage_options' ) || empty( $post['lg_present'] ) ) {
+		if ( ! YSAccess::can_manage() || empty( $post['lg_present'] ) ) {
 			return [];
 		}
 		$codes = [];
@@ -357,7 +358,7 @@ final class YSLoginSecurityAdmin {
 	 */
 	public static function records_view( array $get ): array {
 		$now = time();
-		if ( ! current_user_can( 'manage_options' ) || ! YSLoginGuardSchema::is_ready() ) {
+		if ( ! YSAccess::can_manage() || ! YSLoginGuardSchema::is_ready() ) {
 			return [ 'ready' => false ];
 		}
 		$filter = isset( $get['lg_ip'] ) && is_string( $get['lg_ip'] ) ? self::clean_filter( $get['lg_ip'] ) : '';
@@ -421,7 +422,7 @@ final class YSLoginSecurityAdmin {
 		if ( ! in_array( $action, $known, true ) ) {
 			wp_die( '不認得的動作。' );
 		}
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( '權限不足。' );
 		}
 		check_admin_referer( $action );
@@ -437,7 +438,7 @@ final class YSLoginSecurityAdmin {
 	 * @return array{done?:string,error?:string}
 	 */
 	public static function run_action( string $action, array $post, int $now ): array {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return [ 'error' => 'lg_bad_target' ];
 		}
 		if ( self::ACTION_END_OBSERVATION === $action ) {
@@ -637,7 +638,7 @@ final class YSLoginSecurityAdmin {
 	 * admin_notices：只給 manage_options；總開關打開時才有。文字一律跳脫。
 	 */
 	public static function print_notices(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 		$classes = [ 'error' => 'notice-error', 'warning' => 'notice-warning', 'info' => 'notice-info' ];

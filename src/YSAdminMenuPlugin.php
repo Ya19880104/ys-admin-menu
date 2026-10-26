@@ -17,6 +17,9 @@
 
 namespace YangSheep\AdminMenu;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+use YangSheep\AdminMenu\Admin\YSAccessAdmin;
+use YangSheep\AdminMenu\Cli\YSAccessCommand;
 use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
 use YangSheep\AdminMenu\Menu\YSMenuConfigBridge;
 use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
@@ -69,6 +72,8 @@ final class YSAdminMenuPlugin {
 			// v1.6.0：登入次數限制（狀態、解鎖、白名單、開關、清理、紀錄、刪表）與訪客 IP 偵測的試算（都只在主機上執行）。
 			\WP_CLI::add_command( 'ys-admin-menu login-guard', YSLoginGuardCommand::class );
 			\WP_CLI::add_command( 'ys-admin-menu ip', YSClientIpCommand::class );
+			// v1.7.0：誰能使用本外掛的救援（status／reset／allow）。
+			\WP_CLI::add_command( 'ys-admin-menu access', YSAccessCommand::class );
 		}
 		// 輸出側欄前的最後整理：拿掉已提升子選單在原父層的那一列、沒有內容的分組標籤。
 		add_filter( 'parent_file', [ YSMenuRouter::class, 'prepare_menu_for_render' ], 9 );
@@ -96,6 +101,9 @@ final class YSAdminMenuPlugin {
 		if ( is_admin() ) {
 			YSMenuPage::register();
 			YSWhiteLabelAdmin::register();
+			// v1.7.0：誰能使用本外掛（外掛清單隱藏與停用、刪除防護）與「外掛使用權限」分頁的存檔。
+			YSAccess::register();
+			YSAccessAdmin::register();
 		}
 	}
 }

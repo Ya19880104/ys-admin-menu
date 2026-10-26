@@ -17,6 +17,8 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+
 defined( 'ABSPATH' ) || exit;
 
 class YSMenuPage {
@@ -46,6 +48,10 @@ class YSMenuPage {
 	 * 註冊頂層選單與子頁。
 	 */
 	public static function add_menu(): void {
+		// v1.7.0：「外掛使用權限」選了只有指定帳號時，其他管理員側欄沒有「YS 選單管理」，直接開設定頁也是沒有權限。
+		if ( ! YSAccess::can_manage() ) {
+			return;
+		}
 		$cap = 'manage_options';
 
 		// 若 admin 上傳白牌 LOGO，icon 改用該 LOGO URL；否則用 dashicon。

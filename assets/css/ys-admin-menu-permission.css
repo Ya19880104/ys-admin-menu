@@ -1150,3 +1150,33 @@
     background: #e0e7ff;
     opacity: 0.6;
 }
+
+/* v1.7.0：「外掛使用權限」分頁 */
+.ys-am-access .ys-am-access__mode {
+    margin: 12px 0 8px;
+    line-height: 2;
+}
+.ys-am-access .ys-am-access__users {
+    display: grid;
+    gap: 4px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin: 4px 0 8px;
+    padding: 10px 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #fff;
+}
+.ys-am-access .ys-am-access__user {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 2px;
+}
+.ys-am-access .ys-am-access__user .description {
+    font-size: 12px;
+}
+.ys-am-access .ys-am-access__form code {
+    font-size: 12px;
+}

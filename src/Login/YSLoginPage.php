@@ -23,6 +23,7 @@
 
 namespace YangSheep\AdminMenu\Login;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Admin\YSWhiteLabelAdmin;
 
 defined( 'ABSPATH' ) || exit;
@@ -440,7 +441,7 @@ final class YSLoginPage {
 	 * @param array<string, mixed> $post 已 wp_unslash 的 $_POST。
 	 */
 	public static function save_settings( array $post ): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 

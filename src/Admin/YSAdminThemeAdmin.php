@@ -7,6 +7,7 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 
 defined( 'ABSPATH' ) || exit;
@@ -43,7 +44,7 @@ class YSAdminThemeAdmin {
 	}
 
 	public static function render(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( esc_html__( '權限不足', 'ys-admin-menu' ) );
 		}
 

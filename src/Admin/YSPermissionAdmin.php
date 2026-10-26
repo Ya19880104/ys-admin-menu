@@ -83,6 +83,7 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Rest\YSPermissionController;
 use YangSheep\AdminMenu\Menu\YSMenuMovesMigrator;
 use YangSheep\AdminMenu\Menu\YSMenuRouter;
@@ -124,13 +125,27 @@ class YSPermissionAdmin {
 	 * v2.45.20 Phase R2.4-H：cap check 後統一 YSAdminApp::open() / close()。
 	 * Capability matrix nonce / cap_check / REST save 邏輯**完全不變**，只動 wrapper。
 	 */
+	/**
+	 * 分頁 → 名稱（四個分頁的導覽列共用）。v1.7.0：加「外掛使用權限」（YSAccessAdmin）。
+	 *
+	 * @return array<string, string>
+	 */
+	public static function tabs(): array {
+		return [
+			'wp_native'          => '主選單（頂層）',
+			'ys_cart'            => '全部選單（含子選單）',
+			'user_overrides'     => '使用者覆寫',
+			YSAccessAdmin::TAB   => '外掛使用權限',
+		];
+	}
+
 	public static function render(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( '權限不足。' );
 		}
 
 		$tab_raw = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'wp_native';
-		$tab     = in_array( $tab_raw, [ 'wp_native', 'ys_cart', 'user_overrides' ], true ) ? $tab_raw : 'wp_native';
+		$tab     = array_key_exists( $tab_raw, self::tabs() ) ? $tab_raw : 'wp_native';
 
 		// 三個 tab 都共用一份 enqueue（含 sortablejs / wp-color-picker / 主 JS / 主 CSS）
 		self::enqueue_assets();
@@ -144,7 +159,9 @@ class YSPermissionAdmin {
 		// 不會把搬好的設定寫回舊分組。
 		echo '<input type="hidden" id="ys-admin-menu-moves-token" value="' . esc_attr( YSMenuMovesMigrator::page_token() ) . '">';
 
-		if ( 'user_overrides' === $tab ) {
+		if ( YSAccessAdmin::TAB === $tab ) {
+			YSAccessAdmin::render_tab( self::tabs() );
+		} elseif ( 'user_overrides' === $tab ) {
 			self::render_user_overrides();
 		} else {
 			// wp_native / ys_cart 走新 REST + SortableJS UI
@@ -237,11 +254,7 @@ class YSPermissionAdmin {
 	 */
 	private static function render_rest_ui( string $tab ): void {
 		$base_url   = admin_url( 'admin.php?page=' . YSMenuPage::SLUG_PERMISSIONS );
-		$tabs       = [
-			'wp_native'      => '主選單（頂層）',
-			'ys_cart'        => '全部選單（含子選單）',
-			'user_overrides' => '使用者覆寫',
-		];
+		$tabs       = self::tabs();
 		$tab_title  = $tabs[ $tab ] ?? '選單';
 		$tab_icon   = ( 'wp_native' === $tab ) ? 'dashicons-admin-settings' : 'dashicons-menu';
 		$tab_desc   = ( 'wp_native' === $tab )
@@ -1260,11 +1273,7 @@ class YSPermissionAdmin {
 		$saved_overrides = self::normalize_user_overrides_for_render( $config );
 		$all_slugs       = self::collect_all_known_slugs();
 
-		$tabs = [
-			'wp_native'      => '主選單（頂層）',
-			'ys_cart'        => '全部選單（含子選單）',
-			'user_overrides' => '使用者覆寫',
-		];
+		$tabs = self::tabs();
 		?>
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>

@@ -46,6 +46,7 @@
 
 namespace YangSheep\AdminMenu\Login;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Security\YSClientIp;
 
 defined( 'ABSPATH' ) || exit;
@@ -371,7 +372,7 @@ final class YSTurnstile {
 	 * admin_notices：Turnstile 已啟用但實際上沒有作用（站台設定擋住了連線）時，常駐提醒管理員。
 	 */
 	public static function print_config_problem_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 		// 先看便宜的：設定常數與（自動載入的）健康狀態。沒有問題就結束，不去讀不自動載入的 Secret，
@@ -974,7 +975,7 @@ final class YSTurnstile {
 	 * admin-ajax：設定頁「測試設定」。用已儲存的 Site Key／Secret Key 驗證設定頁上 widget 產生的 token。
 	 */
 	public static function ajax_test(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_send_json_error( [ 'message' => __( '權限不足。', 'ys-admin-menu' ) ], 403 );
 		}
 		check_ajax_referer( self::AJAX_TEST_ACTION, 'nonce' );
@@ -1013,7 +1014,7 @@ final class YSTurnstile {
 	 * @return string[] 欄位錯誤代碼（site_key_format／secret_format），格式不對的值不會存。
 	 */
 	public static function save_settings( array $post ): array {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return [];
 		}
 

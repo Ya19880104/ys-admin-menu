@@ -41,6 +41,7 @@
 
 namespace YangSheep\AdminMenu\Admin;
 
+use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Login\YSLoginPage;
 use YangSheep\AdminMenu\Login\YSTurnstile;
 use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
@@ -339,7 +340,7 @@ class YSWhiteLabelAdmin {
 	 * shell wrapper 影響）。
 	 */
 	public static function render_settings(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( '權限不足。' );
 		}
 
@@ -398,7 +399,7 @@ class YSWhiteLabelAdmin {
 	 * 處理 POST — 儲存白牌設置
 	 */
 	public static function handle_save_settings(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			wp_die( '權限不足。' );
 		}
 		$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';

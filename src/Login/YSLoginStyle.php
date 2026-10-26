@@ -17,6 +17,8 @@
 
 namespace YangSheep\AdminMenu\Login;
 
+use YangSheep\AdminMenu\Access\YSAccess;
+
 defined( 'ABSPATH' ) || exit;
 
 final class YSLoginStyle {
@@ -532,7 +534,7 @@ final class YSLoginStyle {
 	 * @param array<string, mixed> $post 已 wp_unslash 的 $_POST。
 	 */
 	public static function save_settings( array $post ): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! YSAccess::can_manage() ) {
 			return;
 		}
 		$background = isset( $post['login_background'] ) && is_string( $post['login_background'] ) && in_array( $post['login_background'], self::BACKGROUNDS, true )

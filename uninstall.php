@@ -153,6 +153,11 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_turnstile_mode',
 	'ys_admin_menu_turnstile_log',
 	'ys_admin_menu_turnstile_health',
+	// v1.7.0：誰能使用本外掛、關閉留言、控制台小工具（含記下的小工具清單）。
+	'ys_admin_menu_access',
+	'ys_admin_menu_comments',
+	'ys_admin_menu_dashboard_widgets',
+	'ys_admin_menu_dashboard_widgets_seen',
 ];
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；
