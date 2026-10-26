@@ -185,11 +185,14 @@ class YSPermissionAdmin {
 			true
 		);
 
+		$role_choices = self::role_choices();
 		wp_localize_script( 'ys-admin-menu-permission', 'ysPermissionAdmin', [
 			'restUrl'    => esc_url_raw( rest_url( 'ys-admin-menu/v1/admin/permissions' ) ),
 			'usersUrl'   => esc_url_raw( rest_url( 'wp/v2/users' ) ),
 			'nonce'      => wp_create_nonce( 'wp_rest' ),
 			'currentUserId' => get_current_user_id(),
+			// v1.7.0：動態新增的列（複製、移到主選單）也用站上全部角色畫角色面板。[ [ key, 顯示名稱 ], … ]
+			'roles'      => array_map( static fn( $key, $label ): array => [ $key, $label ], array_keys( $role_choices ), array_values( $role_choices ) ),
 		] );
 
 		wp_enqueue_style(
@@ -926,12 +929,6 @@ class YSPermissionAdmin {
 		$copied    = ! empty( $extra['copied'] );
 		$copy_icon = (string) ( $saved['icon'] ?? '' );
 
-		$role_options = [
-			'administrator' => 'Admin',
-			'shop_manager'  => 'SM',
-			'editor'        => 'Editor',
-		];
-
 		$attrs = '';
 		if ( null !== $parent_slug ) {
 			$attrs .= ' data-parent="' . esc_attr( $parent_slug ) . '"';
@@ -990,14 +987,7 @@ class YSPermissionAdmin {
 			</td>
 			<td>
 				<div class="role-cb-group">
-					<?php foreach ( $role_options as $role_key => $role_short ) : ?>
-						<label>
-							<input type="checkbox" class="ys-ec-role-cb"
-								data-role="<?php echo esc_attr( $role_key ); ?>"
-								<?php checked( in_array( $role_key, $roles, true ) ); ?>>
-							<?php echo esc_html( $role_short ); ?>
-						</label>
-					<?php endforeach; ?>
+					<?php echo self::role_picker_html( $roles ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- role_picker_html() 內已逐欄 escape ?>
 				</div>
 					<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）">
 						<input type="checkbox" class="ys-ec-self-only" <?php checked( $self_only_uid > 0 ); ?>>
@@ -1147,12 +1137,6 @@ class YSPermissionAdmin {
 		$icon           = (string) ( $own['icon'] ?? '' );
 		$after          = isset( $own['after'] ) ? (string) $own['after'] : '';
 
-		$role_options = [
-			'administrator' => 'Admin',
-			'shop_manager'  => 'SM',
-			'editor'        => 'Editor',
-		];
-
 		$attrs  = ' data-row-kind="' . esc_attr( $d['kind'] ) . '"';
 		$attrs .= ' data-copy-key="' . esc_attr( $d['key'] ) . '"';
 		$attrs .= ' data-after="' . esc_attr( $after ) . '"';
@@ -1200,14 +1184,7 @@ class YSPermissionAdmin {
 			</td>
 			<td>
 				<div class="role-cb-group">
-					<?php foreach ( $role_options as $role_key => $role_short ) : ?>
-						<label>
-							<input type="checkbox" class="ys-ec-role-cb"
-								data-role="<?php echo esc_attr( $role_key ); ?>"
-								<?php checked( in_array( $role_key, $roles, true ) ); ?>>
-							<?php echo esc_html( $role_short ); ?>
-						</label>
-					<?php endforeach; ?>
+					<?php echo self::role_picker_html( $roles ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- role_picker_html() 內已逐欄 escape ?>
 				</div>
 				<label class="ys-ec-self-only-label" title="勾選後此選單只有目前登入的帳號看得到（含其他管理員）">
 					<input type="checkbox" class="ys-ec-self-only" <?php checked( $self_only_uid > 0 ); ?>>
@@ -1624,6 +1601,64 @@ class YSPermissionAdmin {
 				continue;
 			}
 			$out[] = [ 'slug' => $slug, 'title' => $title ];
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.7.0：「角色可見」欄的下拉面板。
+	 *
+	 * 列出站上全部角色（role_choices()）；已存、但站上已經沒有的角色也列出並標示，勾選狀態照存的值。
+	 * 1.6.0 以前只列 administrator、shop_manager、editor 三種，其他角色（作者、顧客、自訂角色…）在表上看不到，
+	 * 按一次儲存就被清掉，該列從「只有這些角色」變成「不限角色」。
+	 *
+	 * @param array<int, mixed> $roles 這一列存的角色。
+	 */
+	private static function role_picker_html( array $roles ): string {
+		$choices = self::role_choices();
+		$labels  = [];
+		$html    = '';
+		foreach ( $choices as $key => $label ) {
+			$on = in_array( $key, $roles, true );
+			if ( $on ) {
+				$labels[] = $label;
+			}
+			$html .= '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' . esc_attr( $key ) . '"' . checked( $on, true, false ) . '> ' . esc_html( $label ) . '</label>';
+		}
+		foreach ( $roles as $key ) {
+			if ( ! is_string( $key ) || '' === $key || isset( $choices[ $key ] ) ) {
+				continue;
+			}
+			$labels[] = $key;
+			$html    .= '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' . esc_attr( $key ) . '"' . checked( true, true, false ) . '> ' . esc_html( $key . '（角色已不存在）' ) . '</label>';
+		}
+		return '<details class="ys-ec-roles"><summary class="ys-ec-roles__sum" title="沒有勾選＝不限角色">' . esc_html( self::role_summary( $labels ) ) . '</summary><div class="ys-ec-roles__panel">' . $html . '</div></details>';
+	}
+
+	/**
+	 * v1.7.0：角色面板收合時顯示的摘要（JS 的 roleSummary() 同一套規則）。
+	 *
+	 * @param array<int, string> $labels 已勾選角色的顯示名稱。
+	 */
+	private static function role_summary( array $labels ): string {
+		if ( [] === $labels ) {
+			return '不限角色';
+		}
+		if ( count( $labels ) <= 2 ) {
+			return implode( '、', $labels );
+		}
+		return $labels[0] . ' 等 ' . count( $labels ) . ' 個角色';
+	}
+
+	/**
+	 * v1.7.0：站上全部角色 → 顯示名稱（翻譯過的，例如「管理員」「商店管理員」）。設定頁與 JS 共用。
+	 *
+	 * @return array<string, string>
+	 */
+	public static function role_choices(): array {
+		$out = [];
+		foreach ( self::all_role_keys_with_label() as $key => $name ) {
+			$out[ $key ] = function_exists( 'translate_user_role' ) ? (string) translate_user_role( $name ) : $name;
 		}
 		return $out;
 	}

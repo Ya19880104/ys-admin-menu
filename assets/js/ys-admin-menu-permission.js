@@ -572,13 +572,58 @@
         return Array.prototype.slice.call( row.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) { return c.dataset.role; } );
     }
 
-    function roleCheckboxesHtml( roles ) {
-        var opts = [ [ 'administrator', 'Admin' ], [ 'shop_manager', 'SM' ], [ 'editor', 'Editor' ] ];
-        return opts.map( function ( o ) {
-            var checked = roles.indexOf( o[0] ) >= 0 ? ' checked' : '';
-            return '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' + o[0] + '"' + checked + '> ' + o[1] + '</label>';
-        } ).join( '' );
+    // v1.7.0：角色面板（與 PHP role_picker_html() 同一套）。列出站上全部角色；已存但站上已經沒有的角色也列出並保持勾選，
+    // 不會因為表上看不到就在儲存時被清掉。
+    function escHtml( s ) {
+        return String( s ).replace( /[&<>"']/g, function ( ch ) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ ch ];
+        } );
     }
+    function roleSummary( labels ) {
+        if ( ! labels.length ) { return '不限角色'; }
+        if ( labels.length <= 2 ) { return labels.join( '、' ); }
+        return labels[0] + ' 等 ' + labels.length + ' 個角色';
+    }
+    function roleCheckboxesHtml( roles ) {
+        var opts = Array.isArray( cfg.roles ) && cfg.roles.length ? cfg.roles : [ [ 'administrator', '管理員' ], [ 'editor', '編輯' ] ];
+        var known = {};
+        var labels = [];
+        var html = opts.map( function ( o ) {
+            known[ o[0] ] = true;
+            var on = roles.indexOf( o[0] ) >= 0;
+            if ( on ) { labels.push( o[1] ); }
+            return '<label><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( o[0] ) + '"' + ( on ? ' checked' : '' ) + '> ' + escHtml( o[1] ) + '</label>';
+        } ).join( '' );
+        roles.forEach( function ( r ) {
+            if ( 'string' !== typeof r || '' === r || known[ r ] ) { return; }
+            labels.push( r );
+            html += '<label class="ys-ec-roles__missing" title="站上已經沒有這個角色；取消勾選後儲存就會移除"><input type="checkbox" class="ys-ec-role-cb" data-role="' + escHtml( r ) + '" checked> ' + escHtml( r + '（角色已不存在）' ) + '</label>';
+        } );
+        return '<details class="ys-ec-roles"><summary class="ys-ec-roles__sum" title="沒有勾選＝不限角色">' + escHtml( roleSummary( labels ) ) + '</summary><div class="ys-ec-roles__panel">' + html + '</div></details>';
+    }
+    // 勾選改變時更新摘要；打開一個面板時收起其他面板。
+    document.addEventListener( 'change', function ( e ) {
+        var cb = e.target;
+        if ( ! cb || ! cb.classList || ! cb.classList.contains( 'ys-ec-role-cb' ) ) { return; }
+        var box = cb.closest( '.ys-ec-roles' );
+        if ( ! box ) { return; }
+        var labels = Array.prototype.slice.call( box.querySelectorAll( '.ys-ec-role-cb:checked' ) ).map( function ( c ) {
+            return ( c.parentNode.textContent || '' ).replace( /（角色已不存在）$/, '' ).replace( /^\s+|\s+$/g, '' );
+        } );
+        var sum = box.querySelector( '.ys-ec-roles__sum' );
+        if ( sum ) { sum.textContent = roleSummary( labels ); }
+    } );
+    document.addEventListener( 'toggle', function ( e ) {
+        var box = e.target;
+        if ( ! box || ! box.classList || ! box.classList.contains( 'ys-ec-roles' ) || ! box.open ) { return; }
+        Array.prototype.forEach.call( document.querySelectorAll( '.ys-ec-roles[open]' ), function ( other ) {
+            if ( other !== box ) { other.open = false; }
+        } );
+    }, true );
+    document.addEventListener( 'click', function ( e ) {
+        if ( e.target && e.target.closest && e.target.closest( '.ys-ec-roles' ) ) { return; }
+        Array.prototype.forEach.call( document.querySelectorAll( '.ys-ec-roles[open]' ), function ( box ) { box.open = false; } );
+    } );
 
     function parseRow( html ) {
         var temp = document.createElement( 'tbody' );

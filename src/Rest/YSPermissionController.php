@@ -41,6 +41,12 @@ class YSPermissionController {
 	/** v1.3.0：「複製到主選單」最多幾個（防止異常 payload 塞爆設定）。 */
 	private const MAX_TOP_COPIES = 100;
 
+	/** v1.7.0：sanitize_native_items() 認得的欄位（keep_unknown_fields() 用；其他欄位存檔時照已存的值保留）。 */
+	private const NATIVE_FIELDS = [ 'slug', 'title_override', 'order', 'color', 'roles', 'hide', 'self_only_uid', 'icon', 'after' ];
+
+	/** v1.7.0：sanitize_ys_cart_items() 認得的欄位。 */
+	private const YS_CART_FIELDS = [ 'slug', 'order', 'roles', 'level', 'parent_slug', 'hide', 'self_only_uid', 'promote_to_top', 'title_override' ];
+
 	/**
 	 * 註冊路由（由 YSRouteRegistrar 在 rest_api_init 呼叫）
 	 */
@@ -334,12 +340,14 @@ class YSPermissionController {
 		$existing['ys_cart']   = (array) ( $existing['ys_cart'] ?? [] );
 
 		// wp_native slice
+		// v1.7.0：每一列先跟已存的同一列合併不認得的欄位（keep_unknown_fields()），例如 YS CART V3 寫的 visibility。
 		if ( isset( $payload['wp_native'] ) && is_array( $payload['wp_native'] ) ) {
 			$slice = $payload['wp_native'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
+				$stored                         = (array) ( $existing['wp_native']['items'] ?? [] );
 				$existing['wp_native']['items'] = self::merge_unrendered_items(
-					self::sanitize_native_items( $slice['items'] ),
-					(array) ( $existing['wp_native']['items'] ?? [] ),
+					self::keep_unknown_fields( self::sanitize_native_items( $slice['items'] ), $stored, 'wp_native' ),
+					$stored,
 					$slice['rendered_slugs'] ?? null
 				);
 			}
@@ -349,9 +357,10 @@ class YSPermissionController {
 		if ( isset( $payload['ys_cart'] ) && is_array( $payload['ys_cart'] ) ) {
 			$slice = $payload['ys_cart'];
 			if ( isset( $slice['items'] ) && is_array( $slice['items'] ) ) {
+				$stored                       = (array) ( $existing['ys_cart']['items'] ?? [] );
 				$existing['ys_cart']['items'] = self::merge_unrendered_items(
-					self::sanitize_ys_cart_items( $slice['items'] ),
-					(array) ( $existing['ys_cart']['items'] ?? [] ),
+					self::keep_unknown_fields( self::sanitize_ys_cart_items( $slice['items'] ), $stored, 'ys_cart' ),
+					$stored,
 					$slice['rendered_slugs'] ?? null
 				);
 			}
@@ -385,9 +394,10 @@ class YSPermissionController {
 			&& isset( $payload['top_rows']['items'] ) && is_array( $payload['top_rows']['items'] ) ) {
 			$slice                          = $payload['top_rows'];
 			$rendered                       = is_array( $slice['rendered'] ?? null ) ? $slice['rendered'] : [];
+			$stored                         = (array) ( $existing['wp_native']['items'] ?? [] );
 			$existing['wp_native']['items'] = self::merge_top_rows(
-				(array) ( $existing['wp_native']['items'] ?? [] ),
-				self::sanitize_native_items( $slice['items'] ),
+				$stored,
+				self::keep_unknown_fields( self::sanitize_native_items( $slice['items'] ), $stored, 'wp_native' ),
 				$rendered
 			);
 		}
@@ -427,6 +437,58 @@ class YSPermissionController {
 			[ 'success' => true, 'saved_at' => time() ],
 			200
 		);
+	}
+
+	/**
+	 * v1.7.0：已存列上「清理程式不認得的欄位」原樣保留，認得的欄位一律用這次送來的值。
+	 *
+	 * sanitize_native_items()／sanitize_ys_cart_items() 用白名單重建每一列；1.6.0 以前按一次儲存，已存列上別人寫的欄位
+	 * （例如 YS CART V3 寫進設定的可見規則 visibility）、之後版本新增的欄位都會被刪掉。這裡以「同一列」比對：
+	 *   - wp_native：slug_key( slug )
+	 *   - ys_cart：slug_key( slug )＋level＋slug_key( parent_slug )
+	 * 分組列不處理（沒有規則欄位）。同一列在已存資料裡出現多次時，取第一列的不認得欄位。
+	 *
+	 * @param array<int, array<string, mixed>> $submitted 這次送出的列（已清理）。
+	 * @param array<int, mixed>                $stored    目前已存的列。
+	 * @param string                           $section   'wp_native' | 'ys_cart'
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function keep_unknown_fields( array $submitted, array $stored, string $section ): array {
+		$known = array_flip( 'ys_cart' === $section ? self::YS_CART_FIELDS : self::NATIVE_FIELDS );
+		$extra = [];
+		foreach ( $stored as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) || ! is_string( $row['slug'] ) ) {
+				continue;
+			}
+			$unknown = array_diff_key( $row, $known );
+			$key     = self::row_identity( $row, $section );
+			if ( [] !== $unknown && ! isset( $extra[ $key ] ) ) {
+				$extra[ $key ] = $unknown;
+			}
+		}
+		if ( [] === $extra ) {
+			return $submitted;
+		}
+		foreach ( $submitted as $i => $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || empty( $row['slug'] ) ) {
+				continue;
+			}
+			$key = self::row_identity( $row, $section );
+			if ( isset( $extra[ $key ] ) ) {
+				$submitted[ $i ] = $row + $extra[ $key ];
+			}
+		}
+		return $submitted;
+	}
+
+	/** v1.7.0：keep_unknown_fields() 判斷「同一列」用的鍵。 */
+	private static function row_identity( array $row, string $section ): string {
+		$key = YSMenuRouter::slug_key( (string) $row['slug'] );
+		if ( 'ys_cart' === $section ) {
+			$parent = isset( $row['parent_slug'] ) && is_string( $row['parent_slug'] ) ? $row['parent_slug'] : '';
+			$key   .= "\0" . ( 'sub' === ( $row['level'] ?? 'top' ) ? 'sub' : 'top' ) . "\0" . ( '' === $parent ? '' : YSMenuRouter::slug_key( $parent ) );
+		}
+		return $key;
 	}
 
 	/**
