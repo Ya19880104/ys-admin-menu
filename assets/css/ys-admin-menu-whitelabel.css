@@ -22,8 +22,9 @@
  */
 
 /* ─── WP-native chrome 白底化（v2.45.40 Issue #1） ─────────
- * 白牌 5 頁是「設定型」頁面、WP 預設 #f0f0f1 灰底太重。
- * 把 body / #wpcontent 轉白底、.wrap 置中收斂 max-width，視覺更乾淨。
+ * 白牌 5 頁是「設定型」頁面、WP 預設 #f0f0f1 灰底太重，把 body / #wpcontent 轉白底。
+ * v1.7.2（10-27 使用者：「後台頁面有寬有窄怎麼回事?」）：白牌設定頁原本 .wrap 與內容各限寬 1280 置中，
+ * 比原生選單樣式、選單與權限、後台精簡窄，內容又再內縮 20px；改成和那幾頁一樣滿版（.wrap 用 WordPress 預設邊距）。
  */
 body.ysca-wl-active {
     background: #fff;
@@ -32,17 +33,14 @@ body.ysca-wl-active #wpcontent {
     background: #fff;
 }
 body.ysca-wl-active .wrap {
-    max-width: 1280px;
-    margin: 20px auto;
     padding: 0;
 }
 
 /* ─── Root container ─────────────────────────────────────── */
 
 body.ysca-wl-active .ysca-wl-page {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 24px 20px 64px;
+    margin: 0;
+    padding: 0 0 64px;
     color: #1f2937;
     font-size: 14px;
     line-height: 1.55;
@@ -426,7 +424,7 @@ body.ysca-wl-active .ysca-wl-badge--success {
 
 @media (max-width: 782px) {
     body.ysca-wl-active .ysca-wl-page {
-        padding: 16px 12px 32px;
+        padding: 0 0 32px;
     }
     body.ysca-wl-active .ysca-wl-card__header,
     body.ysca-wl-active .ysca-wl-card__body {
@@ -460,7 +458,8 @@ body.ysca-wl-active .ysca-wl-badge--success {
     display: flex;
     align-items: center;
     gap: 18px;
-    margin: 14px 20px 24px 0;
+    /* v1.7.2：右邊不再另留 20px（.wrap 本身已有右邊距），橫幅和下面的內容同寬（原本每一頁的橫幅都比內容右邊短 20px） */
+    margin: 14px 0 24px;
     padding: 24px 28px;
     background: linear-gradient(120deg, var(--ysca-primary-hover, #174fc7) 0%, var(--ysca-primary, #1f5dcf) 52%, var(--ysca-accent, #5da0f9) 100%);
     border-radius: 16px;
