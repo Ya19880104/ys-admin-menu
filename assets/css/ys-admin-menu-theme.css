@@ -14,7 +14,8 @@
     color: #1f2937;
 }
 
-.ys-ec-admin-theme-page h1 {
+/* v1.7.1：頁首橫幅的標題（.ys-am-pagehead__title，白字）不套這條：原本深色字壓在藍色橫幅上看不清楚 */
+.ys-ec-admin-theme-page h1:not(.ys-am-pagehead__title) {
     color: #111827;
     font-size: 23px;
     font-weight: 400;
@@ -24,7 +25,7 @@
     gap: 8px;
 }
 
-.ys-ec-admin-theme-page h1 .dashicons {
+.ys-ec-admin-theme-page h1:not(.ys-am-pagehead__title) .dashicons {
     color: var(--ysca-primary, #1f5dcf);
     font-size: 28px;
     width: 28px;
