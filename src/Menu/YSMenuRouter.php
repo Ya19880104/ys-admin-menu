@@ -65,6 +65,42 @@ class YSMenuRouter {
 		// v1.7.0：開新分頁的選單、子選單分組標題、改名時頁面標題也跟著改。
 		add_action( 'admin_footer', [ self::class, 'print_menu_link_fix' ], 5 );
 		add_filter( 'admin_title', [ self::class, 'filter_admin_title' ], 10, 2 );
+		// v1.7.1：沒有本外掛設定、沒接手 Hub client 共用整理時，在它之後（同為最後一個 priority、較晚註冊）改名。
+		add_action( 'admin_menu', [ self::class, 'neutral_toolbox_label' ], PHP_INT_MAX );
+	}
+
+	/** v1.7.1：不是電商網站時「電商工具箱」改用的名稱與圖示。 */
+	public const TOOLBOX_NEUTRAL_LABEL = 'YS 工具箱';
+	private const TOOLBOX_NEUTRAL_ICON = 'dashicons-screenoptions';
+
+	/**
+	 * v1.7.1（10-27 使用者：立肯官網後台出現「電商工具箱」，「是哪個外掛又給我翻譯成電商工具箱？ 莫名其妙」）：
+	 * 內附 Hub client 的共用整理（YSToolboxMenuNormalizer）不管網站有沒有在賣東西，都把 Hub 的頂層選單寫死成「電商工具箱」＋商店圖示。
+	 * 站上沒有 YS CART、WooCommerce、FluentCart 時改叫「YS 工具箱」、換成方塊圖示；有電商外掛的站照舊。
+	 * 只改還是「電商工具箱」的那一列：在本外掛改過名或換過圖示的照樣以設定為準。
+	 */
+	public static function neutral_toolbox_label(): void {
+		global $menu;
+		if ( ! is_array( $menu ) || self::is_commerce_site() ) {
+			return;
+		}
+		foreach ( $menu as $key => $item ) {
+			$label = is_array( $item ) ? (string) ( $item[0] ?? '' ) : '';
+			if ( ! is_array( $item ) || 'ys-toolbox' !== ( $item[2] ?? '' ) || 0 !== strpos( ltrim( $label ), '電商工具箱' ) ) {
+				continue;
+			}
+			// 只換開頭的名稱，後面若有其他外掛加的數字徽章照樣保留
+			$menu[ $key ][0] = esc_html( self::TOOLBOX_NEUTRAL_LABEL ) . substr( ltrim( $label ), strlen( '電商工具箱' ) );
+			$menu[ $key ][3] = esc_html( self::TOOLBOX_NEUTRAL_LABEL );
+			if ( 'dashicons-store' === ( $item[6] ?? '' ) ) {
+				$menu[ $key ][6] = self::TOOLBOX_NEUTRAL_ICON;
+			}
+		}
+	}
+
+	/** v1.7.1：有在賣東西的網站（YS CART、WooCommerce、FluentCart）。 */
+	public static function is_commerce_site(): bool {
+		return defined( 'YS_ECOMMERCE_VERSION' ) || class_exists( 'WooCommerce', false ) || defined( 'FLUENTCART_VERSION' ) || defined( 'FLUENT_CART_VERSION' );
 	}
 
 	/** 目前請求是否為「已提升」頁（由 fix_promoted_highlight 判定後設定）。 */
@@ -331,6 +367,8 @@ class YSMenuRouter {
 		}
 		call_user_func( $callback );
 		remove_action( 'admin_menu', $callback, (int) $priority );
+		// v1.7.1：共用整理寫死的「電商工具箱」在套用本外掛設定之前就換掉，設定裡的改名、圖示照樣蓋過去。
+		self::neutral_toolbox_label();
 	}
 
 	/**

@@ -8,7 +8,7 @@
  *     （各管理員看到的合併記下；90 天沒出現的拿掉）
  *
  * 列舉：可以使用 YS 選單管理的人打開控制台時，在 wp_dashboard_setup 很晚的優先序讀 $wp_meta_boxes['dashboard']，
- * 內容有變才寫入。不在設定頁執行 wp_dashboard_setup()（那等於在設定頁跑每個外掛的控制台程式）。
+ * 內容有變才寫入。v1.7.1 起打開「後台精簡」頁時也會直接列舉一次（collect_now()，做法同 Widget Disable），不必先打開控制台。
  * 移除：同一個 hook、記錄之後，對每個要隱藏的 id 找出它現在實際所在的欄再 remove_meta_box()（不靠存檔當時的欄）。
  *
  * 對所有人生效（含管理員）。依角色、帳號隱藏留到 1.8.0。
@@ -206,6 +206,42 @@ final class YSDashboardWidgets {
 			return;
 		}
 		update_option( self::SEEN_OPTION, [ 'items' => $items, 'updated_at' => $now ], false );
+	}
+
+	/**
+	 * v1.7.1：打開「後台精簡」頁時直接列舉控制台小工具，不必先打開一次控制台（使用者 10-27：「控制台為什麼需要打開一次？」，對標 Widget Disable）。
+	 *
+	 * 做法同 Widget Disable：載入 wp-admin/includes/dashboard.php、暫時把目前畫面設成控制台、執行 wp_dashboard_setup()。
+	 * 核心與各外掛在這一步只「登記」小工具，不執行小工具的內容；本類別在 wp_dashboard_setup 很晚的那一步照常記下（on_dashboard_setup() → remember()）。
+	 * 結束後還原目前畫面與 $wp_meta_boxes['dashboard']。只給 YAM 管理者；環境沒有這些函式（例如測試替身）就不做。
+	 */
+	public static function collect_now(): void {
+		if ( ! YSAccess::can_manage() ) {
+			return;
+		}
+		if ( ! function_exists( 'wp_dashboard_setup' ) && is_readable( ABSPATH . 'wp-admin/includes/dashboard.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/dashboard.php';
+		}
+		if ( ! function_exists( 'wp_dashboard_setup' ) || ! function_exists( 'set_current_screen' ) || ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+		global $wp_meta_boxes;
+		$screen = get_current_screen();
+		$had    = is_array( $wp_meta_boxes ) && array_key_exists( self::SCREEN, $wp_meta_boxes );
+		$boxes  = $had ? $wp_meta_boxes[ self::SCREEN ] : null;
+		set_current_screen( self::SCREEN );
+		try {
+			wp_dashboard_setup();
+		} finally {
+			if ( $had ) {
+				$wp_meta_boxes[ self::SCREEN ] = $boxes;
+			} elseif ( is_array( $wp_meta_boxes ) ) {
+				unset( $wp_meta_boxes[ self::SCREEN ] );
+			}
+			if ( $screen ) {
+				set_current_screen( $screen );
+			}
+		}
 	}
 
 	/** load-index.php：設定要藏歡迎面板時，拿掉核心的 wp_welcome_panel。 */

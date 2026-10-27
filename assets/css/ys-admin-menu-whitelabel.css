@@ -15,7 +15,7 @@
  * 設計準則：
  *   - body.ysca-wl-active 為唯一 root，無 .ysca-* tokens 依賴
  *   - 取代 WordPress 預設 .nav-tab / .nav-tab-active 醜樣式
- *   - indigo accent (#6366f1)、白底細邊圓角 4px、focus ring shadow
+ *   - indigo accent (var(--ysca-primary, #1f5dcf))、白底細邊圓角 4px、focus ring shadow
  *   - 響應式 ≤782px 收成單欄
  *
  * @since 2.45.39
@@ -168,8 +168,8 @@ body.ysca-wl-active .ysca-wl-textarea {
 
 body.ysca-wl-active .ysca-wl-input:focus,
 body.ysca-wl-active .ysca-wl-textarea:focus {
-    border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    border-color: var(--ysca-primary, #1f5dcf);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ysca-primary, #1f5dcf) 15%, transparent);
     outline: 0;
 }
 
@@ -211,32 +211,32 @@ body.ysca-wl-active .ysca-wl-btn:hover {
 }
 
 body.ysca-wl-active .ysca-wl-btn:focus {
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ysca-primary, #1f5dcf) 18%, transparent);
     outline: 0;
 }
 
 body.ysca-wl-active .ysca-wl-btn--primary {
     color: #fff;
-    background: #6366f1;
-    border-color: #6366f1;
+    background: var(--ysca-primary, #1f5dcf);
+    border-color: var(--ysca-primary, #1f5dcf);
 }
 
 body.ysca-wl-active .ysca-wl-btn--primary:hover {
-    background: #4f46e5;
-    border-color: #4f46e5;
+    background: var(--ysca-primary-hover, #174fc7);
+    border-color: var(--ysca-primary-hover, #174fc7);
     color: #fff;
 }
 
 body.ysca-wl-active .ysca-wl-btn--ghost {
     background: transparent;
     border-color: transparent;
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
 }
 
 body.ysca-wl-active .ysca-wl-btn--ghost:hover {
-    background: #eef2ff;
+    background: var(--ysca-primary-soft, #eef5ff);
     border-color: transparent;
-    color: #4f46e5;
+    color: var(--ysca-primary-hover, #174fc7);
 }
 
 body.ysca-wl-active .ysca-wl-btn--sm {
@@ -289,17 +289,17 @@ body.ysca-wl-active .ysca-wl-tab {
 }
 
 body.ysca-wl-active .ysca-wl-tab:hover {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
 }
 
 body.ysca-wl-active .ysca-wl-tab:focus {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
     outline-offset: -2px;
 }
 
 body.ysca-wl-active .ysca-wl-tab--active,
 body.ysca-wl-active .ysca-wl-tab[aria-selected="true"] {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
 }
 
 body.ysca-wl-active .ysca-wl-tab--active::after,
@@ -310,7 +310,7 @@ body.ysca-wl-active .ysca-wl-tab[aria-selected="true"]::after {
     right: 14px;
     bottom: -1px;
     height: 2px;
-    background: #6366f1;
+    background: var(--ysca-primary, #1f5dcf);
     border-radius: 2px;
 }
 
@@ -462,9 +462,9 @@ body.ysca-wl-active .ysca-wl-badge--success {
     gap: 18px;
     margin: 14px 20px 24px 0;
     padding: 24px 28px;
-    background: linear-gradient(120deg, #4f46e5 0%, #6366f1 52%, #818cf8 100%);
+    background: linear-gradient(120deg, var(--ysca-primary-hover, #174fc7) 0%, var(--ysca-primary, #1f5dcf) 52%, var(--ysca-accent, #5da0f9) 100%);
     border-radius: 16px;
-    box-shadow: 0 10px 30px -6px rgba(79, 70, 229, 0.45);
+    box-shadow: 0 10px 30px -6px color-mix(in srgb, var(--ysca-primary-hover, #174fc7) 45%, transparent);
     color: #fff;
 }
 /* 右上角柔光，增加層次與質感（不影響左側文字可讀性） */
@@ -575,13 +575,13 @@ body.ysca-wl-active .ys-am-toggle__slider::before {
     transition: transform 0.25s ease;
 }
 body.ysca-wl-active .ys-am-toggle input:checked + .ys-am-toggle__slider {
-    background: #6366f1;
+    background: var(--ysca-primary, #1f5dcf);
 }
 body.ysca-wl-active .ys-am-toggle input:checked + .ys-am-toggle__slider::before {
     transform: translateX(20px);
 }
 body.ysca-wl-active .ys-am-toggle input:focus-visible + .ys-am-toggle__slider {
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ysca-primary, #1f5dcf) 30%, transparent);
 }
 body.ysca-wl-active .ys-am-toggle-field__text strong {
     display: block;
@@ -607,7 +607,7 @@ body.ysca-wl-active .ysca-wl-card__title::before {
     transform: translateY(-50%);
     width: 4px;
     height: 18px;
-    background: #6366f1;
+    background: var(--ysca-primary, #1f5dcf);
     border-radius: 2px;
 }
 
@@ -626,7 +626,7 @@ body.ysca-wl-active .ys-am-wl-tabs .ysca-wl-tab {
 }
 
 body.ysca-wl-active .ys-am-wl-tabs .ysca-wl-tab:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
     outline-offset: -2px;
 }
 
@@ -815,7 +815,7 @@ body.ysca-wl-active .ys-am-wl-details[open] > summary::after {
 }
 
 body.ysca-wl-active .ys-am-wl-details > summary:focus-visible {
-    outline: 2px solid #4f46e5;
+    outline: 2px solid var(--ysca-primary-hover, #174fc7);
     outline-offset: 2px;
 }
 
@@ -831,7 +831,7 @@ body.ysca-wl-active .ys-am-wl-ip-table th {
 
 body.ysca-wl-active .ys-am-wl-ip-table tr.is-current th,
 body.ysca-wl-active .ys-am-wl-ip-table tr.is-current td {
-    background: #eef2ff;
+    background: var(--ysca-primary-soft, #eef5ff);
 }
 
 body.ysca-wl-active .ys-am-wl-ip-value {

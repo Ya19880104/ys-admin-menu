@@ -64,11 +64,10 @@ $ys_am_missing = array_values( array_diff( $dashboard['hidden'], array_keys( $se
 			<div class="inside">
 				<p class="description">
 					勾選的小工具，所有人的控制台都不會出現（包括管理員）。
-					清單是可以使用 YS 選單管理的人打開控制台時記下的<?php echo $seen['updated_at'] > 0 ? esc_html( '（最後更新：' . wp_date( 'Y-m-d H:i', $seen['updated_at'] ) . '）' ) : ''; ?>；裝了新外掛後，
-					<a href="<?php echo esc_url( admin_url( 'index.php' ) ); ?>">打開一次控制台</a>再回來，清單就會更新。
+					清單在打開這一頁時自動讀取，也會合併各管理員在控制台看過的小工具；裝了新外掛，重新整理這一頁就會出現。
 				</p>
 				<?php if ( [] === $seen['items'] && [] === $ys_am_missing ) : ?>
-					<div class="notice notice-info inline"><p>還沒有記錄：請先<a href="<?php echo esc_url( admin_url( 'index.php' ) ); ?>">打開一次控制台</a>，再回到這一頁。</p></div>
+					<div class="notice notice-info inline"><p>目前沒有讀到任何控制台小工具。剛裝了外掛的話請重新整理這一頁；仍然是空的，可以<a href="<?php echo esc_url( admin_url( 'index.php' ) ); ?>">打開一次控制台</a>再回來。</p></div>
 				<?php endif; ?>
 				<div class="ys-am-declutter__widgets" role="group" aria-label="要隱藏的控制台小工具">
 					<?php foreach ( $seen['items'] as $ys_am_id => $ys_am_row ) : ?>

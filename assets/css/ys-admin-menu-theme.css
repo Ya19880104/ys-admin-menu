@@ -5,7 +5,8 @@
  *
  * 設計：
  *   - 沿用 ys-ec-card 風格（白底 + 圓角 + 細邊框 + 微陰影）
- *   - 與 .ys-ec-permission-admin 一致的 card header (灰底 + dashicons indigo)
+ *   - 與 .ys-ec-permission-admin 一致的 card header (灰底 + dashicons 主色)
+ *   - v1.7.1：顏色一律用 ys-admin-menu-tokens.css 的 --ysca-*（原本寫死 indigo 紫，和後台藍色不一致）
  *   - 色彩 input 旁顯示 wp.colorPicker 的色塊（WP 原生組件）
  */
 
@@ -24,7 +25,7 @@
 }
 
 .ys-ec-admin-theme-page h1 .dashicons {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
     font-size: 28px;
     width: 28px;
     height: 28px;
@@ -56,7 +57,7 @@
 }
 
 .ys-ec-admin-theme-page .ys-ec-card > h3 .dashicons {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
     vertical-align: middle;
 }
 
@@ -150,9 +151,40 @@
     line-height: 1.4;
 }
 
-/* === Color picker 改浮層：避免 iris 面板展開時推擠版面（v1.0.0 UI 修正） === */
+/* === Color picker 改浮層：避免 iris 面板展開時推擠版面（v1.0.0 UI 修正） ===
+ * v1.7.1：底色、內距、陰影只在面板展開時（.wp-picker-active）才加。原本收合時外框仍有 6px 內距＋白底＋陰影，
+ * 變成 12×12 的小白點蓋在下一行說明文字的第一個字上（使用者 10-27：「這個點在幹嘛？蓋掉文字 沒意義 移除」）。 */
 .ys-ec-admin-theme-page .wp-picker-container { position: relative; }
 .ys-ec-admin-theme-page .wp-picker-container .wp-picker-holder {
-    position: absolute; z-index: 50; left: 0; margin-top: 4px; padding: 6px;
-    background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    position: absolute; z-index: 50; left: 0; margin-top: 4px;
+}
+.ys-ec-admin-theme-page .wp-picker-container.wp-picker-active .wp-picker-holder {
+    padding: 6px; background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* === v1.7.1「選取色彩」按鈕：和本頁輸入框同一套外觀（36px 高、灰框、圓角 6px），左側色塊、右側文字；
+ *     滑過與鍵盤焦點用主色（使用者 10-27：「下方的按鈕樣式也要修正」）。WordPress 預設是 32px 主題色細框、圓角 2px。 === */
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button {
+    min-height: 36px; height: 36px; margin: 0 8px 0 0; padding: 0 0 0 36px;
+    border: 1px solid var(--ysca-border, #e5e7eb); border-radius: 6px; box-shadow: none;
+    font-size: 12px; line-height: 34px; overflow: hidden; vertical-align: middle;
+}
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result .wp-color-result-text {
+    display: block; height: 34px; padding: 0 12px; border-left: 1px solid var(--ysca-border, #e5e7eb); border-radius: 0 5px 5px 0;
+    background: #fff; color: #374151; font-size: 12px; line-height: 34px;
+}
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button:hover,
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button:focus,
+.ys-ec-admin-theme-page .wp-picker-container.wp-picker-active .wp-color-result.button {
+    border-color: var(--ysca-primary, #1f5dcf);
+}
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button:hover .wp-color-result-text,
+.ys-ec-admin-theme-page .wp-picker-container.wp-picker-active .wp-color-result .wp-color-result-text {
+    background: var(--ysca-primary-soft, #eef5ff); color: var(--ysca-primary, #1f5dcf);
+}
+.ys-ec-admin-theme-page .wp-picker-container .wp-color-result.button:focus {
+    outline: none; box-shadow: 0 0 0 2px var(--ysca-primary-soft, #eef5ff), 0 0 0 3px var(--ysca-primary, #1f5dcf);
+}
+.ys-ec-admin-theme-page .wp-picker-container .wp-picker-input-wrap:not(.hidden) {
+    display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
 }

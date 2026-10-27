@@ -185,7 +185,7 @@
             if ( btn.classList.contains( 'ys-ec-move-btn' ) ) {
                 if ( moveRowToTop( tbody, row ) ) {
                     markDirty();
-                    setStatus( saveStatus, '已移到主選單（在下方清單中，可拖拉排序）；按「儲存設定」生效', '#4338ca', 5000 );
+                    setStatus( saveStatus, '已移到主選單（在下方清單中，可拖拉排序）；按「儲存設定」生效', 'var(--ysca-primary-strong, #123f9c)', 5000 );
                 }
                 return;
             }

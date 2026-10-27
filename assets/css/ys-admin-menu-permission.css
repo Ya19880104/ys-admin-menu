@@ -46,7 +46,7 @@
 }
 
 .ys-ec-permission-admin .ys-ec-card > h3 .dashicons {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
     margin-right: 6px;
     vertical-align: middle;
 }
@@ -116,7 +116,7 @@
 }
 
 .ys-ec-permission-admin tr.sortable-chosen td {
-    background: #eef2ff;
+    background: var(--ysca-primary-soft, #eef5ff);
 }
 
 /* ─────────────────────────────────────────
@@ -144,9 +144,9 @@
 }
 
 .ys-ec-permission-admin .ys-ec-permission-table .menu-line .level-badge {
-    background: #e0e7ff;
+    background: var(--ysca-primary-tint, #dde9ff);
     border-radius: 3px;
-    color: #3730a3;
+    color: var(--ysca-primary-strong, #123f9c);
     display: inline-block;
     font-size: 10px;
     font-weight: 600;
@@ -194,16 +194,16 @@
 
 /* v1.2.1：提升區（拖子選單到此 → 升頂層） */
 .ys-ec-permission-admin .ys-ec-promote-zone .ys-ec-promote-zone__hint td {
-    background: #eef2ff;
-    border: 2px dashed #c7d2fe;
+    background: var(--ysca-primary-soft, #eef5ff);
+    border: 2px dashed color-mix(in srgb, var(--ysca-primary, #1f5dcf) 24%, #fff);
     border-radius: 8px;
-    color: #4338ca;
+    color: var(--ysca-primary-strong, #123f9c);
     font-size: 12px;
     line-height: 1.5;
     padding: 10px 14px;
 }
 .ys-ec-permission-admin .ys-ec-promote-zone .ys-ec-promote-zone__hint .dashicons {
-    color: #6366f1;
+    color: var(--ysca-primary, #1f5dcf);
     vertical-align: middle;
     margin-right: 2px;
 }
@@ -218,7 +218,7 @@
     background: #f5f7ff;
 }
 .ys-ec-permission-admin .ys-ec-promote-zone tr.is-promoted .menu-line strong {
-    color: #3730a3;
+    color: var(--ysca-primary-strong, #123f9c);
 }
 
 /* v1.1.0：升頂層 checkbox 欄 */
@@ -252,7 +252,7 @@
 
 .ys-ec-permission-admin .ys-ec-permission-table .title-override-inline:focus {
     background: #ffffff;
-    border-color: #6366f1;
+    border-color: var(--ysca-primary, #1f5dcf);
     border-style: solid;
     color: #1f2937;
     outline: 0;
@@ -375,7 +375,7 @@
 
 .ys-ec-permission-admin tr.ys-ec-separator-row .ys-ec-separator-title:focus {
     background: #ffffff;
-    box-shadow: 0 0 0 2px #6366f1;
+    box-shadow: 0 0 0 2px var(--ysca-primary, #1f5dcf);
     outline: 0;
 }
 
@@ -407,14 +407,14 @@
 }
 
 .ys-ec-permission-admin #ys-ec-save-permissions {
-    background: #6366f1;
-    border-color: #4f46e5;
+    background: var(--ysca-primary, #1f5dcf);
+    border-color: var(--ysca-primary-hover, #174fc7);
     color: #ffffff;
 }
 
 .ys-ec-permission-admin #ys-ec-save-permissions:hover {
-    background: #4f46e5;
-    border-color: #4338ca;
+    background: var(--ysca-primary-hover, #174fc7);
+    border-color: var(--ysca-primary-strong, #123f9c);
 }
 
 .ys-ec-permission-admin #ys-ec-save-status {
@@ -488,8 +488,8 @@
 }
 
 .ys-ec-permission-admin .ys-ec-user-search-results li:hover {
-    background: #eef2ff;
-    color: #3730a3;
+    background: var(--ysca-primary-soft, #eef5ff);
+    color: var(--ysca-primary-strong, #123f9c);
 }
 
 .ys-ec-permission-admin .ys-ec-user-search-results li.no-results {
@@ -640,9 +640,12 @@
 
 /* === Color picker 改浮層：避免 iris 面板展開時推擠表格（v1.0.0 UI 修正） === */
 .ys-ec-permission-admin .wp-picker-container { position: relative; }
+/* v1.7.1：底色、內距、陰影只在面板展開時加（收合時原本留下 12×12 的白點，蓋住旁邊的字） */
 .ys-ec-permission-admin .wp-picker-container .wp-picker-holder {
-    position: absolute; z-index: 50; right: 0; margin-top: 4px; padding: 6px;
-    background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    position: absolute; z-index: 50; right: 0; margin-top: 4px;
+}
+.ys-ec-permission-admin .wp-picker-container.wp-picker-active .wp-picker-holder {
+    padding: 6px; background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -681,22 +684,22 @@
 }
 
 .ys-ec-permission-admin .ysca-wl-tab:hover {
-    color: #4338ca;
+    color: var(--ysca-primary-strong, #123f9c);
     background: #ffffff;
-    border-color: #e0e7ff;
+    border-color: var(--ysca-primary-tint, #dde9ff);
 }
 
 .ys-ec-permission-admin .ysca-wl-tab:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
     outline-offset: 2px;
 }
 
 .ys-ec-permission-admin .ysca-wl-tab--active,
 .ys-ec-permission-admin .ysca-wl-tab[aria-selected="true"] {
     color: #ffffff;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    border-color: #4f46e5;
-    box-shadow: 0 2px 6px -1px rgba(79, 70, 229, 0.45);
+    background: linear-gradient(135deg, var(--ysca-primary, #1f5dcf) 0%, var(--ysca-primary-hover, #174fc7) 100%);
+    border-color: var(--ysca-primary-hover, #174fc7);
+    box-shadow: 0 2px 6px -1px color-mix(in srgb, var(--ysca-primary-hover, #174fc7) 45%, transparent);
 }
 
 .ys-ec-permission-admin .ysca-wl-tab--active::after,
@@ -769,9 +772,9 @@
     min-height: 26px;
     margin: 2px 0 2px 4px;
     padding: 2px 10px 2px 7px;
-    color: #4338ca;
+    color: var(--ysca-primary-strong, #123f9c);
     background: #ffffff;
-    border: 1px solid #c7d2fe;
+    border: 1px solid color-mix(in srgb, var(--ysca-primary, #1f5dcf) 24%, #fff);
     border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
@@ -789,20 +792,20 @@
 }
 
 .ys-ec-permission-admin .ys-ec-row-btn:hover {
-    background: #eef2ff;
-    border-color: #a5b4fc;
+    background: var(--ysca-primary-soft, #eef5ff);
+    border-color: color-mix(in srgb, var(--ysca-primary, #1f5dcf) 40%, #fff);
 }
 
 .ys-ec-permission-admin .ys-ec-row-btn:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
     outline-offset: 1px;
 }
 
 .ys-ec-permission-admin .ys-ec-move-btn.is-active,
 .ys-ec-permission-admin .ys-ec-move-btn[aria-pressed="true"] {
-    color: #3730a3;
-    background: #eef2ff;
-    border-color: #818cf8;
+    color: var(--ysca-primary-strong, #123f9c);
+    background: var(--ysca-primary-soft, #eef5ff);
+    border-color: var(--ysca-accent, #5da0f9);
 }
 
 .ys-ec-permission-admin .ys-ec-copy-btn {
@@ -972,12 +975,12 @@
 
 .ys-ec-permission-admin .ys-ec-icon-btn:hover,
 .ys-ec-permission-admin .ys-ec-icon-btn[aria-expanded="true"] {
-    color: #4338ca;
-    border-color: #6366f1;
+    color: var(--ysca-primary-strong, #123f9c);
+    border-color: var(--ysca-primary, #1f5dcf);
 }
 
 .ys-ec-permission-admin .ys-ec-icon-btn:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
     outline-offset: 1px;
 }
 
@@ -1009,7 +1012,7 @@
 .ys-ec-permission-admin .ys-ec-icon-input:focus {
     color: #1f2937;
     background: #ffffff;
-    border-color: #6366f1;
+    border-color: var(--ysca-primary, #1f5dcf);
     border-style: solid;
     outline: 0;
 }
@@ -1053,16 +1056,16 @@
 
 .ys-ec-icon-picker__item:hover,
 .ys-ec-icon-picker__item:focus-visible {
-    color: #3730a3;
-    background: #eef2ff;
-    border-color: #a5b4fc;
+    color: var(--ysca-primary-strong, #123f9c);
+    background: var(--ysca-primary-soft, #eef5ff);
+    border-color: color-mix(in srgb, var(--ysca-primary, #1f5dcf) 40%, #fff);
     outline: none;
 }
 
 .ys-ec-icon-picker__item.is-selected {
     color: #ffffff;
-    background: #4f46e5;
-    border-color: #4338ca;
+    background: var(--ysca-primary-hover, #174fc7);
+    border-color: var(--ysca-primary-strong, #123f9c);
 }
 
 .ys-ec-icon-picker__foot {
@@ -1088,8 +1091,8 @@
 }
 
 .ys-ec-icon-picker__reset:hover {
-    color: #4338ca;
-    border-color: #6366f1;
+    color: var(--ysca-primary-strong, #123f9c);
+    border-color: var(--ysca-primary, #1f5dcf);
 }
 
 /* ── 剛加入、剛切換的列閃一下 ── */
@@ -1135,7 +1138,7 @@
 }
 
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr.ys-ec-promoted-top-row .menu-line strong {
-    color: #4338ca;
+    color: var(--ysca-primary-strong, #123f9c);
 }
 
 /* 複製／提升列的「順序」欄：改用拖拉指示（位置以 after 記錄，不靠數字） */
@@ -1147,7 +1150,7 @@
 
 /* 拖曳中的列 */
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr.sortable-ghost > td {
-    background: #e0e7ff;
+    background: var(--ysca-primary-tint, #dde9ff);
     opacity: 0.6;
 }
 
@@ -1238,8 +1241,8 @@
     max-width: 100%;
     padding: 1px 2px 1px 8px;
     border-radius: 999px;
-    background: #eef2ff;
-    color: #3730a3;
+    background: var(--ysca-primary-soft, #eef5ff);
+    color: var(--ysca-primary-strong, #123f9c);
     font-size: 11px;
     line-height: 1.6;
     overflow-wrap: anywhere;
@@ -1258,7 +1261,7 @@
 }
 .ys-ec-permission-admin .ys-ec-user-chip__x:hover,
 .ys-ec-permission-admin .ys-ec-user-chip__x:focus-visible {
-    background: #c7d2fe;
+    background: color-mix(in srgb, var(--ysca-primary, #1f5dcf) 24%, #fff);
 }
 .ys-ec-permission-admin .ys-ec-access-user-search,
 .ys-ec-permission-admin #ys-ec-preview-search {
@@ -1288,8 +1291,8 @@
 }
 .ys-ec-permission-admin .ys-ec-access__results li:hover,
 .ys-ec-permission-admin .ys-ec-access__results li:focus-visible {
-    background: #eef2ff;
-    color: #3730a3;
+    background: var(--ysca-primary-soft, #eef5ff);
+    color: var(--ysca-primary-strong, #123f9c);
     outline: none;
 }
 .ys-ec-permission-admin .ys-ec-access__results li.no-results {

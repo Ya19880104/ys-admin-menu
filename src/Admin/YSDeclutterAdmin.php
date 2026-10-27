@@ -58,6 +58,10 @@ final class YSDeclutterAdmin {
 				? (string) ( $object->labels->name ?? $name ) . '（目前不支援留言）'
 				: $name . '（目前沒有註冊）';
 		}
+		// v1.7.1：先直接列舉一次控制台小工具，不必先打開控制台；只在顯示頁面時做（存檔走 admin-post，不會到這裡）。
+		if ( 'GET' === strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) ) {
+			YSDashboardWidgets::collect_now();
+		}
 		$dashboard = YSDashboardWidgets::settings();
 		$seen      = YSDashboardWidgets::seen();
 		$saved     = ! empty( $_GET['saved'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只顯示提示
