@@ -46,6 +46,7 @@ class YSMenuPage {
 		add_action( 'admin_menu', [ self::class, 'add_menu' ] );
 		add_action( 'admin_head', [ self::class, 'print_menu_icon_guard' ] );
 		add_action( 'admin_enqueue_scripts', [ self::class, 'enqueue_shared' ] );
+		add_filter( 'admin_body_class', [ self::class, 'add_body_class' ] );
 	}
 
 	/**
@@ -124,8 +125,9 @@ class YSMenuPage {
 	}
 
 	/**
-	 * 共用設計系統樣式 — 在本外掛任一設定頁載入 .ysca-* primitives 與 token 變數，
-	 * 確保移植自 YS CART 的視覺一致。各頁專屬 JS/CSS 由各自的 render() enqueue。
+	 * 設定頁的樣式：YS 後台中央樣式（YSAdminUi 註冊的 ys-admin-ui，含設計系統三支）＋本外掛獨有的元件。
+	 * v1.8.0（10-27 使用者：「後台你有中央化ＣＳＳ嗎」「YS ADMIN 的也要整理」）：原本白牌頁另有一套 .ysca-wl-* 樣式、
+	 * 頁首是藍色橫幅、各頁分頁籤與卡片各長各的；改成全部用中央樣式的元件。各頁專屬 JS 與色彩挑選器、排序表的 CSS 由各自的 render() enqueue。
 	 *
 	 * @param string $hook 當前 admin 頁面 hook suffix。
 	 */
@@ -133,14 +135,21 @@ class YSMenuPage {
 		if ( false === strpos( (string) $hook, self::PARENT_SLUG ) ) {
 			return;
 		}
+		wp_enqueue_style( 'ys-admin-menu-settings', YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/ys-admin-menu-settings.css', [ 'ys-admin-ui' ], YS_ADMIN_MENU_VERSION );
+	}
 
-		$url = YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/';
-		$ver = YS_ADMIN_MENU_VERSION;
-
-		wp_enqueue_style( 'ys-admin-menu-tokens', $url . 'ys-admin-menu-tokens.css', [], $ver );
-		wp_enqueue_style( 'ys-admin-menu-ds-base', $url . 'ysca-admin-base.css', [ 'ys-admin-menu-tokens' ], $ver );
-		wp_enqueue_style( 'ys-admin-menu-ds-components', $url . 'ys-cart-admin-components.css', [ 'ys-admin-menu-ds-base' ], $ver );
-		wp_enqueue_style( 'ys-admin-menu-whitelabel', $url . 'ys-admin-menu-whitelabel.css', [ 'ys-admin-menu-ds-base' ], $ver );
+	/**
+	 * v1.8.0：本外掛設定頁的 body 加 ys-admin-screen（中央樣式的白底）。
+	 *
+	 * @param string $classes 現有 body class 字串。
+	 * @return string
+	 */
+	public static function add_body_class( $classes ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $screen && false !== strpos( (string) $screen->id, self::PARENT_SLUG ) ) {
+			$classes .= ' ys-admin-screen';
+		}
+		return $classes;
 	}
 
 	/**
@@ -166,14 +175,25 @@ class YSMenuPage {
 	}
 
 	/**
-	 * 共用設定頁首列 HTML（三頁通用、indigo banner）。
+	 * v1.8.0：設定頁的外框與頁首（YS 後台中央樣式的頁面骨架，和其他 YS 外掛的後台頁相同）：
+	 * 白色頁首（麵包屑「YS 選單管理」、標題、說明），內容放在 .ysca-page-root。原本是藍色橫幅＋圖示（.ys-am-pagehead）。
+	 * 收尾用 page_close()。
+	 *
+	 * @param string $title 頁面標題。
+	 * @param string $desc  標題下的說明。
+	 * @param string $class 外框另外加的 class（各頁自己的範圍，例如 ys-am-declutter）。
 	 */
-	public static function pagehead_html( string $icon, string $title, string $sub ): string {
-		return sprintf(
-			'<div class="ys-am-pagehead"><span class="ys-am-pagehead__icon"><span class="dashicons dashicons-%s"></span></span><div class="ys-am-pagehead__text"><h1 class="ys-am-pagehead__title">%s</h1><p class="ys-am-pagehead__sub">%s</p></div></div><hr class="wp-header-end">',
-			esc_attr( $icon ),
-			esc_html( $title ),
-			esc_html( $sub )
-		);
+	public static function page_open( string $title, string $desc, string $class = '' ): string {
+		return '<div class="wrap ysca-native-wrap ys-admin-page' . ( '' !== $class ? ' ' . esc_attr( $class ) : '' ) . '">'
+			. '<div class="ysca-page-head ysca-page-head--native"><div>'
+			. '<p class="ysca-page-head__breadcrumb ysca-page-head__breadcrumb--native">YS 選單管理</p>'
+			. '<h1 class="ysca-page-head__title ysca-page-head__title--native">' . esc_html( $title ) . '</h1>'
+			. '<p class="ys-admin-page-desc">' . esc_html( $desc ) . '</p>'
+			. '</div></div><hr class="wp-header-end"><div class="ysca-page-root ysca-page-root--flush">';
+	}
+
+	/** page_open() 的收尾。 */
+	public static function page_close(): string {
+		return '</div></div>';
 	}
 }

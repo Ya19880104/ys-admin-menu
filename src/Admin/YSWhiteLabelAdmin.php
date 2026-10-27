@@ -90,9 +90,6 @@ class YSWhiteLabelAdmin {
 		// 白牌設置以經典 admin-post PRG 表單儲存（自包含、不依賴 REST）。
 		add_action( 'admin_post_' . self::ADMIN_POST_ACTION, [ self::class, 'handle_save_settings' ] );
 
-		// 白牌頁啟用 indigo design system（body.ysca-wl-active 讓 whitelabel.css 生效）。
-		add_filter( 'admin_body_class', [ self::class, 'add_wl_body_class' ] );
-
 		// 整個後台背景色（有設定才輸出，無條件套用、不需啟用主題皮膚）。
 		if ( '' !== self::get_admin_bg_color() ) {
 			add_action( 'admin_head', [ self::class, 'print_admin_bg_style' ] );
@@ -268,20 +265,6 @@ class YSWhiteLabelAdmin {
 	}
 
 	/**
-	 * 在白牌設定頁的 body 加上 ysca-wl-active，啟用 indigo design system。
-	 *
-	 * @param string $classes 現有 body class 字串。
-	 * @return string
-	 */
-	public static function add_wl_body_class( $classes ) {
-		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( $screen && false !== strpos( (string) $screen->id, YSMenuPage::SLUG_SETTINGS ) ) {
-			$classes .= ' ysca-wl-active';
-		}
-		return $classes;
-	}
-
-	/**
 	 * 是否隱藏 admin bar 左上角 WordPress LOGO。
 	 */
 	public static function get_hide_wp_logo(): bool {
@@ -378,12 +361,8 @@ class YSWhiteLabelAdmin {
 		$field_errors   = self::read_field_errors();
 		$active_tab     = self::read_tab( $_GET['tab'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定先顯示哪個分頁
 
-		// v2.45.29: 完全純 WP-native UI（user 明確要求：白牌設置是給架站者用、
-		// 應該完全使用 WP 原生介面、不共用 YS CART 樣式、避免污染 native pages）。
-		// 不開 YSAdminApp shell、不套 .ysca-page-root、不加 .ysca-card class。
-		// is_ys_cart_admin_page() 排除這 3 page、YS CSS 不會載入、無樣式 cascade 風險。
-		echo '<div class="wrap">';
-		echo YSMenuPage::pagehead_html( 'admin-customizer', '白牌設定', 'LOGO、頁尾文字、Admin Bar、自訂登入頁與 Turnstile 登入防護，打造專屬後台品牌。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
+		// v1.8.0：YS 後台中央樣式的頁面骨架（白色頁首＋.ysca-page-root），和本外掛其他設定頁、其他 YS 外掛的後台頁相同。
+		echo YSMenuPage::page_open( '白牌設定', 'LOGO、頁尾文字、Admin Bar、自訂登入頁與 Turnstile 登入防護，打造專屬後台品牌。', 'ys-am-whitelabel-page' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- page_open 內已逐欄 escape
 
 		$template = YS_ADMIN_MENU_PLUGIN_DIR . 'templates/admin/whitelabel-settings.php';
 		if ( file_exists( $template ) ) {
@@ -392,7 +371,7 @@ class YSWhiteLabelAdmin {
 			echo '<div class="card"><p>白牌設定樣板不存在。</p></div>';
 		}
 
-		echo '</div>';
+		echo YSMenuPage::page_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- 固定字串
 	}
 
 	/**

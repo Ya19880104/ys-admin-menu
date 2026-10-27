@@ -82,12 +82,6 @@ class YSAdminThemeAdmin {
 			YS_ADMIN_MENU_VERSION,
 			true
 		);
-		wp_enqueue_style(
-			'ys-admin-menu-theme-page',
-			YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/ys-admin-menu-theme.css',
-			[ 'wp-color-picker', 'ys-admin-menu-ds-components' ],
-			YS_ADMIN_MENU_VERSION
-		);
 
 		wp_localize_script( 'ys-admin-menu-theme', 'ysEcAdminTheme', [
 			'defaults' => self::defaults(),

@@ -1,0 +1,625 @@
+/**
+ * YS 後台共用版面（YS Admin UI）
+ *
+ * @version 1.0.0
+ *
+ * 中央樣式：YS 外掛（YS Admin Menu、立肯型錄…）的後台頁共用，疊在同目錄設計系統三支
+ * （ysca-tokens.css、ysca-admin-base.css、ys-cart-admin-components.css）上面。
+ * 頁首、分頁、卡片、欄位、輸入框、按鈕、表格、徽章、開關直接用設計系統的 .ysca-*；
+ * 這裡只放設計系統沒有、而各外掛都要的：頁面框架、頁首說明、說明框、開關列、欄位排列、選項格、
+ * 單選卡、勾選列、儲存列、表格分段、精簡表格、收合卡片。
+ *
+ * 用法（設計：docs/plans/2026-10-27-ys-admin-central-css-design.md）：
+ * - 後台頁的 body 加 ys-admin-screen；外框 <div class="wrap ysca-native-wrap ys-admin-page">，
+ *   內容放在 .ysca-page-root.ysca-page-root--flush。
+ * - 外掛自己的 CSS 只放它獨有的元件，不重寫這裡與設計系統已有的樣式。
+ * - 只加不改：改既有 class 的外觀＝所有外掛的頁面一起變；新樣式用新的 class。
+ * - 每個外掛內附同一份（assets/ys-admin-ui/），同一頁只載入版本最高的那份。
+ */
+
+/* ─── 1. 頁面框架 ─────────────────────────────────────────── */
+
+/* 白底（WordPress 預設是淺灰） */
+body.ys-admin-screen #wpcontent,
+body.ys-admin-screen #wpbody-content {
+    background: #fff;
+}
+
+/* 右邊距同 WordPress 原生頁 */
+.wrap.ys-admin-page {
+    margin-right: 20px;
+}
+
+@media (max-width: 782px) {
+    .wrap.ys-admin-page {
+        margin-right: 12px;
+    }
+}
+
+/* .ysca-page-root 是 grid：子項目預設不會比自己的內容窄，不換行的分頁列會把整頁撐寬（手機上出現橫向捲動）；
+   設成 0 之後分頁列在自己的框裡橫向捲動 */
+.ys-admin-page .ysca-page-root > * {
+    min-width: 0;
+}
+
+/* 設計系統的按鈕、分頁、開關列等有自己的 display，會蓋過 hidden 屬性 */
+.ys-admin-page [hidden] {
+    display: none !important;
+}
+
+/* 單行輸入框與下拉一律同高（設計系統的控件高度）。
+   WordPress 核心的 input[type=search] 等規則權重較高、會壓成 40px；色彩挑選器、媒體視窗、
+   編輯器與加了 .ys-admin-free 的區塊（例如嵌在頁面裡的區塊編輯器）不套用。 */
+.ys-admin-page :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]):not([type=button]):not([type=submit]):not([type=reset]):not([type=image]):not([type=color]):not([type=range]), select:not([multiple])):not(:where(.wp-editor-wrap *, .media-modal *, .wp-picker-container *, .ys-admin-free *)) {
+    box-sizing: border-box;
+    height: var(--ysca-control-h, 44px);
+    min-height: var(--ysca-control-h, 44px);
+}
+
+/* ─── 2. 頁首說明（設計系統的原生頁首沒有說明列） ─────────── */
+
+.ysca-native-wrap .ys-admin-page-desc {
+    max-width: 72em;
+    margin: 6px 0 0;
+    color: var(--ysca-muted, #5f6773);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.6;
+}
+
+/* ─── 3. 分頁 ─────────────────────────────────────────────── */
+
+/* 設計系統的分頁籤下緣 -2px 疊在框線上，加上橫向捲動會多出 2px 直向溢出，冒出一條小捲軸 */
+.ys-admin-page .ysca-tabs {
+    overflow-y: hidden;
+}
+
+/* 捲動時固定在上方（管理工具列下面） */
+.ys-admin-tabs--sticky {
+    position: sticky;
+    top: 32px;
+    z-index: 6;
+}
+
+@media (max-width: 782px) {
+    .ys-admin-tabs--sticky {
+        top: 46px;
+    }
+}
+
+.ys-admin-tabpanel:focus {
+    outline: 0;
+}
+
+/* ─── 4. 卡片排列 ─────────────────────────────────────────── */
+
+/* 卡片、說明框在表單與分頁裡上下排（.ysca-page-root 直接放的子項目由設計系統的 gap 排） */
+.ys-admin-page :is(form, .ys-admin-tabpanel) > :is(.ysca-card, .ys-admin-note) + :is(.ysca-card, .ys-admin-note) {
+    margin-top: var(--ysca-space-5, 20px);
+}
+
+/* 一疊區塊（說明框、表單、卡片…）上下排，間距一致（由 gap 決定，子項目不另加外距）；--tight 用在相關的開關與欄位 */
+.ys-admin-stack {
+    display: grid;
+    gap: var(--ysca-space-5, 20px);
+    align-content: start;
+    min-width: 0;
+}
+
+.ys-admin-stack--tight {
+    gap: var(--ysca-space-3, 12px);
+}
+
+.ys-admin-stack > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.ys-admin-page .ysca-card > :last-child {
+    margin-bottom: 0;
+}
+
+/* 卡片內容（設計系統的 .ysca-card__body 是 grid＋gap）：子項目的上下距一律交給 gap，欄位、開關、說明框、欄位群組不再另加外距 */
+.ys-admin-page .ysca-card > .ysca-card__body > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* 欄位群組之間的分隔線 */
+.ys-admin-sep {
+    margin-top: var(--ysca-space-5, 20px);
+    padding-top: var(--ysca-space-5, 20px);
+    border-top: 1px solid var(--ysca-line, #edf0f6);
+}
+
+/* ─── 5. 說明框 ───────────────────────────────────────────── */
+
+.ys-admin-note {
+    margin: 0;
+    padding: 12px 16px;
+    border-left: 4px solid var(--ysca-line-strong, #dbe2ee);
+    border-radius: var(--ysca-radius-input, 8px);
+    background: var(--ysca-card-soft, #fbfcff);
+    color: var(--ysca-text-body, #374151);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.6;
+}
+
+.ys-admin-note p {
+    margin: 0;
+}
+
+.ys-admin-note p + p {
+    margin-top: 6px;
+}
+
+.ys-admin-note code {
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.ys-admin-note--info {
+    border-left-color: var(--ysca-primary, #1f5dcf);
+    background: var(--ysca-primary-soft, #eef5ff);
+}
+
+.ys-admin-note--success {
+    border-left-color: var(--ysca-success, #16a34a);
+    background: var(--ysca-success-soft, #ecfdf5);
+}
+
+.ys-admin-note--warning {
+    border-left-color: var(--ysca-warning, #d97706);
+    background: var(--ysca-warning-soft, #fff7ed);
+}
+
+.ys-admin-note--error {
+    border-left-color: var(--ysca-danger, #dc2626);
+    background: var(--ysca-danger-soft, #fef2f2);
+}
+
+/* 直接放在卡片裡的說明框和前後內容留距（放在 .ysca-card__body 裡的由 gap 排） */
+.ysca-card > .ys-admin-note:not(:first-child) {
+    margin-top: var(--ysca-space-4, 16px);
+}
+
+.ysca-card > .ys-admin-note:not(:last-child) {
+    margin-bottom: var(--ysca-space-4, 16px);
+}
+
+/* ─── 6. 欄位排列與寬度 ───────────────────────────────────── */
+
+/* 設定頁的單行輸入框不撐滿整張卡片 */
+.ys-admin-w-md {
+    max-width: 480px;
+}
+
+.ys-admin-w-sm {
+    max-width: 240px;
+}
+
+.ys-admin-w-xs {
+    width: 6em;
+    max-width: 100%;
+}
+
+/* 兩欄 */
+.ys-admin-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ysca-space-4, 16px) var(--ysca-space-6, 24px);
+}
+
+.ys-admin-grid-2 > .ysca-field {
+    margin: 0;
+}
+
+/* 一排小欄位（數字、留白、字級…），寬度不夠時換行 */
+.ys-admin-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--ysca-space-3, 12px) var(--ysca-space-5, 20px);
+    margin: 0 0 var(--ysca-space-4, 16px);
+}
+
+.ys-admin-fields > .ysca-field {
+    flex: 0 1 auto;
+    min-width: 140px;
+    max-width: 360px;
+    margin: 0;
+}
+
+.ys-admin-fields:last-child {
+    margin-bottom: 0;
+}
+
+/* 一排按鈕 */
+.ys-admin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ysca-space-2, 8px);
+    margin-top: var(--ysca-space-3, 12px);
+}
+
+/* 欄位群組（fieldset）去掉瀏覽器預設的框 */
+.ys-admin-fieldset {
+    min-width: 0;
+    margin: var(--ysca-space-5, 20px) 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.ys-admin-fieldset > legend {
+    padding: 0;
+}
+
+/* 卡片裡的小標、引言 */
+.ys-admin-subhead {
+    margin: var(--ysca-space-5, 20px) 0 var(--ysca-space-2, 8px);
+    color: var(--ysca-text, #09090a);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.ysca-card > .ys-admin-subhead:first-child,
+.ysca-card__head + .ys-admin-subhead {
+    margin-top: 0;
+}
+
+.ys-admin-lead {
+    margin: 0 0 var(--ysca-space-4, 16px);
+    color: var(--ysca-text-body, #374151);
+}
+
+/* ─── 7. 開關列 ───────────────────────────────────────────── */
+
+.ys-admin-switch {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.ys-admin-switch + .ys-admin-switch,
+.ys-admin-switch + .ysca-field__hint,
+.ys-admin-switch + p {
+    margin-top: var(--ysca-space-3, 12px);
+}
+
+.ys-admin-switch .ysca-toggle {
+    flex: 0 0 auto;
+    margin-top: 1px;
+}
+
+.ys-admin-switch__text {
+    min-width: 0;
+    color: var(--ysca-text-body, #374151);
+    font-size: var(--ysca-fs-sm, 13px);
+    line-height: 1.6;
+}
+
+.ys-admin-switch__text strong {
+    display: block;
+    color: var(--ysca-text, #09090a);
+    font-weight: 700;
+}
+
+/* 設計系統的開關打開是綠色；YS 後台一律用主色 */
+.ys-admin-page .ysca-toggle .slider {
+    background: var(--ysca-line-strong, #cbd5e1);
+}
+
+.ys-admin-page .ysca-toggle input:checked + .slider {
+    background: var(--ysca-primary, #1f5dcf);
+}
+
+.ys-admin-page .ysca-toggle input:focus-visible + .slider {
+    box-shadow: var(--ysca-shadow-focus, 0 0 0 3px rgba(31, 93, 207, 0.25));
+}
+
+/* ─── 8. 勾選列、單選列、單選卡 ───────────────────────────── */
+
+.ys-admin-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+
+.ys-admin-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--ysca-text-body, #374151);
+}
+
+.ys-admin-check input {
+    margin: 0;
+}
+
+/* 一個選項一行（粗體標題＋說明） */
+.ys-admin-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 10px;
+    color: var(--ysca-text-body, #374151);
+    line-height: 1.6;
+}
+
+.ys-admin-radio input {
+    flex-shrink: 0;
+    margin: 3px 0 0;
+}
+
+.ys-admin-radio strong {
+    margin-right: 0.35em;
+    color: var(--ysca-text, #09090a);
+}
+
+/* 單選卡：每個選項一格，選了整格標色 */
+.ys-admin-choice {
+    margin: 0 0 var(--ysca-space-2, 8px);
+    padding: 0;
+    border: 0;
+}
+
+.ys-admin-choice legend {
+    margin: 0 0 var(--ysca-space-2, 8px);
+    padding: 0;
+    font-weight: 700;
+}
+
+.ys-admin-choice label {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 0 0 var(--ysca-space-2, 8px);
+    padding: 10px 12px;
+    border: 1px solid var(--ysca-border, #d1d5db);
+    border-radius: var(--ysca-radius-input, 8px);
+    background: #fff;
+    cursor: pointer;
+    line-height: 1.5;
+}
+
+.ys-admin-choice label:has(input:checked) {
+    border-color: var(--ysca-primary, #1f5dcf);
+    background: var(--ysca-primary-soft, #eef5ff);
+}
+
+.ys-admin-choice input {
+    margin-top: 3px;
+}
+
+/* ─── 9. 選項格（多選的分類、標籤） ──────────────────────── */
+
+.ys-admin-chipset {
+    min-width: 0;
+    margin: 0 0 var(--ysca-space-5, 20px);
+    padding: 0;
+    border: 0;
+}
+
+.ys-admin-chipset__legend {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 var(--ysca-space-2, 8px);
+    padding: 0;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.ys-admin-chipset__count {
+    color: var(--ysca-muted, #5f6773);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.ys-admin-page .ys-admin-chipset__q {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 0 var(--ysca-space-3, 12px);
+}
+
+.ys-admin-chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: 8px;
+}
+
+.ys-admin-chip {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--ysca-border, #d1d5db);
+    border-radius: var(--ysca-radius-input, 8px);
+    background: #fff;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.ys-admin-chip:hover {
+    border-color: var(--ysca-primary, #1f5dcf);
+}
+
+.ys-admin-chip:has(input:checked) {
+    border-color: var(--ysca-primary, #1f5dcf);
+    background: var(--ysca-primary-soft, #eef5ff);
+}
+
+.ys-admin-chip:has(input:focus-visible) {
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
+    outline-offset: 1px;
+}
+
+.ys-admin-chip input {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* 選項多時分群組 */
+.ys-admin-chipgroup {
+    margin: 0 0 var(--ysca-space-4, 16px);
+}
+
+.ys-admin-chipgroup:last-child {
+    margin-bottom: 0;
+}
+
+.ys-admin-chipgroup__title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 var(--ysca-space-2, 8px);
+    color: var(--ysca-text-body, #374151);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.ys-admin-chipgroup__title span {
+    color: var(--ysca-muted, #5f6773);
+    font-weight: 400;
+}
+
+.ys-admin-chipgroup__hint {
+    margin: -4px 0 var(--ysca-space-2, 8px);
+    color: var(--ysca-muted, #5f6773);
+    font-size: 12px;
+}
+
+/* ─── 10. 儲存列（固定在畫面底部） ───────────────────────── */
+
+.ys-admin-savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ysca-space-2, 8px);
+    align-items: center;
+    margin-top: var(--ysca-space-5, 20px);
+    padding: var(--ysca-space-3, 12px) var(--ysca-space-4, 16px);
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-card, 12px);
+    background: #fff;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
+}
+
+/* ─── 11. 表格 ────────────────────────────────────────────── */
+
+/* 設定頁的小表格：比列表頁的表格緊湊（設計系統的表格每列至少 64px、最寬 720 起跳） */
+.ysca-table.ys-admin-table--compact {
+    min-width: 0;
+}
+
+.ysca-table.ys-admin-table--compact th,
+.ysca-table.ys-admin-table--compact td {
+    padding: 10px 14px;
+    font-size: var(--ysca-fs-sm, 13px);
+    vertical-align: middle;
+}
+
+.ysca-table.ys-admin-table--compact thead th {
+    position: static;
+}
+
+/* 列標題（tbody 裡的 th）是一般粗體字，不套表頭的灰底小字 */
+.ysca-table.ys-admin-table--compact tbody th {
+    position: static;
+    background: transparent;
+    color: var(--ysca-text, #09090a);
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* 小表格的外框（可橫向捲動；表頭只給讀屏的字也留在框裡） */
+.ys-admin-table-frame {
+    position: relative;
+    margin: var(--ysca-space-4, 16px) 0 var(--ysca-space-3, 12px);
+    overflow-x: auto;
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-input, 8px);
+}
+
+/* 表格分段：群組標題列（不跟著表頭黏在上方） */
+.ysca-table tbody tr.ys-admin-table-group th {
+    position: static;
+    padding: 12px var(--ysca-space-4, 16px);
+    background: var(--ysca-card-soft, #fbfcff);
+    box-shadow: inset 3px 0 0 var(--ysca-primary, #1f5dcf);
+    color: var(--ysca-text, #09090a);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.ysca-table tbody tr.ys-admin-table-group th span {
+    margin-left: 8px;
+    color: var(--ysca-muted, #5f6773);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.ysca-table tbody tr.ys-admin-table-group:hover {
+    background: transparent;
+}
+
+/* ─── 12. 收合卡片（details.ysca-card.ys-admin-details，summary 當卡片頭） ─── */
+
+.ys-admin-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    list-style: none;
+    cursor: pointer;
+}
+
+.ys-admin-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.ys-admin-details > summary::after {
+    content: "";
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    margin-left: 12px;
+    border-right: 2px solid var(--ysca-muted, #5f6773);
+    border-bottom: 2px solid var(--ysca-muted, #5f6773);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+}
+
+.ys-admin-details[open] > summary::after {
+    transform: rotate(-135deg);
+}
+
+.ys-admin-details:not([open]) > summary.ysca-card__head {
+    margin-bottom: 0;
+}
+
+.ys-admin-details > summary:focus-visible {
+    outline: 2px solid var(--ysca-primary, #1f5dcf);
+    outline-offset: 2px;
+}
+
+/* ─── 13. 窄螢幕 ──────────────────────────────────────────── */
+
+@media (max-width: 782px) {
+    .ys-admin-grid-2 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

@@ -129,6 +129,23 @@ class YSPermissionAdmin {
 	}
 
 	/**
+	 * v1.8.0：四個分頁的頁籤列（YS 後台中央樣式的 .ysca-tabs）。分頁是各自的網址，用連結＋aria-current，
+	 * 原本是 .ysca-wl-tabs，而且這一頁與白牌設定頁的頁籤長得不一樣。
+	 *
+	 * @param array<string,string> $tabs     tabs()。
+	 * @param string               $active   目前的分頁鍵。
+	 * @param string               $base_url 「選單與權限」頁網址。
+	 */
+	public static function tabs_nav( array $tabs, string $active, string $base_url ): string {
+		$out = '<nav class="ysca-tabs ysca-tabs--navigation" aria-label="權限設定分頁">';
+		foreach ( $tabs as $key => $label ) {
+			$on   = ( $active === (string) $key );
+			$out .= '<a href="' . esc_url( add_query_arg( 'tab', $key, $base_url ) ) . '" class="ysca-tab' . ( $on ? ' is-active' : '' ) . '"' . ( $on ? ' aria-current="page"' : '' ) . '>' . esc_html( $label ) . '</a>';
+		}
+		return $out . '</nav>';
+	}
+
+	/**
 	 * 渲染權限設置頁
 	 *
 	 * 分頁 ?tab=：
@@ -151,11 +168,8 @@ class YSPermissionAdmin {
 		// 三個 tab 都共用一份 enqueue（含 sortablejs / wp-color-picker / 主 JS / 主 CSS）
 		self::enqueue_assets();
 
-		// v2.45.29: 完全純 WP-native UI（user 明確要求：白牌/授權/權限是給架站者用、
-		// 不共用 YS CART 樣式、避免污染 native pages）。不開 YSAdminApp shell、
-		// 不套 .ysca-page-root、用 WP-native .wrap + <h1>。
-		echo '<div class="wrap">';
-		echo YSMenuPage::pagehead_html( 'menu-alt3', '選單與權限', '拖拉排序、角色可見、僅限本人、隱藏與個別使用者覆寫，全面掌控 wp-admin 選單。' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pagehead_html 內已逐欄 escape
+		// v1.8.0：YS 後台中央樣式的頁面骨架（白色頁首＋.ysca-page-root），和本外掛其他設定頁、其他 YS 外掛的後台頁相同。
+		echo YSMenuPage::page_open( '選單與權限', '拖拉排序、角色可見、僅限本人、隱藏與個別使用者覆寫，全面掌控 wp-admin 選單。', 'ys-am-permission-page' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- page_open 內已逐欄 escape
 		// v1.5.0：開頁當下的 YS CART 選單搬家標記。每次儲存都一起送回；這一頁若是在遷移之前打開的，存檔會被拒絕，
 		// 不會把搬好的設定寫回舊分組。
 		echo '<input type="hidden" id="ys-admin-menu-moves-token" value="' . esc_attr( YSMenuMovesMigrator::page_token() ) . '">';
@@ -169,7 +183,7 @@ class YSPermissionAdmin {
 			self::render_rest_ui( $tab );
 		}
 
-		echo '</div>';
+		echo YSMenuPage::page_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- 固定字串
 	}
 
 	/**
@@ -227,7 +241,7 @@ class YSPermissionAdmin {
 		wp_enqueue_style(
 			'ys-admin-menu-permission',
 			YS_ADMIN_MENU_PLUGIN_URL . 'assets/css/ys-admin-menu-permission.css',
-			[ 'wp-color-picker', 'ys-admin-menu-ds-components' ],
+			[ 'wp-color-picker', 'ys-admin-ui' ],
 			YS_ADMIN_MENU_VERSION
 		);
 	}
@@ -268,7 +282,6 @@ class YSPermissionAdmin {
 		$base_url   = admin_url( 'admin.php?page=' . YSMenuPage::SLUG_PERMISSIONS );
 		$tabs       = self::tabs();
 		$tab_title  = $tabs[ $tab ] ?? '選單';
-		$tab_icon   = ( 'wp_native' === $tab ) ? 'dashicons-admin-settings' : 'dashicons-menu';
 		$tab_desc   = ( 'wp_native' === $tab )
 			? '管理 wp-admin 左側 sidebar 上 <strong>所有</strong>頂層選單（含 WordPress 核心與第三方外掛）：拖拉調整順序、限制角色可見、套色、勾選「隱藏」完全藏起來，或插入「空白標題」分隔列。未列入此處的選單會接續顯示於設定排序之後。從子選單複製來的項目標示「複製」，可在這裡排序、改名、換圖示、隱藏或刪除。'
 			: '管理 <strong>所有</strong>選單端點 — 不只頂層，包含每個頂層底下的子選單（sub-page）。可拖拉調整順序、限制角色可見、勾選「隱藏」、插入分隔列；每個子選單列右側的「移到主選單」「複製到主選單」可把它提升或複製成 wp-admin 頂層選單。';
@@ -358,28 +371,14 @@ class YSPermissionAdmin {
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
-			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設定分頁">
-				<?php foreach ( $tabs as $key => $label ) :
-					$is_active = ( $tab === $key );
-					$class     = 'ysca-wl-tab' . ( $is_active ? ' ysca-wl-tab--active' : '' );
-					$href      = add_query_arg( 'tab', $key, $base_url );
-					?>
-					<a href="<?php echo esc_url( $href ); ?>" class="<?php echo esc_attr( $class ); ?>"
-						role="tab" aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>">
-						<?php echo esc_html( $label ); ?>
-					</a>
-				<?php endforeach; ?>
-			</nav>
+			<?php echo self::tabs_nav( $tabs, $tab, $base_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- tabs_nav 內已逐欄 escape ?>
 
-			<div class="ysca-card ysca-section-card">
-				<h3>
-					<span class="dashicons <?php echo esc_attr( $tab_icon ); ?>"></span>
-					<?php echo esc_html( $tab_title ); ?>
-				</h3>
+			<div class="ysca-card">
+				<div class="ysca-card__head"><div>
+					<h3 class="ysca-card__title"><?php echo esc_html( $tab_title ); ?></h3>
+					<p class="ysca-card__sub"><?php echo wp_kses_post( $tab_desc ); ?></p>
+				</div></div>
 				<div class="inside">
-					<p class="description ysca-muted-text ysca-permission-description">
-						<?php echo wp_kses_post( $tab_desc ); ?>
-					</p>
 
 					<p class="ys-ec-toolbar-hint description">
 						<span class="dashicons dashicons-move ysca-icon-align-middle"></span>
@@ -387,7 +386,7 @@ class YSPermissionAdmin {
 					</p>
 
 					<?php if ( $self_mismatch > 0 ) : ?>
-						<div class="notice notice-warning inline ys-ec-self-mismatch">
+						<div class="ys-admin-note ys-admin-note--warning ys-ec-self-mismatch">
 							<p><?php echo esc_html( '有 ' . $self_mismatch . ' 個選單的「僅限本人」在兩個分頁設得不一樣（側欄看得到的人跟直接開網址進得去的人不同）。表上顯示的是側欄實際的設定，按一次「儲存設定」兩個分頁就會統一。' ); ?></p>
 						</div>
 					<?php endif; ?>
@@ -1444,30 +1443,18 @@ class YSPermissionAdmin {
 		<div class="ys-ec-permission-admin ysca-section">
 			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
-			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設定分頁">
-				<?php foreach ( $tabs as $key => $label ) :
-					$is_active = ( 'user_overrides' === $key );
-					$class     = 'ysca-wl-tab' . ( $is_active ? ' ysca-wl-tab--active' : '' );
-					$href      = add_query_arg( 'tab', $key, $base_url );
-					?>
-					<a href="<?php echo esc_url( $href ); ?>" class="<?php echo esc_attr( $class ); ?>"
-						role="tab" aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>">
-						<?php echo esc_html( $label ); ?>
-					</a>
-				<?php endforeach; ?>
-			</nav>
+			<?php echo self::tabs_nav( $tabs, 'user_overrides', $base_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- tabs_nav 內已逐欄 escape ?>
 
-			<div class="ysca-card ysca-section-card">
-				<h3>
-					<span class="dashicons dashicons-admin-users"></span>
-					使用者覆寫（指定使用者可見的選單）
-				</h3>
-				<div class="inside">
-					<p class="description ysca-muted-text ysca-permission-description">
+			<div class="ysca-card">
+				<div class="ysca-card__head"><div>
+					<h3 class="ysca-card__title">使用者覆寫（指定使用者可見的選單）</h3>
+					<p class="ysca-card__sub">
 						為特定使用者設定「白名單」選單可見範圍。勾選的選單以外，該使用者
 						<strong>看不到</strong>且<strong>無法直接訪問</strong>。<br>
 						勾選「僅允許存取受保護的管理選單」後，該使用者只看得到、進得去 YS CART 的頁面（含 YS CART 附加外掛登記給 YS CART 的頁面，例如分潤）、本外掛的頁面，以及透過 <code>ys_admin_menu_extra_admin_slugs</code> filter 指定的頁面（側欄與直接開網址都是）；綁給這位使用者的「僅限本人」選單照樣看得到。控制台、個人資料，以及 Rank Math 這類跟 YS CART 無關的外掛頁面都進不去。
 					</p>
+				</div></div>
+				<div class="inside">
 
 					<div class="ys-ec-user-overrides-toolbar">
 						<div class="ys-ec-user-search-wrap">

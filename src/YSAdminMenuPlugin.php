@@ -12,6 +12,7 @@
  *   7. v1.6.0 登入次數限制與訪客 IP 偵測的 WP-CLI：`wp ys-admin-menu login-guard`、`wp ys-admin-menu ip`
  *   8. v1.7.0 誰能使用本外掛 YSAccess（＋`wp ys-admin-menu access`）、關閉留言 YSCommentsDisabler、
  *      控制台小工具 YSDashboardWidgets、「後台精簡」頁 YSDeclutterAdmin；選單的逐項目權限、自訂連結等在 YSMenuRouter。
+ *   9. v1.8.0 YS 後台中央樣式 YSAdminUi（assets/ys-admin-ui/，設定頁只用它的元件）
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -21,6 +22,7 @@ namespace YangSheep\AdminMenu;
 
 use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Admin\YSAccessAdmin;
+use YangSheep\AdminMenu\Admin\YSAdminUi;
 use YangSheep\AdminMenu\Admin\YSDeclutterAdmin;
 use YangSheep\AdminMenu\Cli\YSAccessCommand;
 use YangSheep\AdminMenu\Comments\YSCommentsDisabler;
@@ -110,6 +112,8 @@ final class YSAdminMenuPlugin {
 
 		// 4. 後台設定頁 + 白牌 admin-post handler（僅後台）
 		if ( is_admin() ) {
+			// v1.8.0：YS 後台中央樣式（設計系統＋共用版面，和其他 YS 外掛共用同一組代稱，取版本最高的一份）。
+			YSAdminUi::register();
 			YSMenuPage::register();
 			YSWhiteLabelAdmin::register();
 			// v1.7.0：誰能使用本外掛（外掛清單隱藏與停用、刪除防護）與「外掛使用權限」分頁的存檔。

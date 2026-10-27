@@ -1,0 +1,264 @@
+/**
+ * YS Admin Menu — 設定頁獨有的元件（v1.8.0）
+ *
+ * 10-27 使用者：「後台你有中央化ＣＳＳ嗎」「YS ADMIN 的也要整理」。
+ * 頁首、分頁、卡片、欄位、輸入框、按鈕、說明框、開關、表格、徽章、儲存列一律用 YS 後台中央樣式
+ * （assets/ys-admin-ui/，和其他 YS 外掛共用）。原本的 whitelabel.css（.ysca-wl-* 一整套）、theme.css 拿掉。
+ * 這裡只放本外掛獨有的：色彩挑選器、LOGO 預覽、Admin Bar 節點表、訪客 IP 表、Turnstile 測試、登入次數限制、後台精簡的清單。
+ * 選單排序表、面板、使用者覆寫卡在 ys-admin-menu-permission.css。
+ */
+
+/* ─── 色彩挑選器（WordPress 的 wp-color-picker；原生選單樣式、白牌設定、選單與權限都用） ─── */
+
+.ys-admin-page .wp-picker-container {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* 面板改浮層，展開時不推擠版面；底色、內距、陰影只在展開時加（v1.7.1：收合時原本留下 12×12 的白點蓋住旁邊的字） */
+.ys-admin-page .wp-picker-container .wp-picker-holder {
+    position: absolute;
+    z-index: 50;
+    left: 0;
+    margin-top: 4px;
+}
+
+.ys-admin-page .wp-picker-container.wp-picker-active .wp-picker-holder {
+    padding: 6px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* 「選取色彩」按鈕：左側色塊、右側文字，框線與圓角同中央樣式的輸入框；滑過與鍵盤焦點用主色 */
+.ys-admin-page .wp-picker-container .wp-color-result.button {
+    min-height: 36px;
+    height: 36px;
+    margin: 0 8px 0 0;
+    padding: 0 0 0 36px;
+    border: 1px solid var(--ysca-border, #e5e7eb);
+    border-radius: 6px;
+    box-shadow: none;
+    font-size: 12px;
+    line-height: 34px;
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.ys-admin-page .wp-picker-container .wp-color-result .wp-color-result-text {
+    display: block;
+    height: 34px;
+    padding: 0 12px;
+    border-left: 1px solid var(--ysca-border, #e5e7eb);
+    border-radius: 0 5px 5px 0;
+    background: #fff;
+    color: var(--ysca-text-body, #374151);
+    font-size: 12px;
+    line-height: 34px;
+}
+
+.ys-admin-page .wp-picker-container .wp-color-result.button:hover,
+.ys-admin-page .wp-picker-container .wp-color-result.button:focus,
+.ys-admin-page .wp-picker-container.wp-picker-active .wp-color-result.button {
+    border-color: var(--ysca-primary, #1f5dcf);
+}
+
+.ys-admin-page .wp-picker-container .wp-color-result.button:hover .wp-color-result-text,
+.ys-admin-page .wp-picker-container.wp-picker-active .wp-color-result .wp-color-result-text {
+    background: var(--ysca-primary-soft, #eef5ff);
+    color: var(--ysca-primary, #1f5dcf);
+}
+
+.ys-admin-page .wp-picker-container .wp-color-result.button:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ysca-primary-soft, #eef5ff), 0 0 0 3px var(--ysca-primary, #1f5dcf);
+}
+
+.ys-admin-page .wp-picker-container .wp-picker-input-wrap:not(.hidden) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    vertical-align: middle;
+}
+
+/* ─── 白牌設定：後台 LOGO 預覽 ─── */
+
+.ys-am-logo-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--ysca-space-5, 20px);
+}
+
+.ys-am-logo-preview {
+    flex: 0 0 auto;
+}
+
+.ys-am-logo-img {
+    display: block;
+    max-width: 180px;
+    max-height: 80px;
+    padding: 8px;
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-input, 8px);
+    background: var(--ysca-card-soft, #fbfcff);
+    object-fit: contain;
+}
+
+.ys-am-logo-row > .ysca-field {
+    flex: 1 1 320px;
+    margin: 0;
+}
+
+/* ─── 白牌設定：Admin Bar 節點表 ─── */
+
+.ys-am-wl-nodes thead th {
+    white-space: nowrap;
+}
+
+.ys-am-wl-nodes tbody th {
+    font-weight: 500;
+}
+
+.ys-am-wl-nodes tbody th code {
+    margin-left: 6px;
+    color: var(--ysca-muted, #5f6773);
+}
+
+.ys-am-wl-nodes td {
+    white-space: nowrap;
+}
+
+.ys-am-wl-nodes td:nth-child(2),
+.ys-am-wl-nodes td:nth-child(3),
+.ys-am-wl-nodes thead th:nth-child(2),
+.ys-am-wl-nodes thead th:nth-child(3) {
+    text-align: center;
+}
+
+.ys-am-wl-nodes input[type="checkbox"] {
+    margin: 0;
+}
+
+.ys-am-wl-nodes .ysca-badge + .ysca-badge {
+    margin-left: 4px;
+}
+
+.ys-am-wl-node-note {
+    display: block;
+    margin-top: 2px;
+}
+
+/* ─── 白牌設定：進階：訪客 IP ─── */
+
+.ys-am-wl-ip-table th {
+    width: 200px;
+}
+
+.ys-am-wl-ip-table tr.is-current th,
+.ys-am-wl-ip-table tr.is-current td {
+    background: var(--ysca-primary-soft, #eef5ff);
+}
+
+.ys-am-wl-ip-value {
+    display: block;
+    margin: 0 0 2px;
+    word-break: break-all;
+}
+
+.ys-am-wl-ip-preview {
+    color: var(--ysca-text, #09090a);
+    font-weight: 600;
+}
+
+/* ─── 白牌設定：Turnstile 測試 ─── */
+
+.ys-am-wl-test-widget {
+    min-height: 65px;
+}
+
+.ys-am-wl-test-result {
+    margin: 0;
+    color: var(--ysca-text-body, #374151);
+    font-weight: 600;
+}
+
+.ys-am-wl-test-result.is-ok {
+    color: var(--ysca-success, #16a34a);
+}
+
+.ys-am-wl-test-result.is-bad {
+    color: var(--ysca-danger, #dc2626);
+}
+
+/* ─── 白牌設定：登入次數限制、鎖定與紀錄 ─── */
+
+/* 句子裡夾數字欄位（失敗 10 次（15 分鐘內）就鎖 30 分鐘）。有的同時是 .ysca-field：設計系統基底把它設成直向 flex，這裡要明確改回橫向 */
+.ys-am-lg-inline,
+.ys-am-lg-observe,
+.ys-am-lg-filter,
+.ys-am-lg-pages {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ys-am-lg-auto {
+    margin: 4px 0 0 1.2em;
+    list-style: disc;
+}
+
+.ys-am-lg-limits > summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.ys-am-lg-subtitle {
+    margin: 0 0 var(--ysca-space-2, 8px);
+    font-size: 14px;
+}
+
+.ys-am-lg-filter .ysca-input {
+    width: 18em;
+    max-width: 100%;
+}
+
+.ys-am-lg-table td {
+    word-break: break-word;
+}
+
+/* ─── 後台精簡：文章類型、控制台小工具清單（可捲動的框） ─── */
+
+.ys-am-declutter .ys-am-declutter__types,
+.ys-am-declutter .ys-am-declutter__widgets {
+    display: grid;
+    gap: 4px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-input, 8px);
+    background: #fff;
+}
+
+.ys-am-declutter .ys-am-declutter__types .ys-admin-check,
+.ys-am-declutter .ys-am-declutter__widgets .ys-admin-check {
+    flex-wrap: wrap;
+    padding: 3px 2px;
+}
+
+.ys-am-declutter .ys-am-declutter__notes {
+    margin: 0 0 0 18px;
+    list-style: disc;
+}
+
+.ys-am-declutter .ys-am-declutter__notes li {
+    margin-bottom: 4px;
+}
+
+.ys-am-declutter .ys-am-declutter__notes li:last-child {
+    margin-bottom: 0;
+}

@@ -9,52 +9,7 @@
  *   - 統一白底 + ys-ec-card 風格
  */
 
-.ys-ec-permission-admin {
-    color: #1f2937;
-}
-
-.ys-ec-permission-admin h1 {
-    color: #111827;
-    font-size: 23px;
-    font-weight: 400;
-    margin: 0 0 12px 0;
-}
-
-.ys-ec-permission-admin .nav-tab-wrapper {
-    border-bottom-color: #d1d5db;
-    margin-bottom: 16px;
-}
-
-.ys-ec-permission-admin .ys-ec-card {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    margin: 0 0 24px 0;
-    padding: 0;
-}
-
-.ys-ec-permission-admin .ys-ec-card > h3 {
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    border-radius: 8px 8px 0 0;
-    color: #111827;
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0;
-    padding: 14px 20px;
-}
-
-.ys-ec-permission-admin .ys-ec-card > h3 .dashicons {
-    color: var(--ysca-primary, #1f5dcf);
-    margin-right: 6px;
-    vertical-align: middle;
-}
-
-.ys-ec-permission-admin .ys-ec-card .inside {
-    background: #ffffff;
-    padding: 20px;
-}
+/* v1.8.0：頁面外框（頁首、卡片、分頁籤、按鈕）改用 YS 後台中央樣式（assets/ys-admin-ui/），這支只放選單排序表、面板與使用者覆寫卡。 */
 
 /* ─────────────────────────────────────────
  * 主表 — compact rows（v2.39.0 縮一半高度）
@@ -396,27 +351,6 @@
     width: 80px;
 }
 
-/* Action buttons row（toolbar 上方） */
-.ys-ec-permission-admin .ys-ec-card .inside > p:first-of-type,
-.ys-ec-permission-admin .ys-ec-card .inside .ys-ec-toolbar {
-    background: #f9fafb;
-    border: 1px dashed #d1d5db;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    padding: 10px 12px;
-}
-
-.ys-ec-permission-admin #ys-ec-save-permissions {
-    background: var(--ysca-primary, #1f5dcf);
-    border-color: var(--ysca-primary-hover, #174fc7);
-    color: #ffffff;
-}
-
-.ys-ec-permission-admin #ys-ec-save-permissions:hover {
-    background: var(--ysca-primary-hover, #174fc7);
-    border-color: var(--ysca-primary-strong, #123f9c);
-}
-
 .ys-ec-permission-admin #ys-ec-save-status {
     color: #6b7280;
     font-size: 13px;
@@ -500,6 +434,14 @@
 
 .ys-ec-permission-admin .ys-ec-user-search-wrap {
     position: relative;
+    /* v1.8.0：外層跟著伸展，搜尋框才有足夠寬度顯示提示文字（原本只有瀏覽器預設寬度、提示被截斷） */
+    flex: 1 1 320px;
+    max-width: 420px;
+}
+
+.ys-ec-permission-admin .ys-ec-user-search-wrap #ys-ec-user-search {
+    width: 100%;
+    max-width: none;
 }
 
 #ys-ec-user-overrides-list {
@@ -649,63 +591,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * v1.0.9 — 分頁 tabs 明確化 + 主/子選單層級對比（可讀性）
- *
- * 註：本頁不套 body.ysca-wl-active，whitelabel.css 的 .ysca-wl-tab 樣式
- *     全數失效 → tabs 會退化成純文字連結。故此處自帶完整 tab 樣式。
+ * v1.0.9 — 主/子選單層級對比（可讀性）。分頁籤 v1.8.0 起用中央樣式的 .ysca-tabs。
  * ═══════════════════════════════════════════════════════════════════ */
-
-/* ── 分頁 tabs：分段膠囊按鈕（灰底軌道 + 作用中 indigo 實心） ── */
-.ys-ec-permission-admin .ysca-wl-tabs {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin: 0 0 22px;
-    padding: 5px;
-    background: #eef0f4;
-    border: 1px solid #e2e5ec;
-    border-radius: 11px;
-}
-
-.ys-ec-permission-admin .ysca-wl-tab {
-    display: inline-flex;
-    align-items: center;
-    min-height: 34px;
-    padding: 0 18px;
-    color: #4b5563;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1;
-    text-decoration: none;
-    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
-}
-
-.ys-ec-permission-admin .ysca-wl-tab:hover {
-    color: var(--ysca-primary-strong, #123f9c);
-    background: #ffffff;
-    border-color: var(--ysca-primary-tint, #dde9ff);
-}
-
-.ys-ec-permission-admin .ysca-wl-tab:focus-visible {
-    outline: 2px solid var(--ysca-primary, #1f5dcf);
-    outline-offset: 2px;
-}
-
-.ys-ec-permission-admin .ysca-wl-tab--active,
-.ys-ec-permission-admin .ysca-wl-tab[aria-selected="true"] {
-    color: #ffffff;
-    background: linear-gradient(135deg, var(--ysca-primary, #1f5dcf) 0%, var(--ysca-primary-hover, #174fc7) 100%);
-    border-color: var(--ysca-primary-hover, #174fc7);
-    box-shadow: 0 2px 6px -1px color-mix(in srgb, var(--ysca-primary-hover, #174fc7) 45%, transparent);
-}
-
-.ys-ec-permission-admin .ysca-wl-tab--active::after,
-.ys-ec-permission-admin .ysca-wl-tab[aria-selected="true"]::after {
-    content: none; /* 覆蓋 whitelabel.css 的底線指示器（此處用實心膠囊） */
-}
 
 /* ── 頂層 row：作為群組錨點，標題粗黑、上緣分隔線區隔群組 ── */
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="top"] .menu-line strong {
@@ -1155,19 +1042,14 @@
 }
 
 /* v1.7.0：「外掛使用權限」分頁 */
-.ys-am-access .ys-am-access__mode {
-    margin: 12px 0 8px;
-    line-height: 2;
-}
 .ys-am-access .ys-am-access__users {
     display: grid;
     gap: 4px;
     max-height: 320px;
     overflow-y: auto;
-    margin: 4px 0 8px;
     padding: 10px 12px;
-    border: 1px solid #dcdcde;
-    border-radius: 8px;
+    border: 1px solid var(--ysca-line-card, #eef2f7);
+    border-radius: var(--ysca-radius-input, 8px);
     background: #fff;
 }
 .ys-am-access .ys-am-access__user {
@@ -1177,7 +1059,7 @@
     gap: 6px;
     padding: 4px 2px;
 }
-.ys-am-access .ys-am-access__user .description {
+.ys-am-access .ys-am-access__user .ysca-field__hint {
     font-size: 12px;
 }
 .ys-am-access .ys-am-access__form code {
@@ -1385,6 +1267,10 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+}
+/* v1.8.0：頁面放進 .ysca-page-root 後，設計系統把下拉設成 100% 寬，標籤會被擠成兩行；這裡的下拉照內容寬。 */
+.ys-ec-permission-admin .ys-ec-defaults select {
+    width: auto;
 }
 .ys-ec-permission-admin .ys-ec-defaults .description,
 .ys-ec-permission-admin .ys-ec-preview-bar .description {

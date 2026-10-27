@@ -62,14 +62,7 @@ final class YSAccessAdmin {
 		$base_url  = admin_url( 'admin.php?page=' . YSMenuPage::SLUG_PERMISSIONS );
 		?>
 		<div class="ys-ec-permission-admin ysca-section ys-am-access">
-			<nav class="ysca-wl-tabs" role="tablist" aria-label="權限設定分頁">
-				<?php foreach ( $tabs as $key => $label ) :
-					$is_active = ( self::TAB === $key );
-					?>
-					<a href="<?php echo esc_url( add_query_arg( 'tab', $key, $base_url ) ); ?>" class="<?php echo esc_attr( 'ysca-wl-tab' . ( $is_active ? ' ysca-wl-tab--active' : '' ) ); ?>"
-						role="tab" aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"><?php echo esc_html( $label ); ?></a>
-				<?php endforeach; ?>
-			</nav>
+			<?php echo YSPermissionAdmin::tabs_nav( $tabs, self::TAB, $base_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- tabs_nav 內已逐欄 escape ?>
 
 			<?php if ( ! empty( $_GET['access_saved'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
 				<div class="notice notice-success is-dismissible"><p>已儲存「外掛使用權限」。</p></div>
@@ -92,23 +85,28 @@ final class YSAccessAdmin {
 				<div class="notice notice-warning"><p>清單裡的帳號都已經不存在或沒有管理權限，目前暫時改回所有管理員都能使用。請重新勾選後儲存。</p></div>
 			<?php endif; ?>
 
-			<div class="ysca-card ysca-section-card">
-				<h3><span class="dashicons dashicons-lock"></span> 誰能使用 YS 選單管理</h3>
-				<p class="description">
-					這裡只管「YS 選單管理」這幾頁與它們的設定（選單與權限、原生選單樣式、白牌設定、後台精簡），不影響側欄上的其他選單。
-					沒被勾選的管理員在側欄看不到「YS 選單管理」，直接開設定頁或呼叫設定 API 也會被擋。電商工具箱（外掛市集、Hub 設定）不在這裡的範圍內。
-				</p>
-				<p class="description">
-					<strong>這是讓管理員分工、避免誤操作的介面設定，不是防範其他管理員的安全機制。</strong>
-					任何有管理員權限的帳號仍然可以繞過，例如：用 WordPress 內建的「全部設定」頁（wp-admin/options.php）直接改設定、上傳外掛取代本外掛、
-					使用外掛／佈景主題檔案編輯器、安裝其他外掛，或把清單裡的帳號降級（清單失效後會自動改回所有管理員都能使用）。要真正限制某人，請不要給他管理員權限。
-				</p>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="ys-am-access__form">
-					<input type="hidden" name="action" value="<?php echo esc_attr( self::POST_ACTION ); ?>">
-					<?php wp_nonce_field( self::NONCE_ACTION ); ?>
-					<fieldset class="ys-am-access__mode">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="ys-am-access__form">
+				<input type="hidden" name="action" value="<?php echo esc_attr( self::POST_ACTION ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION ); ?>
+			<div class="ysca-card">
+				<div class="ysca-card__head"><div>
+					<h3 class="ysca-card__title">誰能使用 YS 選單管理</h3>
+					<p class="ysca-card__sub">
+						這裡只管「YS 選單管理」這幾頁與它們的設定（選單與權限、原生選單樣式、白牌設定、後台精簡），不影響側欄上的其他選單。
+						沒被勾選的管理員在側欄看不到「YS 選單管理」，直接開設定頁或呼叫設定 API 也會被擋。電商工具箱（外掛市集、Hub 設定）不在這裡的範圍內。
+					</p>
+				</div></div>
+				<div class="ysca-card__body">
+					<div class="ys-admin-note ys-admin-note--warning">
+						<p>
+							<strong>這是讓管理員分工、避免誤操作的介面設定，不是防範其他管理員的安全機制。</strong>
+							任何有管理員權限的帳號仍然可以繞過，例如：用 WordPress 內建的「全部設定」頁（wp-admin/options.php）直接改設定、上傳外掛取代本外掛、
+							使用外掛／佈景主題檔案編輯器、安裝其他外掛，或把清單裡的帳號降級（清單失效後會自動改回所有管理員都能使用）。要真正限制某人，請不要給他管理員權限。
+						</p>
+					</div>
+					<fieldset class="ys-admin-choice">
 						<legend class="screen-reader-text">誰能使用</legend>
-						<label><input type="radio" name="mode" value="capability" <?php checked( 'users' !== $saved['mode'] ); ?>> 所有能管理網站的管理員（預設）</label><br>
+						<label><input type="radio" name="mode" value="capability" <?php checked( 'users' !== $saved['mode'] ); ?>> 所有能管理網站的管理員（預設）</label>
 						<label><input type="radio" name="mode" value="users" <?php checked( 'users' === $saved['mode'] ); ?>> 只有下面勾選的帳號</label>
 					</fieldset>
 					<div class="ys-am-access__users" role="group" aria-label="可以使用 YS 選單管理的帳號">
@@ -118,7 +116,7 @@ final class YSAccessAdmin {
 							<label class="ys-am-access__user">
 								<input type="checkbox" name="user_ids[]" value="<?php echo esc_attr( (string) $uid ); ?>" <?php checked( in_array( $uid, $checked, true ) ); ?>>
 								<strong><?php echo esc_html( (string) $u->display_name ); ?></strong>
-								<span class="description"><?php echo esc_html( (string) $u->user_login . ' · ' . (string) $u->user_email . ' · ID ' . $uid ); ?></span>
+								<span class="ysca-field__hint"><?php echo esc_html( (string) $u->user_login . ' · ' . (string) $u->user_email . ' · ID ' . $uid ); ?></span>
 								<?php if ( $uid === $me ) : ?><em>（你）</em><?php endif; ?>
 							</label>
 						<?php endforeach; ?>
@@ -128,25 +126,26 @@ final class YSAccessAdmin {
 							<label class="ys-am-access__user">
 								<input type="checkbox" name="user_ids[]" value="<?php echo esc_attr( (string) $uid ); ?>" <?php checked( in_array( $uid, $checked, true ) ); ?>>
 								<strong><?php echo esc_html( $u ? (string) $u->display_name : '#' . $uid ); ?></strong>
-								<span class="description"><?php echo esc_html( ( $u ? (string) $u->user_login . ' · ' : '' ) . 'ID ' . $uid . ' · ' . ( $u ? '不在上面的管理員清單裡（例如不是本站成員）' : '帳號已不存在' ) ); ?></span>
+								<span class="ysca-field__hint"><?php echo esc_html( ( $u ? (string) $u->user_login . ' · ' : '' ) . 'ID ' . $uid . ' · ' . ( $u ? '不在上面的管理員清單裡（例如不是本站成員）' : '帳號已不存在' ) ); ?></span>
 							</label>
 						<?php endforeach; ?>
 						<?php if ( count( $admins ) >= self::LIST_LIMIT ) : ?>
-							<p class="description">只列出前 <?php echo esc_html( (string) self::LIST_LIMIT ); ?> 位管理員；其他帳號請用 WP-CLI：<code>wp ys-admin-menu access allow &lt;帳號&gt;</code>。</p>
+							<p class="ysca-field__hint">只列出前 <?php echo esc_html( (string) self::LIST_LIMIT ); ?> 位管理員；其他帳號請用 WP-CLI：<code>wp ys-admin-menu access allow &lt;帳號&gt;</code>。</p>
 						<?php endif; ?>
 					</div>
-					<p class="description">只有勾「只有下面勾選的帳號」時清單才生效；清單裡一定要有你自己（沒勾會自動加上）。</p>
-					<p>
-						<label><input type="checkbox" name="hide_plugin_row" value="1" <?php checked( $saved['hide_plugin_row'] ); ?>> 在「外掛」清單對不在清單裡的管理員隱藏 YS Admin Menu，並擋下他們停用本外掛（停用不了就刪不了）</label>
-					</p>
-					<p class="description">只在選「只有下面勾選的帳號」時有作用。外掛頁、REST API 與電商工具箱的外掛市集停用本外掛都會被擋；WP-CLI、主機面板、直接改資料庫或檔案擋不住。</p>
-					<p class="description">
+					<p class="ysca-field__hint">只有勾「只有下面勾選的帳號」時清單才生效；清單裡一定要有你自己（沒勾會自動加上）。</p>
+					<label class="ys-admin-check"><input type="checkbox" name="hide_plugin_row" value="1" <?php checked( $saved['hide_plugin_row'] ); ?>> 在「外掛」清單對不在清單裡的管理員隱藏 YS Admin Menu，並擋下他們停用本外掛（停用不了就刪不了）</label>
+					<p class="ysca-field__hint">只在選「只有下面勾選的帳號」時有作用。外掛頁、REST API 與電商工具箱的外掛市集停用本外掛都會被擋；WP-CLI、主機面板、直接改資料庫或檔案擋不住。</p>
+					<p class="ysca-field__hint">
 						救援：在主機上執行 <code>wp ys-admin-menu access reset</code>，或在 wp-config.php 加上 <code>define( 'YS_ADMIN_MENU_ACCESS_RESET', true );</code>。
 						清單裡的帳號都被刪除或失去管理權限時，也會自動改回所有管理員都能使用。
 					</p>
-					<p><button type="submit" class="button button-primary">儲存</button></p>
-				</form>
+				</div>
 			</div>
+			<div class="ys-admin-savebar">
+				<button type="submit" class="ysca-btn ysca-btn--primary">儲存</button>
+			</div>
+			</form>
 		</div>
 		<?php
 	}

@@ -26,7 +26,8 @@
 				var on = i === index;
 				tab.setAttribute( 'aria-selected', on ? 'true' : 'false' );
 				tab.setAttribute( 'tabindex', on ? '0' : '-1' );
-				tab.classList.toggle( 'ysca-wl-tab--active', on );
+				// v1.8.0：分頁籤用中央樣式的 .ysca-tab（依 aria-selected 上色；is-active 給舊瀏覽器與測試）。
+				tab.classList.toggle( 'is-active', on );
 				if ( panels[ i ] ) {
 					panels[ i ].hidden = ! on;
 				}
