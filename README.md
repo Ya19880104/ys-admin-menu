@@ -14,7 +14,8 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 | **後台精簡**（v1.7.0） | 關閉留言（全站或指定文章類型）、隱藏控制台小工具與歡迎面板。兩者預設關閉，對所有人生效 |
 | **原生選單樣式** | 美化側欄與 admin bar（背景／文字／圖示／hover 配色、字級、行高），含即時預覽，套用至全站 wp-admin。預設啟用：桌機寬版的側欄寬度為 300px，子選單改為點箭頭收放；側欄展開時子選單文字對齊上一層名稱 |
 | **白牌** | 上傳 LOGO 作為頂層選單圖示、左側選單最上方的 LOGO 區塊、自訂 wp-admin 頁尾文字、隱藏 WordPress 標誌、後台背景色；管理 Admin Bar 節點（後台／前台各自隱藏）與前台 Admin Bar 載入方式（含角色限定） |
-| **自訂登入頁** | wp-login.php 改成 YS CRM 登入頁的樣子：接近黑的深藍底、左側品牌區、右側白色大圓角登入卡片、膠囊形欄位與按鈕（標題／副標／標語／LOGO／背景圖／頁尾文字可設定，一個總開關控制；v1.6.0 起另可設定主色、背景、左上字標）。只改外觀與文字，不改登入流程；登入網址被其他外掛改掉（例如 WPS Hide Login）也照樣套用 |
+| **自訂登入頁** | wp-login.php 改成 YS CRM 登入頁的樣子：接近黑的深藍底、左側品牌區、右側白色大圓角登入卡片、膠囊形欄位與按鈕（標題／副標／標語／LOGO／背景圖／頁尾文字可設定，一個總開關控制；v1.6.0 起另可設定主色、背景、左上字標）。只改外觀與文字，不改登入流程；用本外掛的「登入網址」（v1.9.0）換了網址也照樣套用 |
+| **登入網址**（v1.9.0） | 登入頁換到自己定的網址（例如 `/adminlogin/`），不必另外裝外掛：沒登入的人打開 wp-login.php、wp-admin 看到 404（或轉到指定的頁面），登入相關的連結與信件改用新網址。預設不使用；救援用 WP-CLI 或 wp-config 常數 |
 | **登入防護** | 整合 Cloudflare Turnstile：在 wp-login.php 的登入（可另涵蓋註冊、忘記密碼）表單加入人機驗證，伺服器端向 Cloudflare 驗證；Cloudflare 判定失敗時擋下，連不到時可選寬鬆（放行並記錄）或嚴格（擋下）。不含 XML-RPC 與前台自訂登入表單。v1.6.0 起另有：登入次數限制（只鎖網路位址、涵蓋走 WordPress 登入流程的登入與 XML-RPC）、訪客 IP 偵測（六種方式）、「關閉 XML-RPC 登入」與「停用應用程式密碼」兩個開關，全部預設關閉 |
 
 ## 安裝
@@ -55,7 +56,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - **白牌設定**（四個分頁）：
   - **後台品牌**：上傳 LOGO（取代頂層選單圖示、也可放在左側選單最上方）、後台頁尾文字、後台背景色、資料清除設定。
   - **Admin Bar**：隱藏左上角 WordPress 標誌；逐一設定各節點在後台／前台要不要隱藏；前台 Admin Bar 的載入方式（照預設／完全不載入／套用前台隱藏清單）與角色限定。「隱藏」只是工具列上看不到，不是停用功能。
-  - **登入頁**：啟用自訂登入頁，設定標題、副標、標語、品牌名稱、LOGO（沒有 LOGO 時左上角放網站標題）、背景圖、頁尾文字、「返回首頁」連結與「顯示語言切換」（預設不顯示 WordPress 的語言選單）。v1.6.0 起的「樣式」卡片：主色、背景（預設深藍、淺色、自訂顏色）、左上字標；三項都留空時跟 1.5.2 一樣。
+  - **登入頁**：v1.9.0 起最上面是「登入網址」卡片（見下面「登入網址」一節）。啟用自訂登入頁，設定標題、副標、標語、品牌名稱、LOGO（沒有 LOGO 時左上角放網站標題）、背景圖、頁尾文字、「返回首頁」連結與「顯示語言切換」（預設不顯示 WordPress 的語言選單）。v1.6.0 起的「樣式」卡片：主色、背景（預設深藍、淺色、自訂顏色）、左上字標；三項都留空時跟 1.5.2 一樣。
   - **登入防護**：v1.6.0 起依序是「登入次數限制」「登入入口」「Cloudflare Turnstile」與收合的「進階：訪客 IP」，表單下方是「鎖定與紀錄」（見下面幾節）。Turnstile：填入 Site Key 與 Secret Key，選擇套用範圍與「連不到 Cloudflare 時」的處理方式，並可當場「測試設定」。
 
 ### 配合 YS CART V3 的選單分組（v1.5.0 起）
@@ -72,6 +73,36 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 - V3 上把「商店設定」底下的分頁連結移到主選單時，「使用者覆寫」的可見清單仍把它列在商店設定底下，勾了沒作用：它跟著「商店設定」判斷。
 - WP-CLI（只讀）：`wp ys-admin-menu moves status` 看遷移狀態、`wp ys-admin-menu moves dry-run` 預覽會改哪些設定列。
 - 搭配舊版 YS CART 或沒有 YS CART 時不會做任何事，側欄與直接開網址都跟 1.4.0 一樣。
+
+### 登入網址（v1.9.0 起，預設不使用）
+
+- 在「白牌設定」的「登入頁」分頁最上面的「登入網址」卡片填一個代稱（例如 `adminlogin`），登入頁就換到 `https://你的網站/adminlogin/`（結尾斜線照「設定 › 固定網址」；沒用固定網址的站是 `https://你的網站/?adminlogin`）。留空＝不使用，跟 WordPress 預設一樣；沒設定過的站更新到 1.9.0 什麼都不變。
+- 代稱：小寫英文、數字與連字號，3～50 個字；不能用 WordPress 自己的路徑或查詢變數（`wp-` 開頭、`admin`、`login`、`dashboard`、`feed`、`page`、`search` 等），也不能跟站上的頁面、文章、附件、文章類型或分類的網址一樣。改了之後先用無痕視窗打開新網址、確認看得到登入頁，再登出。
+- **新網址**：登入、登出、忘記密碼、重設密碼、註冊（有開放註冊時）、文章密碼、隱私請求確認、管理員信箱確認、後台逾時跳出的登入小視窗都在新網址，照 WordPress 原本的流程（新網址載入的就是 wp-login.php）。自訂登入頁、Cloudflare Turnstile、登入次數限制在新網址照樣作用。大小寫不同、少了或多了結尾斜線的寫法轉到正式的寫法。
+- **網址自動換掉**：WordPress 產生的登入相關網址（`wp_login_url()`、`wp_logout_url()`、`wp_lostpassword_url()`、`wp_registration_url()`，以及 `site_url()`、`network_site_url()` 與轉址裡指向本站 wp-login.php 的網址）改成新網址，查詢字串原樣保留；重設密碼、新帳號、隱私請求確認的信也帶新網址。佈景主題的「登入」連結、「要登入才能留言」的連結也會顯示新網址。
+- **擋下的地方**（只擋沒登入的人）：
+  - wp-login.php 顯示佈景主題的 404（跟打開不存在的網址一樣）；wp-admin 先轉到 wp-login.php 再顯示 404（不在後台的環境裡載入佈景主題）。也可以改成「轉到本站的這個路徑」（例如 `/`）。
+  - 單站的 wp-signup.php 一樣擋（它只會把人轉到註冊頁）；wp-activate.php 那裡 WordPress 不載入外掛，它轉去的 wp-login.php 一樣是 404。
+  - 核心的 `/login`、`/admin`、`/dashboard` 捷徑只對已登入的人轉址。
+  - 已登入的人照常打開 wp-login.php 與後台。
+- **不受影響**：admin-ajax.php、admin-post.php、REST API（包括其他外掛有簽章的 REST 路由）、XML-RPC、WP-Cron、WP-CLI。前台的文章密碼表單照常送到 wp-login.php（不在公開的頁面上露出新網址）；復原模式（recovery mode）的信照常是 wp-login.php 的連結，進入復原模式之後在 wp-login.php 登入。
+- **救援**（忘了新網址或進不去時）：
+  - `wp ys-admin-menu login-url get` 查看；`wp ys-admin-menu login-url reset` 關掉，登入回到 wp-login.php；`wp ys-admin-menu login-url set adminlogin` 設定（跟設定頁同一套檢查；`--redirect=/` 改成轉址、`--404` 改回 404）。
+  - 在 wp-config.php 加 `define( 'YS_ADMIN_MENU_LOGIN_URL_DISABLED', true );`：整個功能暫停，登入回到 wp-login.php；設定留著，拿掉那一行就恢復。
+  - 停用本外掛：登入回到 wp-login.php。
+- **給整合用的 filter**：`ys_admin_menu_login_url_allow_request`（預設 `false`）讓信任的流程進得了 wp-login.php（或 wp-admin、wp-signup.php），例如主機面板的一鍵登入落在 wp-login.php 的時候。第二個參數有 `where`（`wp-login`、`signup`、`admin`）、`action`（wp-login.php 實際會用的 action，來自請求、不可信）與 `method`；回傳 `true` 才放行。放行之前請自己驗證（例如驗簽章或一次性的 token）：只看「有沒有某個參數」等於讓所有人都能打開 wp-login.php。在 `init` 或更早就讓人登入、自己轉址的單一登入不需要它（已登入的人本來就不擋）。
+- **匯出、匯入**：登入網址不在「選單與權限」的匯出檔裡，匯入也不會改它。它是每個站自己的入口：跟著設定檔搬到別的站或交給別人，等於把新網址交出去。很多站要用同一個網址時，在每個站各設一次（或從範本站複製整個資料庫）。
+- 設定存在 `ys_admin_menu_login_url`（自動載入；只有代稱與轉去的路徑，沒有任何帳號資料）。刪除外掛時照「刪除外掛時一併清除所有設定」保留或清除；保留時重新安裝、啟用後新網址照舊作用。
+
+### 已知限制（v1.9.0 的登入網址）
+
+- 只是讓掃描程式找不到登入頁，不是驗證：知道新網址的人照樣看得到登入頁（登出連結、佈景主題的「登入」連結都會顯示它）。請搭配登入次數限制或 Turnstile。
+- 多站網路不支援（設定了也不作用）。WPS Hide Login 也在作用時這裡的設定不作用，請停用其中一個。
+- 新網址用「設定 › 一般」的網站網址（home），不套用多語外掛的語言前綴。網站網址指向另一個網域的前台（headless）時不適用。
+- 有頁面快取的站（包括主機的快取），改完請清一次快取，免得新網址拿到改之前快取的 404。
+- 改網址之前寄出的重設密碼、新帳號信，連結還是 wp-login.php，沒登入的人打不開，請重新申請。
+- 寫死 wp-login.php、不經過 WordPress 網址函式的外掛連結，沒登入的人打開會是 404。
+- 降回 1.8.x：設定留著但不作用，登入回到 wp-login.php。
 
 ### 登入防護（Cloudflare Turnstile）
 
@@ -141,6 +172,9 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
 | `wp ys-admin-menu login-guard log [--since=24h] [--ip=9.9.9.9]` | 最近的紀錄 |
 | `wp ys-admin-menu login-guard purge --drop-tables [--yes]` | 刪掉三張資料表與內部用的鍵（降版前用）；沒帶 `--yes` 只印會刪什麼 |
 | `wp ys-admin-menu ip check`、`wp ys-admin-menu ip cloudflare-check` | 試算 IP 偵測、比對 Cloudflare 清單（都不改設定） |
+| `wp ys-admin-menu login-url get [--format=json]` | v1.9.0：登入網址、狀態（作用中、沒有使用、常數暫停、多站、跟 WPS Hide Login 衝突）與被擋下時的處理 |
+| `wp ys-admin-menu login-url set adminlogin [--redirect=/] [--404]` | v1.9.0：設定登入網址（跟設定頁同一套檢查） |
+| `wp ys-admin-menu login-url reset` | v1.9.0：關掉登入網址，登入回到 wp-login.php |
 
 輸出裡從資料庫來的帳號名稱、來源會先清掉控制字元。`list` 與 `log` 加 `--format=json` 時用英文鍵（例如 `key`、`last_ip`、`locked_until`、`created_at`），時間是 UNIX 秒，給腳本用：STDOUT 只有 JSON，沒有資料時印 `[]`，`log` 超過 500 筆時「只列最新的 500 筆」的說明寫到 STDERR。表格是中文，給人看。
 
@@ -199,6 +233,7 @@ WordPress 後台選單管理工具 — wp-admin 原生選單的拖拉排序、�
   - 頂層的 `custom_items.items[]`（自訂連結：`url`、`title`；排序、圖示、誰看得到等存在主選單分頁那一列，`slug` 是選單代稱：https 網址照原樣，wp-admin 底下的頁面前面加 `./`，例：`./edit.php?post_status=draft`，所以規則只管這個連結）、`defaults`（`new_items_visibility`、`rename_page_titles`）。
   - 設定格式版本：用 1.7.0 的設定頁存檔或匯入時寫入 `schema_version: 2` 與 `_meta`（寫入的外掛版本）。第一次寫第 2 版之前，原本的設定原樣備份到 `ys_admin_menu_config_v1_backup`（只寫一次、不自動載入）。
 - v1.7.0 的設定（都自動載入；沒存過時不讀資料庫，照預設；被別的工具改成不自動載入時，打開「外掛使用權限」分頁或「後台精簡」頁，或執行 `wp ys-admin-menu access status`，會自動改回並提示）：`ys_admin_menu_access`（外掛使用權限：`mode` capability／users、`user_ids`、`hide_plugin_row`；不放進選單設定、不鏡像給 YS CART、不進匯出檔）、`ys_admin_menu_comments`（關閉留言：`mode` off／everywhere／post_types、`post_types`、`keep_existing`）、`ys_admin_menu_dashboard_widgets`（`hidden` 小工具 id、`hide_welcome`）；另有 `ys_admin_menu_dashboard_widgets_seen`（記下的控制台小工具清單，不自動載入）
+- v1.9.0 的設定：`ys_admin_menu_login_url`（登入網址：`slug`、`redirect`；自動載入，沒存過時不讀資料庫；不進匯出檔）。外掛主檔載入時決定要不要作用：沒設定、wp-config 定義了 `YS_ADMIN_MENU_LOGIN_URL_DISABLED`、多站網路、WPS Hide Login 也在作用時一個 hook 都不掛
 - **REST**：`ys-admin-menu/v1`（權限：`manage_options`＋「外掛使用權限」（v1.7.0）＋ `wp_rest` nonce ＋ body size cap）
 - **存檔保留不認得的欄位**（v1.7.0）：選單設定每一列只用設定頁送來的值覆寫本外掛認得的欄位，其他欄位（例如 YS CART V3 的可見規則）照已存的值保留
 - **自動更新**：透過內嵌的 YS Plugin Hub Client（2.0.7；外掛市集走 WordPress REST，更新與下載只接受 yangsheep.com.tw 的網址；同站有其他版本時先載入的那份負責連線，「電商工具箱」選單的名稱與位置由 2.0.4 起的共用整理統一，本外掛有設定時先整理再套用設定）。它會定期向 yangsheep.com.tw 查詢更新（送出站台網址與站上 YS 外掛的版本），並建立兩張自己的資料表（`{prefix}ys_hub_client_logs`、`{prefix}ys_hub_client_settings`）

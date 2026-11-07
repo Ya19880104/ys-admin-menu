@@ -13,6 +13,7 @@
  *   8. v1.7.0 誰能使用本外掛 YSAccess（＋`wp ys-admin-menu access`）、關閉留言 YSCommentsDisabler、
  *      控制台小工具 YSDashboardWidgets、「後台精簡」頁 YSDeclutterAdmin；選單的逐項目權限、自訂連結等在 YSMenuRouter。
  *   9. v1.8.0 YS 後台中央樣式 YSAdminUi（assets/ys-admin-ui/，設定頁只用它的元件）
+ *  10. v1.9.0 自訂登入網址 YSLoginUrl（外掛主檔載入時啟動）＋ WP-CLI `wp ys-admin-menu login-url`
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
@@ -34,6 +35,7 @@ use YangSheep\AdminMenu\Menu\YSMenuRouter;
 use YangSheep\AdminMenu\Cli\YSMenuMovesCommand;
 use YangSheep\AdminMenu\Cli\YSLoginGuardCommand;
 use YangSheep\AdminMenu\Cli\YSClientIpCommand;
+use YangSheep\AdminMenu\Cli\YSLoginUrlCommand;
 use YangSheep\AdminMenu\Theme\YSAdminThemeRenderer;
 use YangSheep\AdminMenu\Rest\YSRouteRegistrar;
 use YangSheep\AdminMenu\Admin\YSMenuPage;
@@ -81,6 +83,8 @@ final class YSAdminMenuPlugin {
 			\WP_CLI::add_command( 'ys-admin-menu ip', YSClientIpCommand::class );
 			// v1.7.0：誰能使用本外掛的救援（status／reset／allow）。
 			\WP_CLI::add_command( 'ys-admin-menu access', YSAccessCommand::class );
+			// v1.9.0：自訂登入網址（get／set／reset）。
+			\WP_CLI::add_command( 'ys-admin-menu login-url', YSLoginUrlCommand::class );
 		}
 		// 輸出側欄前的最後整理：拿掉已提升子選單在原父層的那一列、沒有內容的分組標籤。
 		add_filter( 'parent_file', [ YSMenuRouter::class, 'prepare_menu_for_render' ], 9 );

@@ -43,6 +43,7 @@ namespace YangSheep\AdminMenu\Admin;
 
 use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Login\YSLoginPage;
+use YangSheep\AdminMenu\Login\YSLoginUrl;
 use YangSheep\AdminMenu\Login\YSTurnstile;
 use YangSheep\AdminMenu\Menu\YSAdminBarFilter;
 
@@ -350,6 +351,8 @@ class YSWhiteLabelAdmin {
 		$menu_logo_text = self::get_menu_logo_text();
 		$adminbar       = YSAdminBarFilter::settings_view();
 		$login_page     = YSLoginPage::settings_view();
+		// v1.9.0：「登入頁」分頁的「登入網址」。
+		$login_url_view = YSLoginUrl::settings_view();
 		$turnstile      = YSTurnstile::settings_view();
 		// v1.6.0：「登入防護」分頁的「登入入口」與「進階：訪客 IP」。
 		$entrance_view  = YSLoginSecurityAdmin::entrance_view();
@@ -430,6 +433,8 @@ class YSWhiteLabelAdmin {
 		YSAdminBarFilter::save_settings( $post );
 		YSLoginPage::save_settings( $post );
 		$errors = YSTurnstile::save_settings( $post );
+		// v1.9.0：登入網址。不合法的欄位不存、保留原本的值，錯誤代碼一起帶回設定頁。
+		$errors = array_merge( $errors, YSLoginUrl::save_settings( $post ) );
 		// v1.6.0：登入入口的兩個開關。
 		YSLoginSecurityAdmin::save_entrance_settings( $post );
 		// v1.6.0：訪客 IP 偵測。不合法的欄位不存、保留原本的值，錯誤代碼一起帶回設定頁。
@@ -469,7 +474,7 @@ class YSWhiteLabelAdmin {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要顯示提示
 		$raw   = isset( $_GET['ys_am_wl_err'] ) && is_string( $_GET['ys_am_wl_err'] ) ? sanitize_text_field( wp_unslash( $_GET['ys_am_wl_err'] ) ) : '';
 		$codes = explode( ',', $raw );
-		// v1.6.0：訪客 IP 的代碼（含行號）另外過白名單。
-		return array_values( array_merge( array_intersect( [ 'site_key_format', 'secret_format' ], $codes ), YSLoginSecurityAdmin::filter_codes( $codes ) ) );
+		// v1.6.0：訪客 IP 的代碼（含行號）另外過白名單。v1.9.0：登入網址的代碼。
+		return array_values( array_merge( array_intersect( [ 'site_key_format', 'secret_format' ], $codes ), array_intersect( YSLoginUrl::ERROR_CODES, $codes ), YSLoginSecurityAdmin::filter_codes( $codes ) ) );
 	}
 }

@@ -18,6 +18,7 @@
  *             $ip_view（登入防護分頁的「進階：訪客 IP」，YSLoginSecurityAdmin::ip_view()）、
  *             $guard_view（登入次數限制，YSLoginSecurityAdmin::guard_view()）、$records_view（鎖定與紀錄，records_view()）、
  *             $lg_done（「鎖定與紀錄」動作做完的代碼）
+ *   - v1.9.0：$login_url_view（登入頁分頁的「登入網址」，YSLoginUrl::settings_view()）
  *
  * @package YangSheep\Ecommerce\Templates
  */
@@ -39,6 +40,7 @@ defined( 'ABSPATH' ) || exit;
 /** @var array  $guard_view */
 /** @var array  $records_view */
 /** @var string $lg_done */
+/** @var array  $login_url_view */
 
 $has_logo        = ( '' !== $logo_url );
 $settings_action = admin_url( 'admin-post.php' );
@@ -92,6 +94,22 @@ $log_labels = [
 			<p>Turnstile Secret Key 格式不正確（只能有英文、數字、底線、連字號，10～100 個字），這個欄位沒有儲存，仍沿用原本的值。</p>
 		</div>
 	<?php endif; ?>
+	<?php
+	// v1.9.0：登入網址存檔時擋下的欄位。
+	$login_url_errors = [
+		'login_url_format'   => '登入網址的代稱只能用小寫英文、數字與連字號（不能在頭尾），3～50 個字。',
+		'login_url_reserved' => '登入網址的代稱是 WordPress 自己用的路徑或查詢變數（例如 wp- 開頭、admin、login、feed、page），請換一個。',
+		'login_url_exists'   => '站上已經有頁面、文章或網址用這個代稱，請換一個登入網址。',
+		'login_url_redirect' => '「轉到本站的這個路徑」要是本站的路徑（/ 開頭，例如 / 或 /contact/），不能有空白，也不能轉回登入、後台或新的登入網址。',
+	];
+	?>
+	<?php foreach ( $login_url_errors as $login_url_code => $login_url_text ) : ?>
+		<?php if ( in_array( $login_url_code, $field_errors, true ) ) : ?>
+			<div class="ys-admin-note ys-admin-note--error">
+				<p><?php echo esc_html( $login_url_text ); ?>這個欄位沒有儲存，仍沿用原本的值。</p>
+			</div>
+		<?php endif; ?>
+	<?php endforeach; ?>
 	<?php
 	// v1.6.0：「進階：訪客 IP」存檔時擋下的欄位（行號只收數字）。
 	$ip_lines = [ 'invalid' => [], 'wide' => [], 'warn' => [] ];
@@ -407,6 +425,92 @@ $log_labels = [
 		<?php /* ═══════════════════════ 分頁 3：登入頁 ═══════════════════════ */ ?>
 		<section class="ys-admin-tabpanel" id="ys-am-wl-panel-login" role="tabpanel" aria-labelledby="ys-am-wl-tab-login" data-panel="login">
 
+			<?php
+			// v1.9.0：登入網址（預設不使用）。
+			$lu_view     = is_array( $login_url_view ?? null ) ? $login_url_view : [];
+			$lu_state    = (string) ( $lu_view['state'] ?? 'off' );
+			$lu_slug     = (string) ( $lu_view['slug'] ?? '' );
+			$lu_url      = (string) ( $lu_view['url'] ?? '' );
+			$lu_redirect = (string) ( $lu_view['redirect'] ?? '' );
+			$lu_constant = (string) ( $lu_view['constant'] ?? 'YS_ADMIN_MENU_LOGIN_URL_DISABLED' );
+			?>
+			<div class="ysca-card" id="ys-am-login-url-card">
+				<div class="ysca-card__head">
+					<h3 class="ysca-card__title">登入網址</h3>
+				</div>
+				<div class="ysca-card__body">
+					<p class="ysca-field__hint">把登入頁換到自己定的網址。設定之後，沒登入的人打開 wp-login.php 或 wp-admin 會看到 404（或轉到下面指定的頁面）；登入、登出、忘記密碼、重設密碼、註冊、後台逾時跳出的登入小視窗都改走新網址，寄出的信（重設密碼、新帳號）也帶新網址。上面的自訂登入頁與「登入防護」分頁的設定在新網址照樣作用。留空＝不使用，跟 WordPress 預設一樣。</p>
+
+					<?php if ( 'active' === $lu_state && '' !== $lu_url ) : ?>
+						<div class="ys-admin-note ys-admin-note--success">
+							<p>目前的登入網址：<a href="<?php echo esc_url( $lu_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $lu_url ); ?></a>　請加入書籤。改了之後先用無痕視窗打開新網址、確認看得到登入頁，再登出。</p>
+						</div>
+					<?php elseif ( 'constant' === $lu_state ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>wp-config.php 定義了 <code><?php echo esc_html( $lu_constant ); ?></code>，登入網址暫停中：登入在 wp-login.php。拿掉那一行之後，下面存的網址就會作用。</p>
+						</div>
+					<?php elseif ( 'multisite' === $lu_state ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>多站網路不支援自訂登入網址，存了也不會作用：登入在 wp-login.php。</p>
+						</div>
+					<?php elseif ( 'conflict' === $lu_state ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>WPS Hide Login 也在作用，兩個一起改登入網址會互相蓋掉，所以這裡的設定目前不作用。請停用其中一個（改用這裡的設定時，停用 WPS Hide Login 之後新網址就會作用）。</p>
+						</div>
+					<?php elseif ( 'invalid' === $lu_state ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>存的代稱不合法（可能是用別的工具直接改了設定），登入網址沒有作用：登入在 wp-login.php。請重新填一個再儲存。</p>
+						</div>
+					<?php endif; ?>
+					<?php if ( 'exists' === (string) ( $lu_view['conflict'] ?? '' ) ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>站上現在有頁面、文章或網址也用這個代稱：那個網址會打開登入頁，看不到原本的內容。要讓它恢復，請換一個登入網址。</p>
+						</div>
+					<?php endif; ?>
+					<?php if ( ! empty( $lu_view['healed'] ) ) : ?>
+						<div class="ys-admin-note ys-admin-note--warning">
+							<p>登入網址的設定被改成「不自動載入」（這段期間登入網址沒有作用），已經改回自動載入。</p>
+						</div>
+					<?php endif; ?>
+
+					<div class="ysca-field">
+						<label for="ys-am-login-url-slug" class="ysca-field__label">新的登入網址</label>
+						<div class="ys-admin-actions">
+							<span class="ysca-field__hint"><?php echo esc_html( (string) ( $lu_view['prefix'] ?? '' ) ); ?></span>
+							<input type="text" id="ys-am-login-url-slug" name="login_url_slug" maxlength="50" class="ysca-input ys-admin-w-md"
+								value="<?php echo esc_attr( $lu_slug ); ?>" placeholder="例如：adminlogin"
+								autocomplete="off" autocapitalize="off" spellcheck="false" pattern="[a-z0-9][a-z0-9\-]{1,48}[a-z0-9]">
+						</div>
+						<p class="ysca-field__hint">小寫英文、數字與連字號，3～50 個字。不能用 WordPress 自己的路徑（例如 wp- 開頭、admin、login、dashboard、feed、page），也不能跟站上的頁面、文章一樣。留空＝不使用。</p>
+					</div>
+
+					<fieldset class="ysca-field ys-admin-fieldset">
+						<legend class="ysca-field__label">沒登入的人打開 wp-login.php 或 wp-admin 時</legend>
+						<label class="ys-admin-radio">
+							<input type="radio" name="login_url_blocked" value="404" <?php checked( '' === $lu_redirect ); ?>>
+							<span><strong>顯示 404（預設）</strong>跟打開不存在的網址一樣，用佈景主題的 404 頁面。wp-admin 先轉到 wp-login.php 再顯示 404。</span>
+						</label>
+						<label class="ys-admin-radio">
+							<input type="radio" name="login_url_blocked" value="redirect" <?php checked( '' !== $lu_redirect ); ?>>
+							<span><strong>轉到本站的這個路徑</strong>例如 <code>/</code>（首頁）或 <code>/contact/</code>。</span>
+						</label>
+						<input type="text" id="ys-am-login-url-redirect" name="login_url_redirect" maxlength="200" class="ysca-input ys-admin-w-md"
+							value="<?php echo esc_attr( $lu_redirect ); ?>" placeholder="/" aria-label="轉到本站的這個路徑">
+						<p class="ysca-field__hint">已登入的人照常打開 wp-login.php 與後台。admin-ajax.php、admin-post.php、REST API、XML-RPC、WP-Cron、WP-CLI 不受影響；前台的文章密碼表單照常送到 wp-login.php。</p>
+					</fieldset>
+
+					<div class="ys-admin-note ys-admin-note--info">
+						<p>
+							<strong>忘了新網址或進不去時：</strong>
+							在主機上執行 <code>wp ys-admin-menu login-url get</code> 查看、<code>wp ys-admin-menu login-url reset</code> 關掉；
+							或在 wp-config.php 加 <code>define( '<?php echo esc_html( $lu_constant ); ?>', true );</code>，登入就回到 wp-login.php。
+							停用本外掛時登入也回到 wp-login.php。
+						</p>
+						<p>有頁面快取的站，改完請清一次快取。改網址之前寄出的重設密碼信，連結還是 wp-login.php，會打不開，請重新申請。這個設定不會出現在「選單與權限」的匯出檔，匯入也不會改它。</p>
+					</div>
+				</div>
+			</div>
+
 			<div class="ysca-card">
 				<div class="ysca-card__head">
 					<h3 class="ysca-card__title">自訂登入頁</h3>
@@ -417,7 +521,7 @@ $log_labels = [
 							<input type="checkbox" name="login_enabled" value="yes" <?php checked( ! empty( $login_page['enabled'] ) ); ?>>
 							<span class="slider"></span>
 						</span>
-						<span class="ys-admin-switch__text"><strong>啟用自訂登入頁</strong>wp-login.php 改成 YS CRM 登入頁的樣子：接近黑的深藍底、左側品牌區、右側白色大圓角登入卡片（膠囊形欄位與按鈕），手機上改成單欄。只改外觀與文字，登入流程、帳號密碼的驗證都不變；登入網址被其他外掛改掉（例如 WPS Hide Login）也照樣套用。</span>
+						<span class="ys-admin-switch__text"><strong>啟用自訂登入頁</strong>wp-login.php 改成 YS CRM 登入頁的樣子：接近黑的深藍底、左側品牌區、右側白色大圓角登入卡片（膠囊形欄位與按鈕），手機上改成單欄。只改外觀與文字，登入流程、帳號密碼的驗證都不變；用上面的「登入網址」或其他外掛（例如 WPS Hide Login）換了登入網址也照樣套用。</span>
 					</label>
 					<p class="ysca-field__hint">
 						檢視方式：用無痕視窗開啟 <a href="<?php echo esc_url( (string) ( $login_page['login_url'] ?? wp_login_url() ) ); ?>" target="_blank" rel="noopener noreferrer">登入頁</a>（已登入時打開登入頁會直接轉到後台）。忘記密碼、註冊、設定新密碼的畫面也套用同一套配色。

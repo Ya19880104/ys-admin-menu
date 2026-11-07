@@ -4,6 +4,25 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.9.0] - 2026-11-08
+
+**新功能預設不使用。** 更新到 1.9.0 時不寫任何設定；沒設定登入網址的站，登入頁、wp-admin 與所有網址都跟 1.8.0 一樣。
+
+### 新增：自訂登入網址
+- **「白牌設定 › 登入頁」最上面的「登入網址」**：填一個代稱（例如 `adminlogin`），登入頁換到 `https://你的網站/adminlogin/`，不必另外裝外掛（例如 WPS Hide Login）。
+- **新網址走 WordPress 原本的登入流程**：登入、登出、忘記密碼、重設密碼、註冊、文章密碼、隱私請求確認、管理員信箱確認、後台逾時跳出的登入小視窗都在新網址；自訂登入頁、Turnstile、登入次數限制照樣作用。
+- **連結與信件**：WordPress 產生的登入相關網址與轉址改成新網址（查詢字串原樣保留），重設密碼、新帳號、隱私請求確認的信也帶新網址。
+- **沒登入的人**：打開 wp-login.php 看到佈景主題的 404，打開 wp-admin 先轉到 wp-login.php 再顯示 404；也可以改成轉到本站的某個路徑。核心的 `/login`、`/admin`、`/dashboard` 捷徑只對已登入的人轉址。已登入的人照常。
+- **不受影響**：admin-ajax.php、admin-post.php、REST API、XML-RPC、WP-Cron、WP-CLI。前台的文章密碼表單與復原模式的信照常用 wp-login.php，不在公開的頁面上露出新網址。
+- **代稱的檢查**：小寫英文、數字、連字號，3～50 個字；不能用 WordPress 自己的路徑與查詢變數，也不能跟站上的頁面、文章、文章類型、分類的網址一樣。
+- **救援**：`wp ys-admin-menu login-url get`、`set`、`reset`，或在 wp-config.php 定義 `YS_ADMIN_MENU_LOGIN_URL_DISABLED` 為 true（登入回到 wp-login.php）。
+- **整合**：`ys_admin_menu_login_url_allow_request` filter（預設不放行）讓信任的流程（例如落在 wp-login.php 的一鍵登入）進得了 wp-login.php。
+- 登入網址不在「選單與權限」的匯出檔裡，匯入也不會改它。
+- 多站網路不支援；WPS Hide Login 也在作用時，這裡的設定不作用。
+
+### 文件
+- README：「自訂登入頁」那一列改寫（不再需要用其他外掛換網址），新增「登入網址」一節、救援方式、WP-CLI 指令與已知限制。
+
 ## [1.8.0] - 2026-10-27
 
 ### 變更：設定頁統一外觀

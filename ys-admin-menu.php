@@ -3,7 +3,7 @@
  * Plugin Name: YS Admin Menu
  * Plugin URI:  https://yangsheep.com.tw
  * Description: 後台選單管理工具 — wp-admin 原生選單的拖拉排序、隱藏、重新命名、改色、角色權限、個別使用者覆寫、直接網址防護，外加原生選單樣式美化與白牌、關閉留言、隱藏控制台小工具、限定可使用本外掛的帳號。從 YS CART 抽離的獨立工具。
- * Version:     1.8.0
+ * Version:     1.9.0
  * Author:      YANGSHEEP DESIGN
  * Author URI:  https://yangsheep.com.tw
  * License:     GPL-2.0-or-later
@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 /* ──────────────────────────────────────────────
  * 常數定義
  * ────────────────────────────────────────────── */
-define( 'YS_ADMIN_MENU_VERSION', '1.8.0' );
+define( 'YS_ADMIN_MENU_VERSION', '1.9.0' );
 define( 'YS_ADMIN_MENU_PLUGIN_FILE', __FILE__ );
 define( 'YS_ADMIN_MENU_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'YS_ADMIN_MENU_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -79,6 +79,12 @@ register_deactivation_hook(
 \YangSheep\AdminMenu\Security\YSLoginGuard::bootstrap();
 register_activation_hook( __FILE__, [ \YangSheep\AdminMenu\Security\YSLoginGuard::class, 'activate' ] );
 register_deactivation_hook( __FILE__, [ \YangSheep\AdminMenu\Security\YSLoginGuard::class, 'deactivate' ] );
+
+/* ──────────────────────────────────────────────
+ * v1.9.0 自訂登入網址：主檔載入時決定（在 load_default_textdomain() 與 WP::init() 之前，新網址的 $pagenow 才來得及改成
+ * wp-login.php）。沒設定時只看一眼已經載入的 alloptions，一個 hook 都不掛。
+ * ────────────────────────────────────────────── */
+\YangSheep\AdminMenu\Login\YSLoginUrl::bootstrap();
 
 /* ──────────────────────────────────────────────
  * Hub Client 註冊（priority 5，比主外掛早）
