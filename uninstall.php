@@ -162,6 +162,9 @@ $ys_admin_menu_options = [
 	'ys_admin_menu_config_v1_backup',
 	// v1.9.0：自訂登入網址（沒勾清除時保留：重新安裝、啟用後新網址照舊作用）。
 	'ys_admin_menu_login_url',
+	// v1.10.0：隨機文章網址的設定與上次重建網址規則時的結果（後者停用外掛時已經刪掉，這裡再保險一次）。
+	'ys_admin_menu_random_content',
+	'ys_admin_menu_random_rules_state',
 ];
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；

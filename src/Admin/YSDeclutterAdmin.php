@@ -1,8 +1,9 @@
 <?php
 /**
  * v1.7.0：「後台精簡」設定頁（關閉留言 YSCommentsDisabler、控制台小工具 YSDashboardWidgets）。
+ * v1.10.0：加上「隨機文章網址」（YSRandomContent，WordPress 7.2 起；預設關閉）。
  *
- * 一張表單送 admin-post.php（action＝ys_admin_menu_save_declutter、自己的 nonce），兩個模組各自清理、存檔，存完回到這一頁。
+ * 一張表單送 admin-post.php（action＝ys_admin_menu_save_declutter、自己的 nonce），各模組各自清理、存檔，存完回到這一頁。
  *
  * @package YangSheep\AdminMenu\Admin
  * @since   1.7.0
@@ -12,6 +13,7 @@ namespace YangSheep\AdminMenu\Admin;
 
 use YangSheep\AdminMenu\Access\YSAccess;
 use YangSheep\AdminMenu\Comments\YSCommentsDisabler;
+use YangSheep\AdminMenu\Content\YSRandomContent;
 use YangSheep\AdminMenu\Dashboard\YSDashboardWidgets;
 
 defined( 'ABSPATH' ) || exit;
@@ -38,6 +40,13 @@ final class YSDeclutterAdmin {
 		// v1.7.0：選項被別的工具改成不自動載入時，設定會靜默回到預設（留言重新打開、小工具全部回來）；打開這一頁時改回來並提示。
 		$healed = YSAccess::heal_autoload( YSCommentsDisabler::OPTION );
 		$healed = YSAccess::heal_autoload( YSDashboardWidgets::OPTION ) || $healed;
+		// v1.10.0：隨機文章網址的設定改回自動載入時，這個請求稍早讀到的是預設值（關閉），重讀一次，畫面與存檔才會是存的那個值。
+		$random_healed = YSAccess::heal_autoload( YSRandomContent::OPTION );
+		if ( $random_healed ) {
+			YSRandomContent::reset_request_state();
+			YSRandomContent::maybe_sync_rewrite_rules(); // admin_init 用預設值比對過了，用存的值再對一次，網址規則這次就對齊
+		}
+		$healed = $random_healed || $healed;
 
 		$comments = YSCommentsDisabler::settings();
 		$types    = [];
@@ -64,6 +73,7 @@ final class YSDeclutterAdmin {
 		}
 		$dashboard = YSDashboardWidgets::settings();
 		$seen      = YSDashboardWidgets::seen();
+		$random    = YSRandomContent::status();
 		$saved     = ! empty( $_GET['saved'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只顯示提示
 
 		$template = YS_ADMIN_MENU_PLUGIN_DIR . 'templates/admin/declutter.php';
@@ -86,6 +96,11 @@ final class YSDeclutterAdmin {
 		$dashboard = is_array( $post['dashboard'] ?? null ) ? $post['dashboard'] : [];
 		YSCommentsDisabler::save( $comments );
 		YSDashboardWidgets::save( $dashboard );
+		// v1.10.0：隨機文章網址。表單帶著 random[present] 才存：更新前打開、還沒有這張卡片的舊表單送出時，不把設定改成「照 WordPress」。
+		$random = is_array( $post['random'] ?? null ) ? $post['random'] : [];
+		if ( ! empty( $random['present'] ) ) {
+			YSRandomContent::save( $random );
+		}
 		wp_safe_redirect( self::url( [ 'saved' => '1' ] ) );
 		exit;
 	}

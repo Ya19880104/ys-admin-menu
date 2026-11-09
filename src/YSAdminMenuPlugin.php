@@ -14,6 +14,7 @@
  *      控制台小工具 YSDashboardWidgets、「後台精簡」頁 YSDeclutterAdmin；選單的逐項目權限、自訂連結等在 YSMenuRouter。
  *   9. v1.8.0 YS 後台中央樣式 YSAdminUi（assets/ys-admin-ui/，設定頁只用它的元件）
  *  10. v1.9.0 自訂登入網址 YSLoginUrl（外掛主檔載入時啟動）＋ WP-CLI `wp ys-admin-menu login-url`
+ *  11. v1.10.0 關閉 WordPress 7.2 的隨機文章網址 YSRandomContent（外掛主檔載入時啟動；設定在「後台精簡」頁）
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0
