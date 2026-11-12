@@ -101,7 +101,7 @@ final class YSLoginGuardSettings {
 
 	/**
 	 * 每個請求都要讀的開關（總開關；停用應用程式密碼，YSLoginEntrances）。沒存過 1.6.0 設定的站，這些 option 不存在：
-	 * 沒有持久物件快取時，get_option() 每個請求都要為它查一次資料庫（WordPress 只在這一次請求記住「不存在」；實作審查 A 線 P3-1）。
+	 * 沒有持久物件快取時，get_option() 每個請求都要為它查一次資料庫（WordPress 只在這一次請求記住「不存在」）。
 	 * 所以能確定「沒存過」時直接回預設（shortcut()）；其他情況一律照常 get_option()。
 	 */
 	public static function autoloaded( string $option, string $default ): string {
@@ -113,7 +113,7 @@ final class YSLoginGuardSettings {
 	}
 
 	/**
-	 * 可以不查資料庫、直接回預設嗎（實作審查 A 線 P3-1；差異審查 SEC P3-1、CODE N1）：
+	 * 可以不查資料庫、直接回預設嗎：
 	 * - 有持久物件快取時不走：get_option() 對不存在的 option 本來就從快取的 notoptions 回答，不查資料庫。
 	 * - 有人掛了 pre_option_{鍵}、pre_option、default_option_{鍵} 時不走：照常 get_option()，filter 照樣作用
 	 *   （例如用 mu-plugin 讓所有站停用應用程式密碼）。
@@ -135,7 +135,7 @@ final class YSLoginGuardSettings {
 
 	/**
 	 * 本外掛的自動載入鍵一個都不在自動載入裡，但其中有存在的（被 option 最佳化工具、wp option add --autoload=no 這類方式改成不自動載入）：
-	 * 改回自動載入，前台的捷徑才不會把開關讀成「關」（差異審查 SEC P3-1、CODE N1）；有改回來時，另一個還沒有的開關寫預設值（seed_switches）。
+	 * 改回自動載入，前台的捷徑才不會把開關讀成「關」；有改回來時，另一個還沒有的開關寫預設值（seed_switches）。
 	 * 有任何一個在自動載入裡時什麼都不做（存過設定的站不多查）；沒存過的站多一句 SELECT。管理員打開後台（heal_on_admin）與 WP-CLI status 時呼叫。
 	 *
 	 * @return string[] 改回自動載入的鍵。
@@ -178,7 +178,7 @@ final class YSLoginGuardSettings {
 	 * （例如只用 WP-CLI enable 打開、或只設了 app-passwords）時，前台讀另一個才不用每個請求查一次資料庫。設定頁存「登入入口」、
 	 * WP-CLI 的 enable、disable、app-passwords 寫完之後，與 heal_autoload() 改回自動載入之後呼叫。
 	 *
-	 * 有人掛 default_option_{鍵} filter 的開關不寫（最終核對 A 線 F1）：值交給 filter 決定，寫了就蓋掉它（README 說這種 filter 照樣有效）。
+	 * 有人掛 default_option_{鍵} filter 的開關不寫：值交給 filter 決定，寫了就蓋掉它（README 說這種 filter 照樣有效）。
 	 * 而且核心 add_option() 判斷「已經有了」，是拿 filter 的回傳值跟 get_option() 比：相同時當成不存在，照樣用
 	 * INSERT … ON DUPLICATE KEY UPDATE 寫入——filter 回 yes、站上也存了 yes 時，現值會被覆寫成 no。這種站本來就不走 shortcut()，
 	 * 每個請求為它查一次資料庫（用 filter 的代價；要完全不查請用 pre_option_）。pre_option_ 的值 add_option() 自己會當成已經有了，不會寫。

@@ -15,6 +15,7 @@
  *   9. v1.8.0 YS 後台中央樣式 YSAdminUi（assets/ys-admin-ui/，設定頁只用它的元件）
  *  10. v1.9.0 自訂登入網址 YSLoginUrl（外掛主檔載入時啟動）＋ WP-CLI `wp ys-admin-menu login-url`
  *  11. v1.10.0 關閉 WordPress 7.2 的隨機文章網址 YSRandomContent（外掛主檔載入時啟動；設定在「後台精簡」頁）
+ *  12. v1.11.0 給其他外掛用的對外介面 YangSheep\AdminMenu\Api\YSAdminMenuApi（只讀、不掛 hook；用到時才由 autoloader 載入）
  *
  * @package YangSheep\AdminMenu
  * @since   1.0.0

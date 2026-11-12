@@ -1,5 +1,5 @@
 /**
- * 原生選單樣式 — Live Preview + Color Picker（v2.39.0 BATCH R / C9）
+ * 原生選單樣式 — Live Preview + Color Picker（v2.39.0）
  *
  * 由 YSAdminThemeAdmin::render() enqueue。
  *
@@ -125,7 +125,7 @@
 	/**
 	 * 套用 / 移除 preview <style>
 	 *
-	 * v2.45.x ADR-045 P1：
+	 * v2.45.x：
 	 *   - 預覽 CSS 只輸出 :root CSS variables
 	 *   - body.ys-theme-active class toggle 由此處控制
 	 *   - companion stylesheet (ys-ec-admin-theme-runtime.css) 已 enqueue，
@@ -159,7 +159,7 @@
 	/**
 	 * 從設定 cfg 建構 CSS 文字（與 PHP renderer 1:1 對齊）
 	 *
-	 * v2.45.x ADR-045 P1：只輸出 :root CSS variables，無 cascade override。
+	 * v2.45.x：只輸出 :root CSS variables，無 cascade override。
 	 * 實際樣式由 ys-ec-admin-theme-runtime.css 透過 body.ys-theme-active 消費。
 	 *
 	 * @param {Object} c

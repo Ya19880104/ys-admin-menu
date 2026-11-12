@@ -169,7 +169,73 @@ $ys_admin_menu_options = [
 
 // ys_ec_menu_config 是給 YS CART 接手用的設定副本。站上沒有 YS CART 時它只是本外掛留下的複本，一起刪；
 // 有 YS CART 時那是它的設定，不動。
-if ( ! defined( 'YS_ECOMMERCE_VERSION' ) ) {
+// v1.11.0：「有 YS CART」不只看啟用中才有的常數，也看外掛檔在不在：YS CART 裝著、當下沒啟用時，這份是它之後再啟用時讀的
+// 選單設定（1.10.0 以前會刪掉，YS CART 再啟用時本外掛設的限制就不見了）。
+// 只有「確定沒裝」才刪：外掛目錄讀得到、每個外掛子目錄都讀得到、硬碟上沒有 ys-cart.php、重新讀的外掛清單與啟用中清單都沒有
+// YS CART（主檔 ys-cart.php、名稱 YS CART 或 Text Domain ys-cart）。get_plugins() 讀不到外掛目錄時回空陣列、讀不到的子目錄直接
+// 略過，清單也可能是快取，所以清單是空的或少東西都不能當成沒裝；讀不到、不確定時一律保留。
+$ys_admin_menu_ys_cart_absent = static function (): bool {
+	if ( defined( 'YS_ECOMMERCE_VERSION' ) ) {
+		return false;
+	}
+	// 1. 外掛目錄與每個子目錄都讀得到，硬碟上沒有 ys-cart.php。
+	$dir = defined( 'WP_PLUGIN_DIR' ) ? rtrim( (string) WP_PLUGIN_DIR, '/\\' ) : '';
+	if ( '' === $dir || ! is_dir( $dir ) || ! is_readable( $dir ) ) {
+		return false;
+	}
+	$entries = @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- 讀不到就當成不確定（保留），不要警告。
+	if ( false === $entries ) {
+		return false;
+	}
+	foreach ( $entries as $entry ) {
+		if ( '.' === $entry || '..' === $entry ) {
+			continue;
+		}
+		$path = $dir . DIRECTORY_SEPARATOR . $entry;
+		if ( 'ys-cart.php' === $entry || ( @is_link( $path ) && ! @file_exists( $path ) ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			return false; // 單檔的 YS CART，或指到不存在位置的連結（例如還沒掛上的磁碟）
+		}
+		if ( ! @is_dir( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( @is_file( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				continue;
+			}
+			return false; // 不能判定類型，無法確定是否已移除。
+		}
+		// 掃到主檔名稱就不能確定已移除：包含主檔是壞掉的連結或讀不到的情況。
+		$children = is_readable( $path ) ? @scandir( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $children || in_array( 'ys-cart.php', $children, true ) ) {
+			return false;
+		}
+	}
+	// 2. 重新讀一次外掛清單（先清掉快取）。
+	if ( ! function_exists( 'get_plugins' ) && is_readable( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	if ( ! function_exists( 'get_plugins' ) ) {
+		return false;
+	}
+	if ( function_exists( 'wp_cache_delete' ) ) {
+		wp_cache_delete( 'plugins', 'plugins' );
+	}
+	foreach ( (array) get_plugins() as $file => $data ) {
+		$data = (array) $data;
+		if ( 'ys-cart.php' === basename( (string) $file ) || 'YS CART' === ( $data['Name'] ?? '' ) || 'ys-cart' === ( $data['TextDomain'] ?? '' ) ) {
+			return false;
+		}
+	}
+	// 3. 啟用中清單（單站與網路啟用）有 YS CART 的主檔：外掛檔暫時讀不到也不刪。
+	$active = (array) get_option( 'active_plugins', [] );
+	if ( is_multisite() && function_exists( 'get_site_option' ) ) {
+		$active = array_merge( $active, array_keys( (array) get_site_option( 'active_sitewide_plugins', [] ) ) );
+	}
+	foreach ( $active as $file ) {
+		if ( is_string( $file ) && 'ys-cart.php' === basename( $file ) ) {
+			return false;
+		}
+	}
+	return true;
+};
+if ( $ys_admin_menu_ys_cart_absent() ) {
 	$ys_admin_menu_options[] = 'ys_ec_menu_config';
 }
 

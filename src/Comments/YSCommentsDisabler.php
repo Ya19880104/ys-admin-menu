@@ -1,6 +1,6 @@
 <?php
 /**
- * v1.7.0：關閉留言（設計 docs/plans/2026-10-26-ys-admin-menu-170-design.md §4；對標 Disable Comments 的做法與踩過的坑）。
+ * v1.7.0：關閉留言（設計 §4；對標 Disable Comments 的做法與踩過的坑）。
  *
  * 選項 ys_admin_menu_comments（autoload yes）：
  *   { version: 1, mode: 'off' | 'everywhere' | 'post_types', post_types: string[], keep_existing: bool }

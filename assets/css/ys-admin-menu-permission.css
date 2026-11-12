@@ -1,15 +1,18 @@
 /**
- * YS CART 權限設置 — 樣式（v2.39.0 BATCH Q）
+ * YS CART 權限設置 — 樣式（v2.39.0）
  *
  * v2.38.2 → v2.39.0 變更：
  *   - row 高度由 ~80px 縮為 ~38-40px（td padding 12px → 6px）
  *   - 單行排版（title + slug inline，title_override 縮成 dashed-border 行內 input）
- *   - 新增「隱藏」欄位 + checkbox（B4）
+ *   - 新增「隱藏」欄位 + checkbox
  *   - user_overrides tab：新 user override card 樣式
  *   - 統一白底 + ys-ec-card 風格
  */
 
 /* v1.8.0：頁面外框（頁首、卡片、分頁籤、按鈕）改用 YS 後台中央樣式（assets/ys-admin-ui/），這支只放選單排序表、面板與使用者覆寫卡。 */
+
+/* v1.11.0：跟著中央樣式 1.1.0 的字級——這支原本寫死的 10～12.5px 字一律 13px（▾ 小箭頭除外），頂層選單標題 14px；
+   說明文字用內文色，比設計系統次要文字色（--ysca-muted）更淡的代稱、email 改用次要文字色。 */
 
 /* ─────────────────────────────────────────
  * 主表 — compact rows（v2.39.0 縮一半高度）
@@ -25,14 +28,14 @@
     background: #f9fafb;
     border-bottom: 2px solid #d1d5db;
     color: #374151;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     padding: 8px 10px;
     text-align: left;
     line-height: 1.2;
 }
 
-/* v2.39.0 BATCH Q2：tbody td padding 12px → 6px（row 高度 ~80px → ~38px） */
+/* v2.39.0：tbody td padding 12px → 6px（row 高度 ~80px → ~38px） */
 .ys-ec-permission-admin .ys-ec-permission-table tbody td {
     background: #ffffff;
     border-bottom: 1px solid #e5e7eb;
@@ -75,7 +78,7 @@
 }
 
 /* ─────────────────────────────────────────
- * v2.39.0 BATCH Q2：menu-line（title + slug + level badge）單行 inline
+ * v2.39.0：menu-line（title + slug + level badge）單行 inline
  * ───────────────────────────────────────── */
 .ys-ec-permission-admin .ys-ec-permission-table .menu-line {
     display: flex;
@@ -94,7 +97,7 @@
     background: #f3f4f6;
     border-radius: 3px;
     color: #6b7280;
-    font-size: 11px;
+    font-size: 13px;
     padding: 1px 6px;
 }
 
@@ -103,7 +106,7 @@
     border-radius: 3px;
     color: var(--ysca-primary-strong, #123f9c);
     display: inline-block;
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 600;
     padding: 1px 6px;
     text-transform: none;
@@ -126,8 +129,8 @@
     align-items: center;
     gap: 6px;
     margin: 0 0 8px;
-    color: #6b7280;
-    font-size: 12px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
 }
 .ys-ec-permission-admin .ys-ec-toolbar-hint .dashicons {
     color: #9ca3af;
@@ -153,7 +156,7 @@
     border: 2px dashed color-mix(in srgb, var(--ysca-primary, #1f5dcf) 24%, #fff);
     border-radius: 8px;
     color: var(--ysca-primary-strong, #123f9c);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
     padding: 10px 14px;
 }
@@ -192,13 +195,13 @@
     margin-right: 4px;
 }
 
-/* v2.39.0 BATCH Q2：title_override inline edit — dashed border, 透明背景 */
+/* v2.39.0：title_override inline edit — dashed border, 透明背景 */
 .ys-ec-permission-admin .ys-ec-permission-table .title-override-inline {
     background: transparent;
     border: 1px dashed #d1d5db;
     border-radius: 3px;
     color: #6b7280;
-    font-size: 11px;
+    font-size: 13px;
     margin-top: 2px;
     padding: 1px 6px;
     width: 100%;
@@ -213,7 +216,7 @@
     outline: 0;
 }
 
-/* v2.39.0 BATCH Q2：role-cb-group 緊湊排版 */
+/* v2.39.0：role-cb-group 緊湊排版 */
 .ys-ec-permission-admin .ys-ec-permission-table .role-cb-group {
     display: flex;
     flex-wrap: wrap;
@@ -223,7 +226,7 @@
 
 .ys-ec-permission-admin .ys-ec-permission-table .role-cb-group label {
     cursor: pointer;
-    font-size: 11px;
+    font-size: 13px;
     user-select: none;
     white-space: nowrap;
     color: #374151;
@@ -248,7 +251,7 @@
     border-radius: 999px;
     background: #fff;
     color: #374151;
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.6;
     white-space: nowrap;
     overflow: hidden;
@@ -293,13 +296,13 @@
     align-items: center;
     gap: 4px;
     padding: 3px 2px;
-    font-size: 12px;
+    font-size: 13px;
 }
 .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-roles__missing {
     color: #b45309;
 }
 
-/* v2.39.0 BATCH Q3：hide checkbox column */
+/* v2.39.0：hide checkbox column */
 .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-hide-cb {
     text-align: center;
 }
@@ -339,14 +342,14 @@
     background: #ffffff;
     border: 1px solid #d1d5db;
     border-radius: 3px;
-    font-size: 12px;
+    font-size: 13px;
     padding: 2px 4px;
     text-align: center;
     width: 50px;
 }
 
 .ys-ec-permission-admin .ys-ec-color-picker {
-    font-size: 12px;
+    font-size: 13px;
     padding: 2px 4px;
     width: 80px;
 }
@@ -376,7 +379,7 @@
 }
 
 /* ─────────────────────────────────────────
- * v2.39.0 BATCH Q1：使用者覆寫卡片樣式
+ * v2.39.0：使用者覆寫卡片樣式
  * ───────────────────────────────────────── */
 .ys-ec-permission-admin .ys-ec-user-overrides-toolbar {
     align-items: center;
@@ -427,9 +430,16 @@
 }
 
 .ys-ec-permission-admin .ys-ec-user-search-results li.no-results {
-    color: #9ca3af;
+    color: var(--ysca-muted, #5f6773);
     cursor: default;
     font-style: italic;
+}
+
+/* v1.11.0：搜尋結果裡的 email 與帳號 ID（原本寫在 JS 的 10px 淡灰字） */
+.ys-ec-permission-admin .ys-ec-user-search-results .ys-ec-user-result__email,
+.ys-ec-permission-admin .ys-ec-user-search-results .ys-ec-user-result__id {
+    color: var(--ysca-muted, #5f6773);
+    font-size: 13px;
 }
 
 .ys-ec-permission-admin .ys-ec-user-search-wrap {
@@ -476,7 +486,7 @@
     background: #f3f4f6;
     border-radius: 3px;
     color: #6b7280;
-    font-size: 11px;
+    font-size: 13px;
     padding: 1px 6px;
 }
 
@@ -485,7 +495,7 @@
     border: 0;
     color: #dc2626;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     margin-left: auto;
     padding: 4px 8px;
     text-decoration: underline;
@@ -499,6 +509,11 @@
 
 .ys-ec-permission-admin .ys-ec-user-override-card .card-body {
     padding: 12px 14px;
+}
+
+/* v1.11.0：卡片裡的說明用內文色（設計系統的 .description 是淡灰） */
+.ys-ec-permission-admin .ys-ec-user-override-card .description {
+    color: var(--ysca-text-body, #4c505b);
 }
 
 .ys-ec-permission-admin .ys-ec-user-override-card .card-body label.ys-cart-only-label {
@@ -519,7 +534,7 @@
 .ys-ec-permission-admin .ys-ec-user-override-card details summary {
     color: #4b5563;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     padding: 4px 0;
 }
@@ -541,15 +556,15 @@
     color: #374151;
     cursor: pointer;
     display: flex;
-    font-size: 12px;
+    font-size: 13px;
     gap: 4px;
 }
 
 .ys-ec-permission-admin .ys-ec-user-override-card .slug-grid label code {
     background: #f3f4f6;
     border-radius: 3px;
-    color: #9ca3af;
-    font-size: 10px;
+    color: var(--ysca-muted, #5f6773);
+    font-size: 13px;
     padding: 1px 4px;
 }
 
@@ -557,7 +572,7 @@
     background: #f9fafb;
     border: 1px dashed #d1d5db;
     border-radius: 6px;
-    color: #6b7280;
+    color: var(--ysca-text-body, #4c505b);
     padding: 20px;
     text-align: center;
 }
@@ -596,7 +611,7 @@
 
 /* ── 頂層 row：作為群組錨點，標題粗黑、上緣分隔線區隔群組 ── */
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="top"] .menu-line strong {
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 700;
     color: #0f172a;
 }
@@ -633,13 +648,13 @@
 }
 
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-line strong {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 500;
     color: #475569;
 }
 
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="sub"] .menu-line code {
-    color: #94a3b8;
+    color: var(--ysca-muted, #5f6773);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -663,7 +678,7 @@
     background: #ffffff;
     border: 1px solid color-mix(in srgb, var(--ysca-primary, #1f5dcf) 24%, #fff);
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
@@ -730,7 +745,7 @@
     background: #f0fdfa;
     border: 2px dashed #99f6e4;
     border-radius: 8px;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
 }
 
@@ -771,8 +786,8 @@
 .ys-ec-permission-admin .ys-ec-copy-note,
 .ys-ec-permission-admin .ys-ec-self-note {
     margin: 2px 0 0;
-    color: #64748b;
-    font-size: 11.5px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
     line-height: 1.45;
 }
 
@@ -791,8 +806,8 @@
 }
 
 .ys-ec-permission-admin .ys-ec-copy-source {
-    color: #64748b;
-    font-size: 11.5px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
 }
 
 /* 主選單分頁：從子選單複製來的頂層項 */
@@ -828,12 +843,12 @@
 
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] .menu-line strong {
     color: #475569;
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 500;
 }
 
 .ys-ec-permission-admin .ys-ec-permission-table tbody tr[data-level="self"] .menu-line code {
-    color: #94a3b8;
+    color: var(--ysca-muted, #5f6773);
 }
 
 /* ── 複製項的圖示欄位 ── */
@@ -893,7 +908,7 @@
     background: transparent;
     border: 1px dashed #d1d5db;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: 13px;
 }
 
 .ys-ec-permission-admin .ys-ec-icon-input:focus {
@@ -961,8 +976,8 @@
     justify-content: space-between;
     gap: 8px;
     margin-top: 8px;
-    color: #64748b;
-    font-size: 11px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
     line-height: 1.4;
 }
 
@@ -973,7 +988,7 @@
     background: #ffffff;
     border: 1px solid #d1d5db;
     border-radius: 6px;
-    font-size: 11.5px;
+    font-size: 13px;
     cursor: pointer;
 }
 
@@ -1059,11 +1074,9 @@
     gap: 6px;
     padding: 4px 2px;
 }
-.ys-am-access .ys-am-access__user .ysca-field__hint {
-    font-size: 12px;
-}
+/* v1.11.0：帳號旁的說明不再縮成 12px，照中央樣式的欄位說明（13px、內文色） */
 .ys-am-access .ys-am-access__form code {
-    font-size: 12px;
+    font-size: 13px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1125,7 +1138,7 @@
     border-radius: 999px;
     background: var(--ysca-primary-soft, #eef5ff);
     color: var(--ysca-primary-strong, #123f9c);
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.6;
     overflow-wrap: anywhere;
 }
@@ -1152,7 +1165,7 @@
     padding: 4px 8px;
     border: 1px solid #d1d5db;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 13px;
 }
 .ys-ec-permission-admin .ys-ec-access__results {
     margin: 0;
@@ -1168,7 +1181,7 @@
 .ys-ec-permission-admin .ys-ec-access__results li {
     margin: 0;
     padding: 5px 10px;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
 }
 .ys-ec-permission-admin .ys-ec-access__results li:hover,
@@ -1178,7 +1191,7 @@
     outline: none;
 }
 .ys-ec-permission-admin .ys-ec-access__results li.no-results {
-    color: #9ca3af;
+    color: var(--ysca-muted, #5f6773);
     cursor: default;
     font-style: italic;
 }
@@ -1188,7 +1201,7 @@
 .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access__note {
     margin: 0;
     color: #b45309;
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.5;
 }
 .ys-ec-permission-admin .ys-ec-permission-table .ys-ec-access-apply-children {
@@ -1202,7 +1215,7 @@
     align-items: center;
     gap: 4px 14px;
     margin-top: 4px;
-    font-size: 12px;
+    font-size: 13px;
     color: #4b5563;
 }
 .ys-ec-permission-admin .ys-ec-row-options label {
@@ -1214,7 +1227,7 @@
     max-width: 180px;
     min-height: 26px;
     padding: 0 22px 0 6px;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 24px;
 }
 
@@ -1233,7 +1246,7 @@
     flex: 1 1 160px;
     min-width: 0;
     padding: 3px 8px;
-    font-size: 12px;
+    font-size: 13px;
 }
 .ys-ec-permission-admin .ys-ec-custom-fields .ys-ec-custom-url {
     flex-basis: 240px;
@@ -1276,7 +1289,8 @@
 .ys-ec-permission-admin .ys-ec-preview-bar .description {
     flex-basis: 100%;
     margin: 0;
-    font-size: 12px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
 }
 .ys-ec-permission-admin .ys-ec-defaults__check {
     flex-basis: 100%;
@@ -1300,7 +1314,7 @@
 .ys-ec-permission-admin .ys-ec-pv {
     padding: 0 6px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.7;
     white-space: nowrap;
 }

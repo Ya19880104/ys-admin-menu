@@ -6,8 +6,8 @@
  *   - 白牌設置（render_settings）：上傳 LOGO + Footer 文字
  *   - 授權設置（render_license） ：授權狀態 + 授權碼啟用 + 更新查詢
  *
- * v2.45.20（Phase R2.4-G）：套用 YSAdminApp shell — 與其他 YS CART admin 頁面
- * 視覺一致（白底 ysca-card / sidebar + topbar 統一）。User LIVE 1920x1080
+ * v2.45.20：套用 YSAdminApp shell — 與其他 YS CART admin 頁面
+ * 視覺一致（白底 ysca-card / sidebar + topbar 統一）。實際在 1920x1080 的畫面上
  * 確認 v2.39.12 的「白牌頁面保留 WP-native UI」決定造成視覺斷裂：白牌設置 page
  * 完全沒 ysca-page-root shell、跟其他 YS CART 後台 page 視覺落差太大。
  *
@@ -19,7 +19,7 @@
  *
  * 歷史（v2.39.12 → v2.45.20）：
  *   v2.39.12 原本以「白牌頁面是給架站者用」為由保留 WP-native UI；user 在
- *   v2.45.20 LIVE 操作回報視覺斷裂，重新評估後採用統一 shell — 既有 user 反饋
+ *   v2.45.20 實際操作時回報視覺斷裂，重新評估後採用統一 shell — 既有 user 反饋
  *   重於假設性的角色區分，且 YSAdminApp shell 本身已有 ysca-wp-chrome-toggle
  *   讓需要切換 WP 原生選單的 user 一鍵 reveal。
  *

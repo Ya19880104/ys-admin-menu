@@ -1,6 +1,6 @@
 <?php
 /**
- * 權限設置 REST Controller（v2.38.2 BATCH I7 + I8）
+ * 權限設置 REST Controller（v2.38.2）
  *
  * 取代 v2.37.1 的 admin-post 寫法，全面改成 REST：
  *
@@ -420,8 +420,8 @@ class YSPermissionController {
 	/**
 	 * v1.7.0：POST /admin/permissions/preview — 以某位使用者試算。
 	 *
-	 * Body：{ user_id, rows: [ { kind: top|sub|copy, slug, parent, cap } ] }（設定頁表格上的列）。
-	 * 回傳每一列：sidebar＝側欄看不看得到、url＝直接開網址進不進得去（本外掛的規則＋WordPress 權限 cap）。
+	 * Body：{ user_id, rows: [ { kind: top|sub|copy|page, slug, parent, cap } ] }（設定頁表格上的列；v1.11.0 的 page＝「不在側欄上的頁面規則」那一區）。
+	 * 回傳每一列：sidebar＝側欄看不看得到（page 是 null）、url＝直接開網址進不進得去（本外掛的規則＋WordPress 權限 cap）。
 	 * 照目前已存的設定算；不切換身分、不寫任何東西。WordPress 自己的規則（例如子選單全部沒權限時頂層也不顯示）不在試算範圍。
 	 */
 	public static function preview_for_user( \WP_REST_Request $request ): \WP_REST_Response {
@@ -439,7 +439,8 @@ class YSPermissionController {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
-			$kind   = in_array( $row['kind'] ?? '', [ 'top', 'sub', 'copy' ], true ) ? (string) $row['kind'] : 'top';
+			// v1.11.0：page＝「不在側欄上的頁面規則」那一區的列：側欄上沒有，只算網址（sidebar 回 null）。
+			$kind   = in_array( $row['kind'] ?? '', [ 'top', 'sub', 'copy', 'page' ], true ) ? (string) $row['kind'] : 'top';
 			$slug   = is_scalar( $row['slug'] ?? null ) ? wp_specialchars_decode( (string) $row['slug'] ) : '';
 			$parent = is_scalar( $row['parent'] ?? null ) ? wp_specialchars_decode( (string) $row['parent'] ) : '';
 			$cap    = is_scalar( $row['cap'] ?? null ) ? sanitize_key( (string) $row['cap'] ) : '';
@@ -447,7 +448,9 @@ class YSPermissionController {
 				continue;
 			}
 			$can = '' === $cap || user_can( $uid, $cap );
-			if ( 'copy' === $kind ) {
+			if ( 'page' === $kind ) {
+				$sidebar = null;
+			} elseif ( 'copy' === $kind ) {
 				$sidebar = YSMenuRouter::copy_allows( $slug, $parent, $config, $uid );
 			} elseif ( 'sub' === $kind ) {
 				$sidebar = YSMenuRouter::sidebar_allows( $parent, true, $config, $uid ) && YSMenuRouter::sidebar_allows( $slug, false, $config, $uid, [], $parent );
@@ -460,7 +463,7 @@ class YSPermissionController {
 				'slug'    => $slug,
 				'parent'  => $parent,
 				'kind'    => $kind,
-				'sidebar' => $can && $sidebar,
+				'sidebar' => null === $sidebar ? null : ( $can && $sidebar ),
 				'url'     => '' === $page ? null : ( $can && YSMenuRouter::url_allows( $page, $config, $uid ) ),
 			];
 		}
@@ -469,14 +472,17 @@ class YSPermissionController {
 				'success' => true,
 				'user'    => [ 'id' => $uid, 'name' => (string) $user->display_name, 'roles' => array_values( (array) $user->roles ) ],
 				'rows'    => $out,
+				// v1.11.0：超過 MAX_PREVIEW_ROWS 沒算的列數（表格的列在前、「不在側欄上的頁面規則」在後），畫面照實寫出來。
+				'skipped' => is_array( $body['rows'] ?? null ) ? max( 0, count( $body['rows'] ) - self::MAX_PREVIEW_ROWS ) : 0,
 			],
 			200
 		);
 	}
 
 	/**
-	 * v1.7.0：選單代稱直接開網址時，本外掛判斷用的頁面（跟 guard_hidden_pages() 看的 current_admin_request_slug() 同一種寫法）：
+	 * v1.7.0：選單代稱直接開網址時，本外掛判斷用的頁面（跟 guard_hidden_pages() 看的同一種寫法）：
 	 * admin.php?page=X → X；edit.php?post_type=X、post-new.php?post_type=X 保留 post_type；其他 .php 頁只看檔名；外掛頁的代稱照舊。
+	 * v1.11.0：分類列表頁 edit-tags.php?taxonomy=X（&amp;post_type=Y）→ YSMenuRouter::taxonomy_page_key()（直接開網址也照那個分類選單的列判斷）。
 	 */
 	private static function preview_page_of( string $slug ): string {
 		$slug = ltrim( trim( $slug ), './' );
@@ -489,6 +495,13 @@ class YSPermissionController {
 		$file = explode( '?', $slug, 2 )[0];
 		if ( in_array( $file, [ 'edit.php', 'post-new.php' ], true ) && preg_match( '/[?&]post_type=([a-z0-9_\-]+)/i', $slug, $m ) && 'post' !== strtolower( $m[1] ) ) {
 			return $file . '?post_type=' . strtolower( $m[1] );
+		}
+		if ( 'edit-tags.php' === $file ) {
+			$args = [];
+			wp_parse_str( str_replace( '&amp;', '&', (string) ( explode( '?', $slug, 2 )[1] ?? '' ) ), $args );
+			$taxonomy = is_string( $args['taxonomy'] ?? null ) ? sanitize_key( $args['taxonomy'] ) : '';
+			$type     = is_string( $args['post_type'] ?? null ) ? sanitize_key( $args['post_type'] ) : '';
+			return YSMenuRouter::taxonomy_page_key( '' !== $taxonomy ? $taxonomy : 'post_tag', $type );
 		}
 		return $file;
 	}
@@ -638,6 +651,23 @@ class YSPermissionController {
 			);
 		}
 
+		// v1.11.0：「不在側欄上的頁面規則」一次最多改 1000 個、移除 1000 個頁面。超過就整批不存（什麼都不寫，不會只存前面一部分），
+		// 回明確的錯誤，請分幾次儲存。
+		if ( isset( $payload['unlisted'] ) && is_array( $payload['unlisted'] ) ) {
+			foreach ( [ 'changed', 'deleted' ] as $part ) {
+				if ( is_array( $payload['unlisted'][ $part ] ?? null ) && count( $payload['unlisted'][ $part ] ) > self::MAX_UNLISTED ) {
+					return new \WP_REST_Response(
+						[
+							'success' => false,
+							'code'    => 'ys_admin_menu_unlisted_too_many',
+							'error'   => '「不在側欄上的頁面規則」一次最多修改 ' . self::MAX_UNLISTED . ' 個頁面、移除 ' . self::MAX_UNLISTED . ' 個頁面，這次超過了，什麼都沒有儲存。請分幾次修改後再儲存。',
+						],
+						400
+					);
+				}
+			}
+		}
+
 		$existing = YSMenuRouter::get_config();
 		$existing['wp_native'] = (array) ( $existing['wp_native'] ?? [] );
 		$existing['ys_cart']   = (array) ( $existing['ys_cart'] ?? [] );
@@ -702,6 +732,12 @@ class YSPermissionController {
 			}
 		}
 
+		// v1.11.0：「不在側欄上的頁面規則」那一區的修改與移除（只動那個分頁裡同一個頁面的列；沒送這一段的舊頁面不動）。
+		// 這次表格送出或列出的頁面（那個分頁的 rendered_slugs、items）不給這一段改刪：那些列以表格送來的為準。
+		if ( isset( $payload['unlisted'] ) && is_array( $payload['unlisted'] ) ) {
+			$existing = self::apply_unlisted_edits( $existing, $payload['unlisted'], get_current_user_id(), self::table_keys( $payload, $payload['unlisted'] ) );
+		}
+
 		// v1.3.0：子選單「複製到主選單」（top_copies）。兩個分頁都會送：「全部選單」新增與刪除、
 		// 「主選單（頂層）」刪除。只動頁面載入時列出的複製項（rendered），其餘原樣保留；
 		// 刪掉的複製項，它在主選單分頁的設定列（排序、名稱、圖示…）一併清掉。
@@ -736,7 +772,7 @@ class YSPermissionController {
 		}
 
 		// user_overrides slice
-		// v2.39.0 BATCH Q1：支援兩種 payload 結構
+		// v2.39.0：支援兩種 payload 結構
 		//   - 新（v2.39+）：{ user_overrides: { items: [ { user_id, visible_slugs, hide_ys_cart }, ... ] } }
 		//   - 舊（legacy）：{ user_overrides: { "5": { visible_slugs: [...] }, ... } }
 		// 兩者都存進 $existing['user_overrides']['items'] 統一格式
@@ -875,6 +911,255 @@ class YSPermissionController {
 		}
 
 		return $submitted;
+	}
+
+	/** v1.11.0：「不在側欄上的頁面規則」一次最多處理幾個頁面（修改、移除各自算；超過就整批不存，save_menu_config()）。 */
+	private const MAX_UNLISTED = 1000;
+
+	/**
+	 * v1.11.0：設定裡有、這次設定頁表格沒列出來的頁面規則（merge_unrendered_items() 會原樣保留、照樣生效的那些列），
+	 * 給設定頁「不在側欄上的頁面規則」那一區列出來，能看、能改、能刪。一個頁面（slug_key()）一筆，照設定裡第一次出現的順序。
+	 *
+	 * 只列帶規則的列（隱藏、角色、僅限本人、誰看得到）；分隔列、沒有規則的列、複製項與自訂連結自己的列（它們在主選單分頁管）不列。
+	 * 每一筆顯示那個頁面最後一列的值（跟表格一樣：同一個頁面有好幾列時，表格顯示最後一列），rows 是那個頁面在這個分頁有幾列。
+	 *
+	 * kind：
+	 *   - bound_to_other：「僅限本人」綁給別的帳號（側欄看最後一列、網址看第一列，任一邊綁給別人就算；bound_to＝那個帳號）。只能看。
+	 *   - bound_to_missing：「僅限本人」綁給的帳號都已經不存在（刪掉的帳號、從別站匯入的設定；bound_to＝那個帳號）。這一頁連管理員
+	 *     都打不開，只能移除（v1.11.0）。
+	 *   - not_registered：這次請求沒有這個選單（不是選單的頁面、停用中外掛的頁面、已經改名或拿掉的選單）。
+	 *   - other：有登記在選單上，但你的側欄沒有（只有其他角色或帳號的側欄有）。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param string              $tab             'wp_native' | 'ys_cart'
+	 * @param array<int,mixed>    $listed_slugs    表格上列出的頁面（設定頁的 data-slug）。
+	 * @param int                 $user_id         打開設定頁的帳號。
+	 * @param array<int,mixed>    $registered_slugs 這次請求登記過的選單（YSMenuRouter::registered_menu_keys()）。
+	 * @return array<int, array<string,mixed>>
+	 */
+	public static function unlisted_rows( array $config, string $tab, array $listed_slugs, int $user_id, array $registered_slugs ): array {
+		$tab   = 'ys_cart' === $tab ? 'ys_cart' : 'wp_native';
+		$items = $config[ $tab ]['items'] ?? [];
+		if ( ! is_array( $items ) || [] === $items ) {
+			return [];
+		}
+		$set = static function ( array $slugs ): array {
+			$out = [];
+			foreach ( $slugs as $slug ) {
+				if ( is_string( $slug ) && '' !== $slug ) {
+					$out[ YSMenuRouter::slug_key( $slug ) ] = true;
+				}
+			}
+			return $out;
+		};
+		$listed     = $set( $listed_slugs );
+		$registered = $set( $registered_slugs );
+		// 複製項、自訂連結自己的列（主選單分頁）：只管那個連結，由它們自己的列管。
+		$own_links = [];
+		if ( 'wp_native' === $tab ) {
+			foreach ( self::sanitize_top_copies( (array) ( $config['top_copies']['items'] ?? [] ) ) as $copy ) {
+				$own_links[ YSMenuRouter::slug_key( YSMenuRouter::copy_menu_key( $copy['slug'], $copy['parent_slug'] ) ) ] = true;
+			}
+			foreach ( self::sanitize_custom_items( (array) ( $config['custom_items']['items'] ?? [] ) ) as $custom ) {
+				$own_links[ YSMenuRouter::slug_key( YSMenuRouter::custom_menu_key( $custom['url'] ) ) ] = true;
+			}
+		}
+
+		$found = [];
+		foreach ( $items as $row ) {
+			if ( ! is_array( $row ) || ! empty( $row['separator'] ) || ! is_string( $row['slug'] ?? null ) || '' === $row['slug'] ) {
+				continue;
+			}
+			$key = YSMenuRouter::slug_key( $row['slug'] );
+			if ( '' === $key || isset( $listed[ $key ] ) || isset( $own_links[ $key ] ) ) {
+				continue;
+			}
+			$found[ $key ][] = $row;
+		}
+
+		$sidebar_map = YSMenuRouter::sidebar_self_only_map( $config );
+		$out         = [];
+		foreach ( $found as $key => $rows ) {
+			$has_rules = false;
+			foreach ( $rows as $row ) {
+				if ( ! empty( $row['hide'] ) || [] !== array_filter( (array) ( $row['roles'] ?? [] ) ) || (int) ( $row['self_only_uid'] ?? 0 ) > 0
+					|| null !== YSMenuRouter::sanitize_access( $row['access'] ?? null ) ) {
+					$has_rules = true;
+					break;
+				}
+			}
+			if ( ! $has_rules ) {
+				continue;
+			}
+			$last  = $rows[ count( $rows ) - 1 ];
+			$bound = self::bound_elsewhere( (string) $key, (string) $last['slug'], $config, $sidebar_map, $user_id );
+			$gone  = self::bound_accounts_gone( $bound );
+			$alive = array_values( array_filter( $bound, static fn( int $uid ): bool => false !== get_userdata( $uid ) ) );
+			$out[] = [
+				'key'           => (string) $key,
+				'slug'          => (string) $last['slug'],
+				'level'         => 'ys_cart' === $tab && 'sub' === ( $last['level'] ?? 'top' ) ? 'sub' : 'top',
+				'parent'        => is_string( $last['parent_slug'] ?? null ) ? $last['parent_slug'] : '',
+				'kind'          => [] === $bound ? ( isset( $registered[ $key ] ) ? 'other' : 'not_registered' ) : ( $gone ? 'bound_to_missing' : 'bound_to_other' ),
+				'bound_to'      => $gone ? $bound[0] : ( $alive[0] ?? 0 ),
+				'rows'          => count( $rows ),
+				'hide'          => ! empty( $last['hide'] ),
+				'roles'         => array_values( array_filter( array_map( 'sanitize_key', array_filter( (array) ( $last['roles'] ?? [] ), 'is_string' ) ) ) ),
+				'access'        => YSMenuRouter::sanitize_access( $last['access'] ?? null ),
+				'self_only_uid' => (int) ( $last['self_only_uid'] ?? 0 ),
+				'core_rules'    => [] !== array_filter( $rows, static fn( array $r ): bool => array_key_exists( 'visibility', $r ) ),
+			];
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.11.0：這個頁面的「僅限本人」綁給的別的帳號：側欄看的（後面的列蓋前面，兩個分頁一起算）與直接開網址看的（第一列），
+	 * 綁給 $user_id 以外的帳號就列出來（側欄的在前、不重複）；都沒有回空陣列。
+	 *
+	 * @param array<string,mixed> $config
+	 * @param array<string,int>   $sidebar_map YSMenuRouter::sidebar_self_only_map()
+	 * @return array<int,int>
+	 */
+	private static function bound_elsewhere( string $key, string $slug, array $config, array $sidebar_map, int $user_id ): array {
+		$out  = [];
+		$side = (int) ( $sidebar_map[ $key ] ?? 0 );
+		if ( $side > 0 && $side !== $user_id ) {
+			$out[] = $side;
+		}
+		$url = YSMenuRouter::url_self_only_uid( $slug, $config );
+		if ( $url > 0 && $url !== $user_id && ! in_array( $url, $out, true ) ) {
+			$out[] = $url;
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.11.0：綁給的帳號都已經不存在（刪掉的帳號、從別站匯入的 ID）。這種頁面誰都打不開（「僅限本人」優先於管理員），
+	 * 「不在側欄上的頁面規則」那一區讓管理員移除；修改照樣不准。
+	 *
+	 * @param array<int,int> $uids bound_elsewhere()
+	 */
+	private static function bound_accounts_gone( array $uids ): bool {
+		if ( [] === $uids ) {
+			return false;
+		}
+		foreach ( $uids as $uid ) {
+			if ( false !== get_userdata( (int) $uid ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * v1.11.0：設定頁「不在側欄上的頁面規則」那一區送來的修改與移除（unlisted：{ tab, changed:[ { key, roles, access, hide } ], deleted:[ key ] }）。
+	 *   - 只動 tab 那個分頁裡同一個頁面（slug_key()）的列；同一個頁面有好幾列時一起改、一起刪。
+	 *   - changed：只改誰看得到（roles／access：跟表格一樣，「只有這些角色」存成 roles）與隱藏；順序、名稱、顏色、開新分頁、
+	 *     YS CART 的 visibility 等其他欄位不動。
+	 *   - deleted：拿掉那個頁面的列。
+	 *   - 「僅限本人」綁給別的帳號的頁面不動（設定頁也只讓看）；綁給的帳號都已經不存在的只准移除（bound_accounts_gone()）。
+	 *     格式不對的部分略過。
+	 *   - 這次表格送出或列出的頁面（$table_keys，table_keys()）不動：那些列以表格送來的為準（手寫的請求也一樣）。
+	 *
+	 * @param array<string,mixed> $config     已合併這次表格內容的設定。
+	 * @param array<string,mixed> $slice
+	 * @param array<string,bool>  $table_keys table_keys()
+	 * @return array<string,mixed>
+	 */
+	private static function apply_unlisted_edits( array $config, array $slice, int $user_id, array $table_keys = [] ): array {
+		$tab = 'ys_cart' === ( $slice['tab'] ?? null ) ? 'ys_cart' : 'wp_native';
+		if ( ! is_array( $config[ $tab ]['items'] ?? null ) ) {
+			return $config;
+		}
+
+		// 筆數上限（MAX_UNLISTED）在 save_menu_config() 開頭整批檢查過，這裡不再截斷。
+		$deleted = [];
+		foreach ( is_array( $slice['deleted'] ?? null ) ? $slice['deleted'] : [] as $slug ) {
+			$key = is_string( $slug ) ? YSMenuRouter::slug_key( $slug ) : '';
+			if ( '' !== $key && ! isset( $table_keys[ $key ] ) ) {
+				$deleted[ $key ] = true;
+			}
+		}
+		$changed = [];
+		foreach ( is_array( $slice['changed'] ?? null ) ? $slice['changed'] : [] as $edit ) {
+			$key = is_array( $edit ) && is_string( $edit['key'] ?? null ) ? YSMenuRouter::slug_key( $edit['key'] ) : '';
+			if ( '' === $key || isset( $deleted[ $key ] ) || isset( $table_keys[ $key ] ) ) {
+				continue;
+			}
+			$roles = [];
+			foreach ( is_array( $edit['roles'] ?? null ) ? $edit['roles'] : [] as $role ) {
+				$role = is_string( $role ) ? sanitize_key( $role ) : '';
+				if ( '' !== $role && ! in_array( $role, $roles, true ) ) {
+					$roles[] = $role;
+				}
+			}
+			// 跟表格的列同一套：清理過的 access 等於「只有這些角色」而且這一列沒有角色時，改存 roles。
+			$rules           = self::with_row_extras( [ 'roles' => $roles ], [ 'access' => $edit['access'] ?? null ] );
+			$changed[ $key ] = [
+				'roles'  => $rules['roles'],
+				'access' => $rules['access'] ?? null,
+				'hide'   => ! empty( $edit['hide'] ),
+			];
+		}
+		if ( [] === $deleted && [] === $changed ) {
+			return $config;
+		}
+
+		$sidebar_map = YSMenuRouter::sidebar_self_only_map( $config );
+		$out         = [];
+		foreach ( $config[ $tab ]['items'] as $row ) {
+			$key = is_array( $row ) && empty( $row['separator'] ) && is_string( $row['slug'] ?? null ) ? YSMenuRouter::slug_key( $row['slug'] ) : '';
+			if ( '' === $key || ( ! isset( $deleted[ $key ] ) && ! isset( $changed[ $key ] ) ) ) {
+				$out[] = $row;
+				continue;
+			}
+			// 綁給別的帳號的頁面不動；綁給的帳號都已經不存在時只准移除（改照樣不准）。
+			$bound = self::bound_elsewhere( $key, (string) $row['slug'], $config, $sidebar_map, $user_id );
+			if ( [] !== $bound && ! ( isset( $deleted[ $key ] ) && self::bound_accounts_gone( $bound ) ) ) {
+				$out[] = $row;
+				continue;
+			}
+			if ( isset( $deleted[ $key ] ) ) {
+				continue;
+			}
+			$row['roles'] = $changed[ $key ]['roles'];
+			$row['hide']  = $changed[ $key ]['hide'];
+			unset( $row['access'] );
+			if ( null !== $changed[ $key ]['access'] ) {
+				$row['access'] = $changed[ $key ]['access'];
+			}
+			$out[] = $row;
+		}
+		$config[ $tab ]['items'] = $out;
+		return $config;
+	}
+
+	/**
+	 * v1.11.0：這次存檔表格送出或列出的頁面：unlisted 那個分頁的 rendered_slugs 與 items 的 slug（slug_key() 後）。
+	 * apply_unlisted_edits() 不動這些頁面。
+	 *
+	 * @param array<string,mixed> $payload
+	 * @param array<string,mixed> $slice unlisted
+	 * @return array<string,bool>
+	 */
+	private static function table_keys( array $payload, array $slice ): array {
+		$tab   = 'ys_cart' === ( $slice['tab'] ?? null ) ? 'ys_cart' : 'wp_native';
+		$table = is_array( $payload[ $tab ] ?? null ) ? $payload[ $tab ] : [];
+		$slugs = is_array( $table['rendered_slugs'] ?? null ) ? $table['rendered_slugs'] : [];
+		foreach ( is_array( $table['items'] ?? null ) ? $table['items'] : [] as $row ) {
+			if ( is_array( $row ) ) {
+				$slugs[] = $row['slug'] ?? null;
+			}
+		}
+		$out = [];
+		foreach ( $slugs as $slug ) {
+			$key = is_string( $slug ) ? YSMenuRouter::slug_key( $slug ) : '';
+			if ( '' !== $key ) {
+				$out[ $key ] = true;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1335,7 +1620,7 @@ class YSPermissionController {
 				$roles = array_values( array_unique( array_filter( array_map( 'sanitize_key', $row['roles'] ) ) ) );
 			}
 
-			// v2.39.0 BATCH Q3：hide flag（boolean）
+			// v2.39.0：hide flag（boolean）
 			$hide = ! empty( $row['hide'] );
 
 			$item = [
@@ -1519,7 +1804,7 @@ class YSPermissionController {
 				? sanitize_text_field( (string) $row['parent_slug'] )
 				: null;
 
-			// v2.39.0 BATCH Q3：hide flag（boolean）
+			// v2.39.0：hide flag（boolean）
 			$hide = ! empty( $row['hide'] );
 
 			// v1.2.0：自訂顯示名稱（先前 ys_cart 遺漏此欄位 → 使用者填了必被清空）
@@ -1557,7 +1842,7 @@ class YSPermissionController {
 	}
 
 	/**
-	 * v2.39.0 BATCH Q1：Sanitize user_overrides items（新 schema）
+	 * v2.39.0：Sanitize user_overrides items（新 schema）
 	 *
 	 * Payload shape:
 	 *   [
@@ -1616,7 +1901,7 @@ class YSPermissionController {
 	}
 
 	/**
-	 * v2.39.0 BATCH Q1：把 v2.37.1 legacy schema upgrade 成新 items[]
+	 * v2.39.0：把 v2.37.1 legacy schema upgrade 成新 items[]
 	 *
 	 * Legacy:
 	 *   { "5": { "visible_slugs": [...] }, "7": { "visible_slugs": [...] } }

@@ -23,7 +23,7 @@ final class YSLoginGuardSchema {
 	/** 資料表版本。表的結構改了就加一（2：計數表加 net48 欄與索引、四個記上限用的保留列）。 */
 	public const DB_VERSION = '2';
 
-	/** 建表失敗後多久內不再重試（秒，審查 P2-12）。 */
+	/** 建表失敗後多久內不再重試（秒）。 */
 	public const RETRY_AFTER = 600;
 
 	/**
@@ -135,7 +135,7 @@ final class YSLoginGuardSchema {
 	 * 唯一建表的地方（§4.7.4）。成功才把版本鍵寫成目前版本；失敗記 health，10 分鐘內不再重試。
 	 *
 	 * @param bool $force 手動的入口（WP-CLI 的 status --repair 與 enable、設定頁的儲存、外掛啟用）不管 10 分鐘的冷卻：
-	 *                    管理員補好權限之後要能馬上重試（實作審查 A 線 P3-4）。admin_init 的自動重試照樣有冷卻。
+	 *                    管理員補好權限之後要能馬上重試。admin_init 的自動重試照樣有冷卻。
 	 */
 	public static function ensure( bool $force = false ): bool {
 		global $wpdb;
@@ -168,7 +168,7 @@ final class YSLoginGuardSchema {
 		foreach ( self::tables() as $table ) {
 			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 			// 大小寫不分（跟 dbDelta 一樣）：lower_case_table_names=1（Windows、macOS 的預設）時 SHOW TABLES 回小寫，
-			// 大寫的資料表前綴也算建好了（實作審查 A 線 P3-3）。
+			// 大寫的資料表前綴也算建好了。
 			if ( ! is_string( $found ) || 0 !== strcasecmp( $found, $table ) ) {
 				YSLoginGuardHealth::record( 'ensure_failed', [ 'why' => 'missing_table' ], true );
 				return false;

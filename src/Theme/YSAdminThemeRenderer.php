@@ -42,6 +42,14 @@ class YSAdminThemeRenderer {
 	}
 
 	/**
+	 * v1.11.0：站上有 YS CART，本外掛的皮膚讓位（register() 不掛任何 hook）：側欄的配色、字級、留白由 YS CART 的
+	 * 「原生選單樣式」管。設定頁用這個判斷要不要提示「這裡的設定目前不會套用」。分組標籤樣式不在皮膚裡（YSMenuRouter 輸出），照樣套用。
+	 */
+	public static function yields_to_ys_cart(): bool {
+		return self::should_stand_down();
+	}
+
+	/**
 	 * Record the ownership decision once per standalone version.
 	 */
 	private static function log_stand_down_once(): void {

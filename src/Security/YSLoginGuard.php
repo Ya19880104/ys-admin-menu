@@ -66,7 +66,7 @@ final class YSLoginGuard {
 
 	/**
 	 * 這個請求已經由本外掛擋下（跨站拒絕或鎖定）。登入頁的提醒看這個，不看閘門：wp_login_failed 0 的
-	 * YSAuthGate::restore() 在 login_header 之前就把閘門打開了（實作審查 A 線 P2-1）。
+	 * YSAuthGate::restore() 在 login_header 之前就把閘門打開了。
 	 */
 	private static bool $blocked = false;
 
@@ -82,7 +82,7 @@ final class YSLoginGuard {
 		YSLoginGuardHealth::reset();
 		YSLoginGuardCapacity::reset();
 		YSLoginGuardNotifier::reset();
-		// 不看總開關的三個（安全審查 B 線 P2-2、P3-4；差異審查 SEC P3-1、CODE N1）：
+		// 不看總開關的三個：
 		// - 每天清理的 callback：總開關關掉之後，紀錄照樣依保留天數清掉（cron_cleanup 自己會看資料表在不在；
 		//   排程只在打開過時才建立，從沒打開過的站不會多出排程或查詢）。
 		// - login_init 再重設一次這個請求記住的 IP 與判斷（設計 §3.3 第 4 步）。
@@ -130,7 +130,7 @@ final class YSLoginGuard {
 
 	/**
 	 * 外掛啟用時：總開關是開的才建表（§4.7.4）。資料表在（打開過）就把每天的清理排回去：停用時排程被取消，
-	 * 再啟用時總開關若關著，紀錄照樣要依保留天數清掉（安全審查 B 線 P2-2）。沒有表的站不排。
+	 * 再啟用時總開關若關著，紀錄照樣要依保留天數清掉。沒有表的站不排。
 	 */
 	public static function activate(): void {
 		if ( YSLoginGuardSettings::enabled() ) {
@@ -149,8 +149,7 @@ final class YSLoginGuard {
 	/**
 	 * admin_init：總開關是開的（register 才會掛）、有 manage_options、不是 admin-ajax，而且版本鍵不是目前版本或要補表
 	 * （repair_pending()）時才建表。admin-ajax.php 與 admin-post.php 在權限檢查前就觸發 admin_init，所以要自己看權限。
-	 * 先看權限與 admin-ajax，再讀 health：health 不自動載入，讀它可能要查一句，前台訪客的 admin-ajax、admin-post 請求不能多這一句
-	 * （最終核對 A 線 F2）。
+	 * 先看權限與 admin-ajax，再讀 health：health 不自動載入，讀它可能要查一句，前台訪客的 admin-ajax、admin-post 請求不能多這一句。
 	 */
 	public static function maybe_ensure(): void {
 		if ( wp_doing_ajax() || ! current_user_can( 'manage_options' ) ) {
@@ -165,7 +164,7 @@ final class YSLoginGuard {
 	/**
 	 * 版本鍵是目前版本，但要檢查並補表：
 	 * - 計數表在、只少紀錄表或「鍵＋帳號」小表（table_missing）；
-	 * - 最近一小時有查詢回報表不存在、再確認時 SHOW TABLES 也失敗（query_failed 的 unverified，最終核對 A 線 F4）。
+	 * - 最近一小時有查詢回報表不存在、再確認時 SHOW TABLES 也失敗（query_failed 的 unverified）。
 	 *   不知道是哪一張，交給 ensure()：dbDelta 只補不在的表與欄位，表都在時什麼都不改。問題消失一小時後就不再觸發。
 	 * ensure() 成功時兩筆都會清掉。
 	 */
@@ -197,7 +196,7 @@ final class YSLoginGuard {
 	/**
 	 * 存設定之後（設定頁、WP-CLI 都呼叫這一個）：
 	 * - 總開關從關到開時建表。
-	 * - 跨站判斷的觀察期只在「關到開」時開始（r5，審查 R4-P3-3）：存檔前不是「總開關與子開關都開」、存檔後是，才寫開始時間。
+	 * - 跨站判斷的觀察期只在「關到開」時開始：存檔前不是「總開關與子開關都開」、存檔後是，才寫開始時間。
 	 *   整頁只有一張表單，存其他分頁時兩個值都沒變，不會重算。
 	 *
 	 * @param array{enabled?:bool,cross_site_reject?:bool} $old 存檔前的值。
@@ -210,7 +209,7 @@ final class YSLoginGuard {
 			update_option( YSLoginGuardSettings::OPTION_CROSS_SITE_SINCE, time(), true );
 		}
 		// 從關到開，或開著但表不可用、要補表（少了紀錄表或小表，或表不存在而沒辦法再確認；repair_pending()）：建表。
-		// 這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻（實作審查 A 線 P3-4）。
+		// 這是管理員手動存檔，不管建表失敗後 10 分鐘的冷卻。
 		if ( ! empty( $new['enabled'] ) && ( empty( $old['enabled'] ) || ! YSLoginGuardSchema::is_ready() || self::repair_pending() ) ) {
 			YSLoginGuardSchema::ensure( true );
 		}
@@ -253,7 +252,7 @@ final class YSLoginGuard {
 		if ( '' === $ip ) {
 			return self::shared( 'via:unknown', self::SHARED_MULT, '', false );
 		}
-		// 外站的 Cloudflare Worker 在白名單之前判斷（§4.4.1 那張表的「最先判斷」；安全審查 B 線 P2-1）：它帶來的位址不可信，
+		// 外站的 Cloudflare Worker 在白名單之前判斷（§4.4.1 那張表的「最先判斷」）：它帶來的位址不可信，
 		// 不能拿去比白名單。站方自己另一個 zone 的 Worker 用 ys_admin_menu_ip_own_domains 加進來。
 		if ( YSClientIp::is_foreign_worker() ) {
 			return self::shared( 'via:cf-worker', 1, $ip, (bool) $r['from_header'] );
@@ -722,7 +721,7 @@ final class YSLoginGuard {
 	}
 
 	/**
-	 * 本站的主機（主機完全相同才算；跟 CF-Worker 的 zone 規則分開，審查 R3-P3-3）。
+	 * 本站的主機（主機完全相同才算；跟 CF-Worker 的 zone 規則分開）。
 	 *
 	 * @return string[]
 	 */
@@ -853,8 +852,7 @@ final class YSLoginGuard {
 		$stats   = YSLoginGuardStore::stat24();
 		$reasons = [];
 		// 最近一小時有查詢失敗（計數表不見、沒有權限、不明的錯誤）：失敗的那幾次照設計放行，但一定要算成沒有正常作用
-		// （§4.6、§4.10；實作審查 A 線 P2-3）。死結、逾時、連線斷掉這類暫時性的錯誤另外算：一小時內有兩分鐘以上才算
-		// （差異審查 SEC P3-4、CODE N2）。
+		// （§4.6、§4.10）。死結、逾時、連線斷掉這類暫時性的錯誤另外算：一小時內有兩分鐘以上才算。
 		$failed = YSLoginGuardHealth::get( 'query_failed' );
 		if ( null !== $failed && time() - (int) $failed['last'] < self::QUERY_FAILED_SECONDS ) {
 			$reasons[] = 'query_failed';

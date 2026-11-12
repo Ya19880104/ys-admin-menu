@@ -11,9 +11,6 @@ Thumbs.db
 # Node
 node_modules/
 
-# Claude
-.claude/
-
 # 環境 / 秘密
 .env
 .env.*

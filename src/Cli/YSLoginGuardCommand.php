@@ -14,8 +14,8 @@
  *   wp ys-admin-menu login-guard app-passwords <on|off>
  *
  * WP-CLI 本身不會被判斷或計數（沒有遠端的用戶端，§4.4.1）。輸出裡從資料庫來的字串（帳號名稱、來源）都先清掉控制字元，
- * 不會變成終端機的控制序列（審查 P2-9）。list 與 log 的 --format=json 用英文鍵、時間是 UNIX 秒（給腳本用），STDOUT 只有 JSON：
- * 沒有資料時是 []，紀錄超過 500 筆的說明寫到 STDERR（最終核對 A 線 F3）；表格是中文（給人看）。
+ * 不會變成終端機的控制序列。list 與 log 的 --format=json 用英文鍵、時間是 UNIX 秒（給腳本用），STDOUT 只有 JSON：
+ * 沒有資料時是 []，紀錄超過 500 筆的說明寫到 STDERR；表格是中文（給人看）。
  *
  * @package YangSheep\AdminMenu\Cli
  * @since   1.6.0
@@ -41,7 +41,7 @@ defined( 'ABSPATH' ) || exit;
 final class YSLoginGuardCommand {
 
 	/**
-	 * list、log 的 --format=json 欄位（英文鍵，跟每一列的鍵相同）。沒有資料時照樣用這組欄位印 []（最終核對 A 線 F3）。
+	 * list、log 的 --format=json 欄位（英文鍵，跟每一列的鍵相同）。沒有資料時照樣用這組欄位印 []。
 	 */
 	public const LIST_JSON_FIELDS = [ 'key', 'label', 'last_ip', 'window_failures', 'total_failures', 'locked_until', 'lockout_count', 'blocked_count', 'last_username', 'last_source' ];
 	public const LOG_JSON_FIELDS  = [ 'created_at', 'event', 'ip', 'key', 'username', 'source', 'code', 'origin' ];
@@ -72,7 +72,7 @@ final class YSLoginGuardCommand {
 	 * @param array<string,string> $assoc_args
 	 */
 	public function status( $args, $assoc_args ): void {
-		// 開關被別的工具改成不自動載入時，前台會先讀成「關」：在這裡改回自動載入（差異審查 SEC P3-1、CODE N1）。
+		// 開關被別的工具改成不自動載入時，前台會先讀成「關」：在這裡改回自動載入。
 		$healed = YSLoginGuardSettings::heal_autoload();
 		if ( [] !== $healed ) {
 			\WP_CLI::line( '這幾個設定原本不是自動載入（前台會讀成預設值），已經改回自動載入：' . implode( '、', $healed ) );
@@ -147,7 +147,7 @@ final class YSLoginGuardCommand {
 			$last_ip  = self::clean( YSClientIp::normalize( (string) $row['last_ip'] ) );
 			$username = self::clean( YSLoginGuardStore::sanitize_username( (string) $row['last_username'] ) );
 			$source   = self::clean( (string) $row['last_source'] );
-			// --format=json 用英文鍵、時間給 UNIX 秒（給腳本用，差異審查 CODE P3-5）；終端機的表格照樣中文。
+			// --format=json 用英文鍵、時間給 UNIX 秒（給腳本用）；終端機的表格照樣中文。
 			$rows[] = $json
 				? [
 					'key'             => $key,
@@ -419,7 +419,7 @@ final class YSLoginGuardCommand {
 		$json   = 'json' === self::format( $assoc_args );
 		$rows   = [];
 		foreach ( $logs['rows'] as $log ) {
-			// --format=json 用英文鍵、時間給 UNIX 秒、code 與 origin 分開（差異審查 CODE P3-5）；終端機的表格照樣中文。
+			// --format=json 用英文鍵、時間給 UNIX 秒、code 與 origin 分開；終端機的表格照樣中文。
 			$code   = self::clean( (string) $log['code'] );
 			$origin = self::clean( (string) $log['origin'] );
 			$rows[] = $json
@@ -454,7 +454,7 @@ final class YSLoginGuardCommand {
 		\WP_CLI\Utils\format_items( $json ? 'json' : 'table', $rows, array_keys( $rows[0] ) );
 		if ( $logs['total'] > count( $rows ) ) {
 			$more = sprintf( '（只列最新的 %d 筆，共 %d 筆）', count( $rows ), (int) $logs['total'] );
-			// JSON 模式的 STDOUT 只放 JSON（被攻擊時最常超過 500 筆，腳本偏偏在那時候要解析；最終核對 A 線 F3）：說明改用 warning，寫到 STDERR。
+			// JSON 模式的 STDOUT 只放 JSON（被攻擊時最常超過 500 筆，腳本偏偏在那時候要解析）：說明改用 warning，寫到 STDERR。
 			if ( $json ) {
 				\WP_CLI::warning( $more );
 			} else {
@@ -603,7 +603,7 @@ final class YSLoginGuardCommand {
 	}
 
 	/**
-	 * 輸出到終端機前清掉控制字元（C0、C1、方向控制字元）與不合法的 UTF-8，太長的截斷（審查 P2-9）。
+	 * 輸出到終端機前清掉控制字元（C0、C1、方向控制字元）與不合法的 UTF-8，太長的截斷。
 	 */
 	public static function clean( string $value, int $max = 300 ): string {
 		if ( 1 !== preg_match( '//u', $value ) ) {

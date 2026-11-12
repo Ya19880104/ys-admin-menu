@@ -1,6 +1,6 @@
 <?php
 /**
- * 後台選單路由器（v2.39.0 BATCH Q3）
+ * 後台選單路由器（v2.39.0）
  *
  * 在 admin_menu hook（priority 9999，AFTER all add_menu_page 呼叫）讀取
  * `ys_admin_menu_config` JSON option，套用於 WordPress 全域 $menu / $submenu：
@@ -8,12 +8,12 @@
  *   1. 若使用者 ID 在 ys_cart.hide_for_user_ids → 移除所有 ys-* 開頭的頂層選單
  *   2. 套用 wp_native.items 的 role-based 過濾
  *   3. 套用 wp_native.user_overrides — 指定使用者只看到允許的 slug
- *   4. **v2.39.0 Q3**：套用 items[].hide=true → 從 sidebar 完全移除（含 sub-page）
+ *   4. **v2.39.0**：套用 items[].hide=true → 從 sidebar 完全移除（含 sub-page）
  *   5. 依 wp_native.items[].order 重排頂層選單順序
  *   6. 注入「空白標題」分隔列（separator items）
  *   7. 透過 admin_head echo inline CSS 套用顏色
- *   8. **v2.39.0 Q3**：admin_init 攔截 ?page= 直接訪問 hidden slugs（非 super-admin → 404）
- *   9. **v2.39.0 Q1**：套用 user_overrides.items[]（含 hide_ys_cart 完全隱藏）
+ *   8. **v2.39.0**：admin_init 攔截 ?page= 直接訪問 hidden slugs（非 super-admin → 404）
+ *   9. **v2.39.0**：套用 user_overrides.items[]（含 hide_ys_cart 完全隱藏）
  *
  * Schema 範例見 YSPermissionAdmin phpdoc。
  *
@@ -46,7 +46,7 @@ class YSMenuRouter {
 		add_action( 'admin_menu', [ self::class, 'apply_config' ], 9999 );
 		add_action( 'admin_head', [ self::class, 'output_colors' ] );
 		add_action( 'admin_head', [ self::class, 'output_section_label_css' ] );
-		// v2.39.0 BATCH Q3：擋直接訪問 hidden slugs（非 super-admin）
+		// v2.39.0：擋直接訪問 hidden slugs（非 super-admin）
 		add_action( 'admin_init', [ self::class, 'guard_hidden_pages' ] );
 		// v1.1.0：造訪「已提升至頂層」的頁面時，把側欄高亮指到提升後的頂層項。
 		add_filter( 'parent_file', [ self::class, 'fix_promoted_highlight' ] );
@@ -74,7 +74,7 @@ class YSMenuRouter {
 	private const TOOLBOX_NEUTRAL_ICON = 'dashicons-screenoptions';
 
 	/**
-	 * v1.7.1（10-27 使用者：立肯官網後台出現「電商工具箱」，「是哪個外掛又給我翻譯成電商工具箱？ 莫名其妙」）：
+	 * v1.7.1（不是電商網站的後台也出現「電商工具箱」）：
 	 * 內附 Hub client 的共用整理（YSToolboxMenuNormalizer）不管網站有沒有在賣東西，都把 Hub 的頂層選單寫死成「電商工具箱」＋商店圖示。
 	 * 站上沒有 YS CART、WooCommerce、FluentCart 時改叫「YS 工具箱」、換成方塊圖示；有電商外掛的站照舊。
 	 * 只改還是「電商工具箱」的那一列：在本外掛改過名或換過圖示的照樣以設定為準。
@@ -200,6 +200,9 @@ class YSMenuRouter {
 	/**
 	 * 取得設定（保證為 array）
 	 *
+	 * v1.11.0：對外介面（供 YS CART 呼叫），簽章與語意不改。讀 ys_admin_menu_config（陣列照原樣；舊站存成 JSON 字串的
+	 * 解開；其他回空陣列）。新寫的外掛請用 YangSheep\AdminMenu\Api\YSAdminMenuApi。
+	 *
 	 * @return array<string, mixed>
 	 */
 	public static function get_config(): array {
@@ -232,6 +235,9 @@ class YSMenuRouter {
 		if ( ! $user || ! $user->exists() ) {
 			return;
 		}
+
+		// v1.11.0：「選單與權限」頁記下套用規則之前登記過的選單（「不在側欄上的頁面規則」分辨沒有這個選單、還是你的側欄看不到）。
+		self::remember_registered_menus();
 
 		// v1.5.1：「電商工具箱」的共用整理（Hub client 2.0.4 起）先在這裡跑，本外掛的設定在它之後生效。
 		self::take_over_toolbox_normalizer();
@@ -279,7 +285,7 @@ class YSMenuRouter {
 
 		// ─────────────────────────────────────────────
 		// 3. WP 原生選單 — user override（白名單模式：指定 user 只看到允許的 slug）
-		//    v2.39.0 Q1：優先讀新 user_overrides.items[]，回退 v2.37.1 wp_native.user_overrides
+		//    v2.39.0：優先讀新 user_overrides.items[]，回退 v2.37.1 wp_native.user_overrides
 		// ─────────────────────────────────────────────
 		$visible_slugs = self::resolve_visible_slugs_for_user( $config, $current_user_id );
 		if ( null !== $visible_slugs && ! is_super_admin( $current_user_id ) ) {
@@ -287,7 +293,7 @@ class YSMenuRouter {
 		}
 
 		// ─────────────────────────────────────────────
-		// 4. v2.39.0 Q3：套用 hide flag — 從 sidebar 移除（含 sub-page）
+		// 4. v2.39.0：套用 hide flag — 從 sidebar 移除（含 sub-page）
 		//     super-admin 不受影響
 		// ─────────────────────────────────────────────
 		if ( ! is_super_admin( $current_user_id ) ) {
@@ -345,6 +351,44 @@ class YSMenuRouter {
 		//    拿掉這幾列：複製項、排序、指定位置都跟 1.5.0 一樣（1.5.0 的複製項在原子選單移走之前就插入了）。
 		// ─────────────────────────────────────────────
 		self::apply_kept_promote_rows( $config, $current_user_id, $user_roles );
+	}
+
+	/**
+	 * v1.11.0：這次請求在本外掛套用規則之前登記過的選單（鍵 => true）。只在「選單與權限」頁（?page=ys-admin-menu）記，
+	 * 其他請求不多花時間；YSPermissionController::unlisted_rows() 用它分辨「不在側欄上的頁面規則」是沒有這個選單、還是你的側欄看不到。
+	 *
+	 * @var array<string,bool>
+	 */
+	private static array $registered_keys = [];
+
+	/**
+	 * v1.11.0：registered_keys 的 slug（鍵）。不是「選單與權限」頁、或還沒跑到 apply_config() 時是空陣列。
+	 *
+	 * @return array<int,string>
+	 */
+	public static function registered_menu_keys(): array {
+		return array_map( 'strval', array_keys( self::$registered_keys ) );
+	}
+
+	private static function remember_registered_menus(): void {
+		global $menu, $submenu;
+		$page = isset( $_GET['page'] ) && is_string( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要不要記，不寫資料。
+		if ( 'ys-admin-menu' !== $page ) {
+			return;
+		}
+		self::$registered_keys = [];
+		foreach ( is_array( $menu ) ? $menu : [] as $item ) {
+			if ( is_array( $item ) && '' !== (string) ( $item[2] ?? '' ) ) {
+				self::$registered_keys[ self::slug_key( (string) $item[2] ) ] = true;
+			}
+		}
+		foreach ( is_array( $submenu ) ? $submenu : [] as $rows ) {
+			foreach ( is_array( $rows ) ? $rows : [] as $sub ) {
+				if ( is_array( $sub ) && '' !== (string) ( $sub[2] ?? '' ) ) {
+					self::$registered_keys[ self::slug_key( (string) $sub[2] ) ] = true;
+				}
+			}
+		}
 	}
 
 	/**
@@ -1411,7 +1455,7 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v2.39.0 Q1：解析該 user 的 visible_slugs 白名單
+	 * v2.39.0：解析該 user 的 visible_slugs 白名單
 	 *
 	 * 優先順序：
 	 *   1. config.user_overrides.items[].user_id == $user_id 且 visible_slugs 非空 → 用此
@@ -1551,7 +1595,7 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v2.39.0 BATCH Q3：套用 hide flag — 從 sidebar 完全移除
+	 * v2.39.0：套用 hide flag — 從 sidebar 完全移除
 	 *
 	 * 規則：
 	 *   - wp_native.items[].hide=true → unset $menu[i]（top-level）
@@ -1561,6 +1605,10 @@ class YSMenuRouter {
 	 */
 	/**
 	 * Canonical permission decision for native WP menu, YS shell, and direct URLs.
+	 *
+	 * v1.11.0：對外介面（供 YS CART 呼叫），簽章與語意不改。某個帳號（null＝目前登入的人）在側欄看不看得到這個選單：
+	 * 本外掛的隱藏、角色、僅限本人、使用者覆寫，加上「誰看得到」（只藏選單的列也算擋）；$parent＝子選單在側欄上的上層。
+	 * 沒登入（帳號 0）與空字串一律回 true。新寫的外掛請用 YangSheep\AdminMenu\Api\YSAdminMenuApi::sidebar_allows()。
 	 */
 	public static function current_user_can_access_admin_slug( string $slug, ?int $user_id = null, ?string $parent = null ): bool {
 		$slug = self::normalize_admin_slug( $slug );
@@ -1864,7 +1912,13 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v1.5.0（選單搬家遷移用）：照 $config，某個帳號直接開這一頁的網址會不會被本外掛擋下（guard_hidden_pages() 的同一套判斷）。
+	 * v1.5.0：照 $config，某個帳號直接開這一頁的網址會不會被本外掛擋下（guard_hidden_pages() 的同一套判斷）。
+	 * 選單搬家遷移、以某位使用者試算都用它。
+	 *
+	 * v1.11.0：對外介面（供 YS CART 呼叫），簽章與語意不改。$page 是 guard_hidden_pages() 判斷用的頁面寫法：
+	 * admin.php?page=X 的 X、.php 檔名、edit.php?post_type=X；分類列表頁是 taxonomy_page_key() 的 edit-tags.php?taxonomy=X
+	 * （自訂文章類型的分類另帶 &post_type=Y）。true＝進得去。
+	 * 新寫的外掛請用 YangSheep\AdminMenu\Api\YSAdminMenuApi::url_allows()。
 	 *
 	 * @param array<string,mixed> $config
 	 */
@@ -2013,11 +2067,23 @@ class YSMenuRouter {
 	}
 
 	/**
+	 * v1.11.0：page_access_decision() 判斷參數裡的分類列表頁時，可見清單對應的擁有者（[ 'edit-tags.php' => 那一頁的
+	 * 分類選單寫法 ]）。設了就照它、不讀目前這個請求；null＝照目前請求（1.10.0 的行為）。
+	 *
+	 * @var array<string, array<int,string>>|null
+	 */
+	private static ?array $owner_override = null;
+
+	/**
 	 * 目前請求若是沒有選單項的編輯畫面，回傳它所屬的選單 slug（可能有多種寫法）。
+	 * v1.11.0：判斷 url_allows() 參數裡的分類列表頁時（owner_override），照那一頁算，不看目前這個請求。
 	 *
 	 * @return array<int, string>
 	 */
 	private static function request_owner_slugs( string $slug ): array {
+		if ( null !== self::$owner_override ) {
+			return self::$owner_override[ $slug ] ?? [];
+		}
 		global $pagenow;
 		if ( ! is_string( $pagenow ) || $slug !== $pagenow ) {
 			return [];
@@ -2271,8 +2337,9 @@ class YSMenuRouter {
 	 *   實際的 slug 經過同一個函式就對得上，不用重存；sanitize_text_field() 對清過的字串不會再改，存下的鍵就是它自己。
 	 * - customize.php 的 return 參數是 WordPress 依「目前這一頁」加上的，每一頁都不一樣：只留參數名、不比值。
 	 *   直接開 customize.php 的請求鍵是 customize.php（不帶參數），跟「自訂」那一列的鍵不同，直連守門照舊。
-	 * - 帶 %xx 的網址與 customize.php 的連結先還原 HTML 實體（設定頁存下的是瀏覽器還原過的字串）。
-	 *   其他 slug 不還原（例如自訂文章類型分類子選單的 &amp;）：原本先還原再比的地方照舊先還原，再算鍵。
+	 * - 帶 %xx 的網址、customize.php 的連結與帶 &amp; 的 slug 先還原 HTML 實體（設定頁存下的是瀏覽器還原過的字串）。
+	 *   帶 &amp; 的是 v1.11.0 起：自訂文章類型的分類子選單在側欄上是 edit-tags.php?taxonomy=X&amp;post_type=Y，設定頁存下的是
+	 *   &post_type=Y，1.4.0～1.10.0 兩邊對不上（側欄藏不掉、表格看不到已存的設定、下一次存檔就被洗掉）。其他 slug 不還原。
 	 *
 	 * 什麼時候用鍵：原字串對得上的列一律照原字串（跟 1.5.0 完全一樣）；只有「存檔時會被改掉」的實際 slug
 	 * （slug_is_altered()）原字串對不上，才改用鍵。權限判斷（current_user_can_access_admin_slug() 這一系列）
@@ -2284,9 +2351,10 @@ class YSMenuRouter {
 		}
 		$key = trim( $slug );
 		if ( '' !== $key ) {
-			// 帶 %xx 的網址與 customize.php 的連結：設定頁從表格（data-slug）讀回 slug 時，瀏覽器已經把 HTML 實體還原
-			// （&#038;、&amp; 變成 &，例如「頁首」「背景」的 &#038;autofocus），存下的是還原過的；比對時這邊也還原。
-			if ( ( self::is_customize_link( $key ) || 1 === preg_match( '/%[0-9a-f]{2}/i', $key ) ) && function_exists( 'wp_specialchars_decode' ) ) {
+			// 帶 %xx 的網址、customize.php 的連結、帶 &amp; 的 slug（自訂文章類型的分類子選單）：設定頁從表格（data-slug）讀回
+			// slug 時，瀏覽器已經把 HTML 實體還原（&#038;、&amp; 變成 &，例如「頁首」「背景」的 &#038;autofocus），存下的是還原過的；
+			// 比對時這邊也還原。
+			if ( ( self::is_customize_link( $key ) || false !== strpos( $key, '&amp;' ) || 1 === preg_match( '/%[0-9a-f]{2}/i', $key ) ) && function_exists( 'wp_specialchars_decode' ) ) {
 				$key = (string) wp_specialchars_decode( $key );
 			}
 			if ( self::is_customize_link( $key ) ) {
@@ -2309,7 +2377,7 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v1.5.1：這個實際的 slug 存檔時會不會被改掉（帶 %xx、前後空白、customize.php 的 return…）。
+	 * v1.5.1：這個實際的 slug 存檔時會不會被改掉（帶 %xx、前後空白、customize.php 的 return…；v1.11.0 起帶 &amp; 的也算）。
 	 * 會被改掉的，存下的設定跟它的原字串永遠對不上，只能用鍵對。
 	 */
 	public static function slug_is_altered( string $slug ): bool {
@@ -2549,7 +2617,8 @@ class YSMenuRouter {
 	private static function apply_hide_flags( array $config ): void {
 		global $menu, $submenu;
 
-		// 收集所有 hide=true 的 slug（v1.5.1：另收一份鍵，給存檔時會被改掉的實際 slug 用：網址帶 %xx、「自訂」）
+		// 收集所有 hide=true 的 slug（v1.5.1：另收一份鍵，給存檔時會被改掉的實際 slug 用：網址帶 %xx、「自訂」；
+		// v1.11.0：自訂文章類型的分類子選單 &amp;post_type=）
 		$hidden_top = [];
 		$hidden_sub = []; // [ slug => true ]
 		$top_keys   = [];
@@ -2626,7 +2695,7 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v2.39.0 BATCH Q3：擋直接 URL 訪問 hidden / non-whitelisted pages
+	 * v2.39.0：擋直接 URL 訪問 hidden / non-whitelisted pages
 	 *
 	 * Hooked on admin_init。super-admin / REST / cron / WP-CLI 自動 bypass。
 	 *
@@ -2655,10 +2724,148 @@ class YSMenuRouter {
 		}
 
 		self::$moves_site = null;
-		$page             = self::current_admin_request_slug();
+		$page             = self::current_guard_page();
 		if ( ! self::page_access_decision( $page, self::get_config(), get_current_user_id(), current_user_can( 'manage_network' ) || is_super_admin() ) ) {
 			self::deny_access( $page );
 		}
+	}
+
+	/**
+	 * v1.11.0：guard_hidden_pages() 判斷用的頁面：current_admin_request_slug()，只有分類列表頁（edit-tags.php）帶上分類與文章類型
+	 * （taxonomy_page_key()；不帶 taxonomy 時跟 WordPress 一樣是標籤 post_tag），那個分類選單的列才擋得到網址。參數跟 1.5.1 起
+	 * 可見清單對應分類頁（request_owner_slugs()）讀的一樣。其他頁不變；current_admin_request_slug() 本身不變（高亮、頁面標題照舊用它）。
+	 */
+	private static function current_guard_page(): string {
+		$page = self::current_admin_request_slug();
+		if ( 'edit-tags.php' !== $page ) {
+			return $page;
+		}
+		$taxonomy  = isset( $_REQUEST['taxonomy'] ) && is_string( $_REQUEST['taxonomy'] ) ? sanitize_key( wp_unslash( $_REQUEST['taxonomy'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- 只決定要比對哪幾列規則，不寫資料。
+		$post_type = isset( $_REQUEST['post_type'] ) && is_string( $_REQUEST['post_type'] ) ? sanitize_key( wp_unslash( $_REQUEST['post_type'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return self::taxonomy_page_key( '' !== $taxonomy ? $taxonomy : 'post_tag', $post_type );
+	}
+
+	/**
+	 * v1.11.0：分類列表頁判斷用的頁面寫法：edit-tags.php?taxonomy=X，文章類型不是 post 時加 &post_type=Y（跟 edit.php?post_type=Y
+	 * 一樣）。側欄上自訂文章類型的分類選單寫成 &amp;post_type=Y，設定頁存的是 &post_type=Y，比對時兩種都認（taxonomy_rule_keys()）。
+	 * url_allows() 認這個寫法；以某位使用者試算也用它。
+	 */
+	public static function taxonomy_page_key( string $taxonomy, string $post_type = '' ): string {
+		$taxonomy  = sanitize_key( $taxonomy );
+		$post_type = sanitize_key( $post_type );
+		return 'edit-tags.php?taxonomy=' . $taxonomy . ( '' !== $post_type && 'post' !== $post_type ? '&post_type=' . $post_type : '' );
+	}
+
+	/**
+	 * v1.11.0：taxonomy_page_key() 的寫法（&amp; 也認）解析成 [ 分類, 文章類型 ]；不是分類列表頁回 null。
+	 *
+	 * @return array{0:string,1:string}|null
+	 */
+	private static function parse_taxonomy_page( string $page ): ?array {
+		if ( 1 !== preg_match( '/^edit-tags\.php\?taxonomy=([a-z0-9_\-]+)(?:&(?:amp;)?post_type=([a-z0-9_\-]+))?$/', $page, $m ) ) {
+			return null;
+		}
+		return [ $m[1], (string) ( $m[2] ?? '' ) ];
+	}
+
+	/**
+	 * v1.11.0：分類列表頁的寫法（taxonomy_page_key()）在可見清單裡對應的選單：edit-tags.php?taxonomy=X，文章類型
+	 * 不是 post 時另加 …&amp;post_type=Y 與 …&post_type=Y。跟 request_owner_slugs() 對目前請求算的一樣，只是照參數裡那一頁算。
+	 *
+	 * @return array<int,string>
+	 */
+	private static function taxonomy_owner_keys( string $page ): array {
+		$parsed = self::parse_taxonomy_page( $page );
+		if ( null === $parsed ) {
+			return [];
+		}
+		[ $taxonomy, $post_type ] = $parsed;
+		$owners = [ 'edit-tags.php?taxonomy=' . $taxonomy ];
+		if ( '' !== $post_type && 'post' !== $post_type ) {
+			$owners[] = 'edit-tags.php?taxonomy=' . $taxonomy . '&amp;post_type=' . $post_type;
+			$owners[] = 'edit-tags.php?taxonomy=' . $taxonomy . '&post_type=' . $post_type;
+		}
+		return self::normalize_slug_list_for_match( $owners );
+	}
+
+	/**
+	 * v1.11.0：直接開分類列表頁時，要另外判斷的設定列的鍵（側欄上那個分類選單的 slug 的各種寫法）；不是分類列表頁回 null。
+	 *
+	 * 網址上的 post_type 只決定 WordPress 把這一頁歸在哪個上層，列出的分類都一樣，所以：
+	 *   - 網址對得到側欄上的那一項（不帶 post_type 而且這個分類給文章用；或帶的 post_type 用這個分類）：只看那一項。文章底下的是
+	 *     edit-tags.php?taxonomy=X；自訂文章類型底下的是 …&amp;post_type=Y（設定頁存的是 &post_type=Y），兩種都比；這個分類不給文章用時
+	 *     不帶 post_type 的寫法也比（側欄上沒有它，比了只會更嚴）。同一個分類給兩種文章類型用時，另一個上層底下那一項的規則不算。
+	 *   - 對不到（拿掉 post_type、或帶了不用這個分類的 post_type）：側欄上沒有這個網址，照這個分類每一個選單項的列，任一列擋就擋。
+	 *   - 讀不到分類給哪些文章類型用（get_taxonomy() 沒有結果）：看不帶 post_type 的寫法，加上網址帶的 post_type 那一項。
+	 *
+	 * @return array<int,string>|null
+	 */
+	private static function taxonomy_rule_keys( string $page ): ?array {
+		$parsed = self::parse_taxonomy_page( $page );
+		if ( null === $parsed ) {
+			return null;
+		}
+		[ $taxonomy, $post_type ] = $parsed;
+		$post_type = 'post' === $post_type ? '' : $post_type;
+		$base      = self::taxonomy_page_key( $taxonomy );
+		$variants  = static fn( string $type ): array => [ $base . '&amp;post_type=' . $type, $base . '&post_type=' . $type ];
+
+		$object = function_exists( 'get_taxonomy' ) ? get_taxonomy( $taxonomy ) : false;
+		$types  = null;
+		if ( is_object( $object ) && isset( $object->object_type ) && is_array( $object->object_type ) ) {
+			$types = array_values( array_filter( array_map( static fn( $t ): string => is_string( $t ) ? sanitize_key( $t ) : '', $object->object_type ) ) );
+		}
+
+		if ( null === $types ) {
+			$keys = '' === $post_type ? [ $base ] : array_merge( [ $base ], $variants( $post_type ) );
+		} else {
+			$for_post = in_array( 'post', $types, true );
+			$on_menu  = '' === $post_type ? $for_post : in_array( $post_type, $types, true );
+			if ( $on_menu ) {
+				$keys = '' === $post_type ? [ $base ] : array_merge( $variants( $post_type ), $for_post ? [] : [ $base ] );
+			} else {
+				$keys = [ $base ];
+				foreach ( $types as $type ) {
+					if ( 'post' !== $type ) {
+						$keys = array_merge( $keys, $variants( $type ) );
+					}
+				}
+				if ( '' !== $post_type ) {
+					$keys = array_merge( $keys, $variants( $post_type ) );
+				}
+			}
+		}
+		return array_values( array_unique( $keys ) );
+	}
+
+	/**
+	 * v1.11.0：一組設定列的鍵（taxonomy_rule_keys()）對這個帳號直接開網址的判斷，任一列擋就擋：僅限本人（綁給別人就擋，管理員也擋）、
+	 * 誰看得到（只藏選單的不算；管理員照那一列的設定）、隱藏與角色（管理員不受影響）。跟其他頁面直接開網址時看的一樣；
+	 * 使用者覆寫的可見清單不在這裡判斷（照舊看 edit-tags.php）。
+	 *
+	 * @param array<int,string>   $keys
+	 * @param array<string,mixed> $config
+	 */
+	private static function rule_keys_allow( array $keys, array $config, int $user_id, bool $is_super ): bool {
+		foreach ( $keys as $key ) {
+			$self_uid = self::self_only_uid_for_slug( $key, $config );
+			if ( $self_uid > 0 && $self_uid !== $user_id ) {
+				return false;
+			}
+			if ( $user_id > 0 && self::access_denies( $key, $config, $user_id, true, null, $is_super ) ) {
+				return false;
+			}
+		}
+		if ( $is_super || $user_id <= 0 ) {
+			return true;
+		}
+		$roles = self::user_roles_of( $user_id );
+		foreach ( $keys as $key ) {
+			if ( ! self::passes_item_rules( self::normalize_admin_slug( $key ), $config, $roles ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -2675,6 +2882,22 @@ class YSMenuRouter {
 	private static function page_access_decision( string $page, array $config, int $user_id, bool $is_super ): bool {
 		if ( '' === $page ) {
 			return true;
+		}
+
+		// v1.11.0：分類列表頁（edit-tags.php?taxonomy=…，current_guard_page()）：先照 1.10.0 用 edit-tags.php 判斷（使用者覆寫的
+		// 可見清單、受保護選單照舊），再加判那個分類選單的列（taxonomy_rule_keys()）。兩邊都過才放行，只會比 1.10.0 嚴。
+		// 可見清單對應的分類頁照 $page 算（taxonomy_owner_keys()），不讀目前這個請求的 taxonomy：守門判的就是目前
+		// 這一頁，結果跟 1.10.0 一樣；url_allows()（其他外掛、以某位使用者試算）問別的分類頁時照那一頁判斷。
+		$taxonomy_keys = self::taxonomy_rule_keys( $page );
+		if ( null !== $taxonomy_keys ) {
+			$previous             = self::$owner_override;
+			self::$owner_override = [ 'edit-tags.php' => self::taxonomy_owner_keys( $page ) ];
+			try {
+				$base_ok = self::page_access_decision( 'edit-tags.php', $config, $user_id, $is_super );
+			} finally {
+				self::$owner_override = $previous;
+			}
+			return $base_ok && self::rule_keys_allow( $taxonomy_keys, $config, $user_id, $is_super );
 		}
 
 		$self_uid = self::self_only_uid_for_slug( $page, $config );
@@ -2720,7 +2943,7 @@ class YSMenuRouter {
 	}
 
 	/**
-	 * v2.39.0 BATCH Q3：終止 request 並回 404
+	 * v2.39.0：終止 request 並回 404
 	 *
 	 * @param string $page 用於 log / debug
 	 */
@@ -2938,6 +3161,13 @@ class YSMenuRouter {
 	}
 
 	/**
+	 * v1.11.0：單項字色不套用的狀態（掛在 li 上）：滑過去、鍵盤聚焦在裡面、浮出子選單開著（.opensub）、目前所在的選單
+	 * （.current、.wp-has-current-submenu）。這幾種狀態照皮膚（YS CART 的原生選單樣式、本外掛的原生選單樣式）或 WordPress
+	 * 配色的 hover 字色。
+	 */
+	private const ITEM_COLOR_STATES = ':not(:hover):not(:focus-within):not(.opensub):not(.current):not(.wp-has-current-submenu)';
+
+	/**
 	 * 在 admin_head 輸出 inline CSS — 為頂層 menu 套用自訂顏色
 	 *
 	 * WP admin menu li 的 ID 規則：menu-{slug-without-php-suffix}
@@ -2946,6 +3176,7 @@ class YSMenuRouter {
 	 *      'admin.php?page=ys-cart' → 'toplevel_page_ys-cart'
 	 *
 	 * 這些 id 無法從 slug 推導，所以從 $menu 讀出每一項實際輸出的 id 再產生規則。
+	 * v1.11.0：規則只在平常的狀態生效（ITEM_COLOR_STATES）。
 	 */
 	public static function output_colors(): void {
 		$config = self::get_config();
@@ -2989,9 +3220,12 @@ class YSMenuRouter {
 				continue; // 這個身分的側欄沒有這一項。
 			}
 			// 文字與字型圖示一起上色：啟用原生選單樣式時，文字與圖示各有自己的顏色規則，只改連結看不出來。
+			// v1.11.0：只管平常的樣子。滑過去、鍵盤聚焦、浮出子選單開著、目前所在的選單（ITEM_COLOR_STATES）交給皮膚或
+			// WordPress 配色的 hover 字色；以前這裡的 !important 連那幾種狀態也蓋掉，字色跟 hover 底色一樣時那一項就看不見。
+			$li      = '#adminmenu li#' . esc_attr( $li_id ) . self::ITEM_COLOR_STATES;
 			$rules[] = sprintf(
-				'#adminmenu li#%1$s > a.menu-top, #adminmenu li#%1$s > a.menu-top .wp-menu-name, #adminmenu li#%1$s > a.menu-top .wp-menu-image::before { color: %2$s !important; }',
-				esc_attr( $li_id ),
+				'%1$s > a.menu-top, %1$s > a.menu-top .wp-menu-name, %1$s > a.menu-top .wp-menu-image::before { color: %2$s !important; }',
+				$li,
 				esc_attr( $color )
 			);
 		}
@@ -3019,6 +3253,12 @@ class YSMenuRouter {
 
 	/** v1.7.0：access 每份名單（角色、帳號）最多幾筆。 */
 	public const ACCESS_MAX_ENTRIES = 100;
+
+	/**
+	 * v1.11.0：列上 access 欄位的格式版本（sanitize_access() 寫進 v）。對外介面（YangSheep\AdminMenu\Api\YSAdminMenuApi
+	 * 也宣告同一個值）：格式改版時升這個數字，舊格式照樣讀得懂。
+	 */
+	public const ACCESS_FORMAT_VERSION = 1;
 
 	/**
 	 * v1.7.0：清理 access 欄位。什麼都不擋（others＝inherit、沒有拒絕名單）回 null＝沒有限制。
@@ -3052,7 +3292,7 @@ class YSMenuRouter {
 			];
 		};
 		$out = [
-			'v'           => 1,
+			'v'           => self::ACCESS_FORMAT_VERSION,
 			'allow'       => $side( $raw['allow'] ?? null ),
 			'deny'        => $side( $raw['deny'] ?? null ),
 			'others'      => 'deny' === ( $raw['others'] ?? null ) ? 'deny' : 'inherit',

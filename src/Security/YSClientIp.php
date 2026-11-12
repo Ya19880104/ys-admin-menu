@@ -164,7 +164,7 @@ final class YSClientIp {
 	public static function resolve_with( array $settings, array $server, bool $apply_filter = true ): array {
 		$remote = self::normalize( self::server_string( $server, 'REMOTE_ADDR' ) );
 		if ( '' === $remote ) {
-			// 伺服器給不出合法的 REMOTE_ADDR：不讀任何標頭，但照樣經過 filter，整合的人可以用文件寫的 filter 補上（實作審查 A 線 P3-10）。
+			// 伺服器給不出合法的 REMOTE_ADDR：不讀任何標頭，但照樣經過 filter，整合的人可以用文件寫的 filter 補上。
 			$result = [ 'ip' => '', 'from_header' => false, 'source' => 'remote_addr_invalid' ];
 			return $apply_filter ? self::apply_ip_filter( $result ) : $result;
 		}
@@ -272,7 +272,7 @@ final class YSClientIp {
 	 * 一個位址的正規化：去掉前後空白與 tab、去掉 port 與中括號、驗證、轉成標準寫法（IPv6 小寫、零壓縮），
 	 * IPv4 對應的 IPv6（二進位前綴 ::ffff:0:0/96，十六進位寫法也算）轉回 IPv4。不合法回空字串。
 	 *
-	 * NAT64 的標準前綴 64:ff9b::/96（RFC 6052）也轉回內嵌的 IPv4（安全審查 B 線 P3-2）：這個前綴保留給 IPv4／IPv6 轉換，
+	 * NAT64 的標準前綴 64:ff9b::/96（RFC 6052）也轉回內嵌的 IPv4：這個前綴保留給 IPv4／IPv6 轉換，
 	 * 裡面每個位址都代表一個 IPv4 訪客。只有 IPv6 的主機前面用 NAT64 轉進 IPv4 訪客時，不轉的話所有 IPv4 訪客會落在
 	 * 同一個 /64 鍵（1 倍門檻、會逐次加長），一個人錯 10 次就鎖住所有 IPv4 訪客。轉回之後鍵、白名單、信任的代理、
 	 * overflow 分桶（/24）、內部位址的分類都照那個 IPv4。營運商自己網段的 NAT64 前綴分辨不出來，寫在已知限制

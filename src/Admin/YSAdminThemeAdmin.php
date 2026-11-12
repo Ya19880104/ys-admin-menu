@@ -20,6 +20,9 @@ class YSAdminThemeAdmin {
 
 	private const LEGACY_NATIVE_MENU_WIDTH_OPTION = 'ys_ec_native_menu_width';
 
+	/** v1.11.0：YS CART「原生選單樣式」頁的頁面代稱（YS CART 2.69 起都是 ys-cart-admin-theme；讀不到就不放連結）。 */
+	private const YS_CART_THEME_PAGE_CONST = 'YangSheep\\Ecommerce\\Admin\\YSAdminThemeAdmin::PAGE_SLUG';
+
 	/**
 	 * @return array<string, mixed>
 	 */
@@ -73,6 +76,9 @@ class YSAdminThemeAdmin {
 			self::defaults()
 		);
 
+		// v1.11.0：站上有 YS CART 時，本頁的皮膚設定不會套用（YSAdminThemeRenderer 讓位）；頁首下方提示，表單照樣能存。
+		$ys_cart_notice = self::ys_cart_notice();
+
 		wp_enqueue_style( 'wp-color-picker' );
 		wp_enqueue_script( 'wp-color-picker' );
 		wp_enqueue_script(
@@ -94,6 +100,22 @@ class YSAdminThemeAdmin {
 		}
 
 		echo '<div class="wrap"><div class="notice notice-error"><p>原生選單樣式模板不存在。</p></div></div>';
+	}
+
+	/**
+	 * v1.11.0：站上有 YS CART（YSAdminThemeRenderer::yields_to_ys_cart()）時，本頁的提示：
+	 * [ 'url' => YS CART「原生選單樣式」頁的網址（讀不到它的頁面代稱時是空字串） ]；沒有 YS CART 回 null。
+	 * 只讀 YS CART 的常數，不載入、不呼叫它的任何方法。
+	 *
+	 * @return array{url:string}|null
+	 */
+	public static function ys_cart_notice(): ?array {
+		if ( ! YSAdminThemeRenderer::yields_to_ys_cart() ) {
+			return null;
+		}
+		$slug = defined( self::YS_CART_THEME_PAGE_CONST ) ? constant( self::YS_CART_THEME_PAGE_CONST ) : '';
+		$slug = is_string( $slug ) ? sanitize_key( $slug ) : '';
+		return [ 'url' => '' !== $slug ? admin_url( 'admin.php?page=' . $slug ) : '' ];
 	}
 
 	private static function save(): void {

@@ -1,11 +1,14 @@
 /**
  * YS Admin Menu — 設定頁獨有的元件（v1.8.0）
  *
- * 10-27 使用者：「後台你有中央化ＣＳＳ嗎」「YS ADMIN 的也要整理」。
+ * 後台樣式中央化：本外掛的設定頁也一起整理。
  * 頁首、分頁、卡片、欄位、輸入框、按鈕、說明框、開關、表格、徽章、儲存列一律用 YS 後台中央樣式
  * （assets/ys-admin-ui/，和其他 YS 外掛共用）。原本的 whitelabel.css（.ysca-wl-* 一整套）、theme.css 拿掉。
  * 這裡只放本外掛獨有的：色彩挑選器、LOGO 預覽、Admin Bar 節點表、訪客 IP 表、Turnstile 測試、登入次數限制、後台精簡的清單。
  * 選單排序表、面板、使用者覆寫卡在 ys-admin-menu-permission.css。
+ *
+ * v1.11.0：跟著中央樣式 1.1.0 的字級，「選取色彩」按鈕的字 12px → 13px。白牌設定的表單在窄螢幕縮到欄寬由中央樣式 1.1.1 負責
+ * （.ys-admin-stack 的子項目 min-width: 0），這裡不另寫。
  */
 
 /* ─── 色彩挑選器（WordPress 的 wp-color-picker；原生選單樣式、白牌設定、選單與權限都用） ─── */
@@ -40,7 +43,7 @@
     border: 1px solid var(--ysca-border, #e5e7eb);
     border-radius: 6px;
     box-shadow: none;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 34px;
     overflow: hidden;
     vertical-align: middle;
@@ -54,7 +57,7 @@
     border-radius: 0 5px 5px 0;
     background: #fff;
     color: var(--ysca-text-body, #374151);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 34px;
 }
 

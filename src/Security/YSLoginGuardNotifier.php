@@ -4,7 +4,7 @@
  *
  * - 建立一次鎖定（ys_admin_menu_login_guard_locked，同一次鎖定只有一個請求會觸發）就排一封純文字信，在 shutdown 寄。
  * - 內容：時間、IP 或網段（共用桶寫明是哪一條路）、鎖到幾點、失敗次數、這個視窗內有幾個不同的帳號失敗、來源、
- *   設定頁連結、WP-CLI 解鎖指令。帳號只列站上存在的；不存在的只寫「另有 N 個不存在的帳號名稱」（審查 P2-10）。
+ *   設定頁連結、WP-CLI 解鎖指令。帳號只列站上存在的；不存在的只寫「另有 N 個不存在的帳號名稱」。
  * - 節流：同一個鍵 24 小時一封（計數表 last_notified_at 的有條件 UPDATE）；全站每 24 小時十封（option 讀改寫，
  *   並發時可能多寄一兩封，可以接受）。
  * - 全站的 via:overflow 出現時（打開通知才寄）另寄一封，全站一天一封。
@@ -216,7 +216,7 @@ final class YSLoginGuardNotifier {
 		return $out;
 	}
 
-	/** 純文字信用的網站名稱：blogname 存的是 esc_html 過的值，跟核心寄信一樣先解回來（「A &amp; B」寄成「A & B」；實作審查 A 線 P3-13）。 */
+	/** 純文字信用的網站名稱：blogname 存的是 esc_html 過的值，跟核心寄信一樣先解回來（「A &amp; B」寄成「A & B」）。 */
 	private static function site_name(): string {
 		$name = wp_strip_all_tags( wp_specialchars_decode( (string) get_option( 'blogname', '' ), ENT_QUOTES ) );
 		return '' !== $name ? $name : (string) wp_parse_url( home_url(), PHP_URL_HOST );

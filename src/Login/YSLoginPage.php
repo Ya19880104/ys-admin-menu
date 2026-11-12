@@ -94,6 +94,12 @@ final class YSLoginPage {
 
 	/* ─────────────────────────── 設定讀取 ─────────────────────────── */
 
+	/**
+	 * 自訂登入頁的總開關（「白牌設定 › 登入頁」的「啟用自訂登入頁」）。
+	 *
+	 * v1.11.0：對外介面（YS CART 3.0.1 起呼叫），簽章與語意不改：開著時 YS CART 的登入頁外觀讓位。新寫的外掛請用
+	 * YangSheep\AdminMenu\Api\YSAdminMenuApi::login_page_enabled()。
+	 */
 	public static function is_enabled(): bool {
 		return 'yes' === get_option( self::OPTION_ENABLED, 'no' );
 	}

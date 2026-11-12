@@ -1,6 +1,6 @@
 <?php
 /**
- * v1.7.0：誰能使用 YS Admin Menu（設計 docs/plans/2026-10-26-ys-admin-menu-170-design.md §6）。
+ * v1.7.0：誰能使用 YS Admin Menu（設計 §6）。
  *
  * 選項 ys_admin_menu_access（autoload yes）：
  *   { mode: 'capability' | 'users', user_ids: int[], hide_plugin_row: bool }
@@ -202,6 +202,9 @@ final class YSAccess {
 	/**
 	 * 目前登入的人能不能使用 YS Admin Menu（設定頁、REST、表單動作與提醒）。
 	 * 預設（capability）就是 current_user_can( 'manage_options' )，跟 1.6.0 一樣。
+	 *
+	 * v1.11.0：對外介面（供 YS CART 呼叫），簽章與語意不改。新寫的外掛請用
+	 * YangSheep\AdminMenu\Api\YSAdminMenuApi::can_manage()（也能問指定帳號）。
 	 */
 	public static function can_manage(): bool {
 		if ( ! current_user_can( 'manage_options' ) ) {

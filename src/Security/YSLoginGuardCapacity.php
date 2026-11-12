@@ -5,15 +5,15 @@
  * 寫入時就強制上限：
  * - 計數表的 IP 鍵（含 agg48:）最多 50,000 列，用保留列 ~rows 原子計數：只在真的新增新鍵時加 1，清理後設成實際列數。
  * - 每個 /48 最多 256 列（net48 欄）：IPv6 的 IP 鍵一律先 UPDATE 自己那一列；沒有列時才數它的 /48，到 256 就不新增。
- *   寫入 net48 與比對 net48 都用 YSClientIp::network( $ip, 48 )（跟 key() 同一套正規化，審查 P3-1）。
+ *   寫入 net48 與比對 net48 都用 YSClientIp::network( $ip, 48 )（跟 key() 同一套正規化）。
  * - 表已經滿了的新鍵、/48 已經有 256 列的新 /64：記到自己網段的 overflow 桶（via:overflow: 加 IPv6 /48 或 IPv4 /24），
  *   5 倍門檻、不逐次加長。分桶可以超過上限新增，有自己的上限 5,000 列（~rows_ovf）。
- * - 分桶也滿了：記到全站的 via:overflow，只計數、不鎖，查鎖定時也不看它（審查 R4-P2-1）。
+ * - 分桶也滿了：記到全站的 via:overflow，只計數、不鎖，查鎖定時也不看它。
  * - 表滿了時也不新增 agg48: 鍵（overflow 已經按 /48 分桶）；共用桶不受上限影響。
  * - 「鍵＋帳號」小表最多 50,000 列（~rows_acct），滿了不記新列（只是少了原諒）。
  * - 記列數的保留列讀不到時當成已經滿了（安全的方向），記 health，同一個請求立刻清理把它補回來、設成實際列數。
  *
- * 查鎖定（§4.4 第 5 步，r7 依審查附註更正）：這個鍵不在表裡，而且「表已經超過上限」**或**「是 IPv6、它的 /48 已經有 256 列」
+ * 查鎖定（§4.4 第 5 步）：這個鍵不在表裡，而且「表已經超過上限」**或**「是 IPv6、它的 /48 已經有 256 列」
  * → 看自己網段的 overflow 桶，桶鎖著就擋。表已經超過上限時第一個條件就成立，不數列數；/48 的列數只在表還沒滿、
  * 那個桶又鎖著時才數。表滿之後 IPv4 與 IPv6 一樣：每個網段共用一個 5 倍的桶。
  *
@@ -111,7 +111,7 @@ final class YSLoginGuardCapacity {
 		return $value;
 	}
 
-	/** 計數表已經超過上限（~rows 讀不到時當成已經超過，r5 審查 R4-P2-2）。 */
+	/** 計數表已經超過上限（~rows 讀不到時當成已經超過）。 */
 	public static function table_full(): bool {
 		$row = self::reserved( '~rows' );
 		return null === $row || (int) $row['fail_count'] >= self::ROWS_MAX;
@@ -143,7 +143,7 @@ final class YSLoginGuardCapacity {
 
 	/* ─────────────────────────── 鍵 ─────────────────────────── */
 
-	/** 這個位址的 overflow 分桶：IPv6 用 /48、IPv4 用 /24（r5 審查 R4-P1-1）。位址不合法回空字串。 */
+	/** 這個位址的 overflow 分桶：IPv6 用 /48、IPv4 用 /24。位址不合法回空字串。 */
 	public static function overflow_key( string $ip ): string {
 		$net = YSClientIp::network( $ip, str_contains( $ip, ':' ) ? 48 : 24 );
 		return '' === $net ? '' : self::OVERFLOW_PREFIX . $net;
@@ -456,7 +456,7 @@ final class YSLoginGuardCapacity {
 
 	/**
 	 * GET_LOCK 的鎖名：ysam_lg_ 加 md5( DB_NAME . 資料表前綴 ) 的前 16 碼（24 字元）。GET_LOCK 是整台 MySQL 共用的命名空間、
-	 * 不分資料庫，共用主機上不同的站（或多站網路的各站）不能用同一個名稱互相擋（審查 R3-P2-2）。
+	 * 不分資料庫，共用主機上不同的站（或多站網路的各站）不能用同一個名稱互相擋。
 	 */
 	public static function lock_name(): string {
 		global $wpdb;

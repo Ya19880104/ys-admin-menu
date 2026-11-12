@@ -1,7 +1,14 @@
 /**
  * YS 後台共用版面（YS Admin UI）
  *
- * @version 1.0.0
+ * @version 1.1.1
+ *
+ * 1.1.1（2026-11-06）窄螢幕：.ys-admin-stack 的子項目可以縮到欄寬（min-width: 0）。1.1.0 分頁字變大後，
+ * 不換行的分頁列會把子項目、連帶整頁撐寬，手機寬（320～375px）出現橫向捲動；現在分頁列改在自己裡面捲。
+ *
+ * 1.1.0（2026-11-06）字級：中文在 11～12px 不好讀。YS 外掛的頁面（body.ys-admin-screen）裡，設計系統的小字變數
+ * （--ysca-fs-xs、--ysca-fs-sm、--ysca-fs-caption）一律 13px；欄位標題、開關說明、說明框、頁首說明、精簡表格 14px；
+ * 欄位說明、卡片副標、選項格說明從淡灰改成內文色。YS CART 自己的後台不載入這支，不受影響。
  *
  * 中央樣式：YS 外掛（YS Admin Menu、立肯型錄…）的後台頁共用，疊在同目錄設計系統三支
  * （ysca-tokens.css、ysca-admin-base.css、ys-cart-admin-components.css）上面。
@@ -56,13 +63,33 @@ body.ys-admin-screen #wpbody-content {
     min-height: var(--ysca-control-h, 44px);
 }
 
+/* ─── 1-1. 字級（1.1.0） ──────────────────────────────────────
+   中文筆畫多，11～12px 的灰字不好讀：YS 外掛的頁面裡（含掛在 body 的對話框），設計系統的小字變數一律 13px，
+   欄位標題 14px，欄位說明與卡片副標用內文色。設計系統的 :root 變數照舊，只有 YS 外掛的頁面換掉。 */
+
+body.ys-admin-screen {
+    --ysca-fs-xs: 13px;
+    --ysca-fs-sm: 13px;
+    --ysca-fs-caption: 13px;
+}
+
+body.ys-admin-screen .ysca-field__label {
+    font-size: 14px;
+}
+
+body.ys-admin-screen .ysca-field__hint,
+body.ys-admin-screen .ysca-card__sub {
+    color: var(--ysca-text-body, #4c505b);
+    line-height: 1.6;
+}
+
 /* ─── 2. 頁首說明（設計系統的原生頁首沒有說明列） ─────────── */
 
 .ysca-native-wrap .ys-admin-page-desc {
     max-width: 72em;
     margin: 6px 0 0;
-    color: var(--ysca-muted, #5f6773);
-    font-size: var(--ysca-fs-sm, 13px);
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 14px;
     line-height: 1.6;
 }
 
@@ -114,6 +141,12 @@ body.ys-admin-screen #wpbody-content {
     margin-bottom: 0;
 }
 
+/* 1.1.1：grid 子項目預設 min-width: auto，裡面有不換行的分頁列時會撐寬整頁；讓子項目縮到欄寬，分頁列在自己裡面捲。
+   :where() 讓這條不佔權重，外掛或元件自己寫的 min-width 仍然優先 */
+:where(.ys-admin-stack) > * {
+    min-width: 0;
+}
+
 .ys-admin-page .ysca-card > :last-child {
     margin-bottom: 0;
 }
@@ -140,7 +173,7 @@ body.ys-admin-screen #wpbody-content {
     border-radius: var(--ysca-radius-input, 8px);
     background: var(--ysca-card-soft, #fbfcff);
     color: var(--ysca-text-body, #374151);
-    font-size: var(--ysca-fs-sm, 13px);
+    font-size: 14px;
     line-height: 1.6;
 }
 
@@ -156,7 +189,7 @@ body.ys-admin-screen #wpbody-content {
     padding: 1px 4px;
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
+    font-size: 13px;
     word-break: break-all;
 }
 
@@ -299,7 +332,7 @@ body.ys-admin-screen #wpbody-content {
 .ys-admin-switch__text {
     min-width: 0;
     color: var(--ysca-text-body, #374151);
-    font-size: var(--ysca-fs-sm, 13px);
+    font-size: 14px;
     line-height: 1.6;
 }
 
@@ -417,8 +450,8 @@ body.ys-admin-screen #wpbody-content {
 }
 
 .ys-admin-chipset__count {
-    color: var(--ysca-muted, #5f6773);
-    font-size: 12px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
     font-weight: 400;
 }
 
@@ -483,7 +516,7 @@ body.ys-admin-screen #wpbody-content {
     gap: 8px;
     margin: 0 0 var(--ysca-space-2, 8px);
     color: var(--ysca-text-body, #374151);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
 }
 
@@ -494,8 +527,8 @@ body.ys-admin-screen #wpbody-content {
 
 .ys-admin-chipgroup__hint {
     margin: -4px 0 var(--ysca-space-2, 8px);
-    color: var(--ysca-muted, #5f6773);
-    font-size: 12px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
 }
 
 /* ─── 10. 儲存列（固定在畫面底部） ───────────────────────── */
@@ -526,7 +559,7 @@ body.ys-admin-screen #wpbody-content {
 .ysca-table.ys-admin-table--compact th,
 .ysca-table.ys-admin-table--compact td {
     padding: 10px 14px;
-    font-size: var(--ysca-fs-sm, 13px);
+    font-size: 14px;
     vertical-align: middle;
 }
 
@@ -568,8 +601,8 @@ body.ys-admin-screen #wpbody-content {
 
 .ysca-table tbody tr.ys-admin-table-group th span {
     margin-left: 8px;
-    color: var(--ysca-muted, #5f6773);
-    font-size: 12px;
+    color: var(--ysca-text-body, #4c505b);
+    font-size: 13px;
     font-weight: 400;
 }
 

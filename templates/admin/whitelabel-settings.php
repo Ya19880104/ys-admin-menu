@@ -1,6 +1,6 @@
 <?php
 /**
- * 白牌設置頁面 template（v2.37.1；v1.4.0 分頁；v1.8.0 改用 YS 後台中央樣式的元件，原本是 ADR-047 的獨立樣式）
+ * 白牌設置頁面 template（v2.37.1；v1.4.0 分頁；v1.8.0 改用 YS 後台中央樣式的元件，原本是獨立樣式）
  *
  * 從 YSWhiteLabelAdmin::render_settings() 載入。整頁是一個表單，「儲存白牌設定」一次存全部分頁。
  *
@@ -150,7 +150,7 @@ $log_labels = [
 	<?php endif; ?>
 	<?php
 	// v1.6.0：整頁一張表單，存其他分頁時登入次數限制的欄位也會送出。有欄位沒存（例如逐次加長比鎖定短）時，詳細的錯誤
-	// 只在「登入防護」分頁的卡片裡，存其他分頁的人看不到：這裡提醒一句（實作審查 A 線 P3-12）。
+	// 只在「登入防護」分頁的卡片裡，存其他分頁的人看不到：這裡提醒一句。
 	$lg_page_errors = 'turnstile' !== $active_tab ? \YangSheep\AdminMenu\Admin\YSLoginSecurityAdmin::guard_error_texts( array_filter( $field_errors, static fn( $c ) => 0 !== strpos( (string) $c, 'lg_allow_warn_' ) ) ) : []; // 寬網段的提醒是已經存了，不算
 	?>
 	<?php if ( [] !== $lg_page_errors ) : ?>
@@ -885,7 +885,7 @@ $log_labels = [
 			$ip_custom   = (string) ( $ip_settings['custom_header'] ?? '' );
 			$ip_remote   = (string) ( $ip_diag['remote'] ?? '' );
 			$ip_errors   = array_filter( $field_errors, static fn( $c ) => 0 === strpos( (string) $c, 'ip_' ) );
-			// 登入次數限制說「IP 偵測可能沒設好」（共用桶占多數）時也展開：卡片上那條紅字的錨點指到這裡（設計 §5.2；實作審查 A 線 P3-12）。
+			// 登入次數限制說「IP 偵測可能沒設好」（共用桶占多數）時也展開：卡片上那條紅字的錨點指到這裡（設計 §5.2）。
 			$ip_shared   = ! empty( $guard_view['enabled'] ) && in_array( 'shared_bucket', (array) ( $guard_view['status']['reasons'] ?? [] ), true );
 			$ip_open     = [] !== $ip_errors || [] !== array_diff( $ip_hints, [ 'custom_header_warning' ] ) || 'auto' !== $ip_source || $ip_trust_cf || ! empty( $ip_view['turnstile_use'] ) || $ip_shared;
 

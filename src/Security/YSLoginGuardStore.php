@@ -10,7 +10,7 @@
  * - 遇到死結（1213）或鎖等待逾時（1205）重試一次。
  * - 查詢失敗時回 null，呼叫的人照樣放行（fail-open），並記 health。
  * - 紀錄：全站每分鐘前 120 次一般失敗、前 20 次被拒的跨站登入才可能寫紀錄（各自的保留列原子計數），每個 IP 每分鐘一筆；
- *   預算算的是失敗（被拒）的次數，不是寫了幾筆紀錄，omitted 記的是超出的次數（實作審查 A 線 P3-15）。
+ *   預算算的是失敗（被拒）的次數，不是寫了幾筆紀錄，omitted 記的是超出的次數。
  *   鎖定、解鎖、清空不受額度限制。
  * - 上限（§4.7.3）：哪一次失敗記到哪裡由 YSLoginGuardCapacity 決定；這裡只提供它用的 SQL：只更新既有列的 UPDATE、
  *   數同一個 /48 的列數、保留列的原子加 1、照上限刪與重算列數、清理互斥（GET_LOCK 與 ~cleanup 租約）。
@@ -42,12 +42,12 @@ final class YSLoginGuardStore {
 	public const LOG_MAX          = 50000;
 	public const CLEANUP_INTERVAL = 3600;
 
-	/** 「鍵＋帳號」的 HMAC 用途前綴（審查 R3-P3-1）。 */
+	/** 「鍵＋帳號」的 HMAC 用途前綴。 */
 	public const ACCT_PREFIX = 'ys_admin_menu_lg_acct|';
 
 	/**
 	 * 暫時性的資料庫錯誤：死結（1213）、鎖等待逾時（1205）、連線斷掉（2006、2013）、連線數滿（1040、1203）、伺服器關閉中（1053）、
-	 * 查詢被中斷或逾時（1317、1927、1969、3024、4031）。跟「表不見、沒有權限」分開說（實作審查差異 SEC P3-4、CODE N2）。
+	 * 查詢被中斷或逾時（1317、1927、1969、3024、4031）。跟「表不見、沒有權限」分開說。
 	 */
 	public const TRANSIENT_ERRORS = [ 1040, 1053, 1203, 1205, 1213, 1317, 1927, 1969, 2006, 2013, 3024, 4031 ];
 
@@ -135,7 +135,7 @@ final class YSLoginGuardStore {
 	 * 只更新已經存在的列（表滿了、或 IPv6 的 IP 鍵要先看自己有沒有列時，§4.4 失敗時第 2 步）。SET 跟計數那一句一樣，
 	 * 加完的次數用 LAST_INSERT_ID( 運算式 ) 記在這個連線上。wpdb 只在 INSERT／REPLACE 之後更新 insert_id，所以直接用
 	 * mysqli_insert_id() 從剛剛那一句的連線取回；讀寫分離的 db.php（HyperDB、LudicrousDB）會把另一句 SELECT 送到讀庫，
-	 * 那裡沒有這個值（實作審查 A 線 P3-2）。$wpdb->dbh 不是 mysqli 時（替身、其他驅動）才再送一句 SELECT LAST_INSERT_ID()。
+	 * 那裡沒有這個值。$wpdb->dbh 不是 mysqli 時（替身、其他驅動）才再送一句 SELECT LAST_INSERT_ID()。
 	 *
 	 * @return null|array{count:int,matched:bool} matched＝這個鍵有列（加過了）。查詢失敗回 null。
 	 */
@@ -274,7 +274,7 @@ final class YSLoginGuardStore {
 		return null === $until ? $now + $lockout : (int) $until;
 	}
 
-	/** 鎖定期間被擋下一次（同一秒最多加一次，審查 P3-11）。 */
+	/** 鎖定期間被擋下一次（同一秒最多加一次）。 */
 	public static function note_blocked( string $key, int $now ): void {
 		global $wpdb;
 		$wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . ' SET blocked_count = blocked_count + 1, last_blocked_at = %d WHERE ip_key = %s AND last_blocked_at < %d', $now, $key, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
@@ -563,7 +563,7 @@ final class YSLoginGuardStore {
 	 * - 紀錄表超過 50,000 筆時從最舊的刪。
 	 * - 一次可以連跑多輪 LIMIT 5000，時間上限 200 毫秒。
 	 * - 最後把 ~rows、~rows_ovf、~rows_acct 設成實際的列數，~rows 的「新增幾列」「記到 overflow 幾次」歸零
-	 *   （數完到寫回之間的新增會被蓋掉，量很小，下次清理就修正，§11 R4-P3-2）。
+	 *   （數完到寫回之間的新增會被蓋掉，量很小，下次清理就修正）。
 	 *
 	 * @return array{counter:int,cap:int,acct:int,log:int,done:bool,rows:?int,ovf:?int,acct_rows:?int} 刪了幾列、有沒有在時間內清完、重算後的列數。
 	 */
@@ -701,7 +701,7 @@ final class YSLoginGuardStore {
 		return false !== $result && 1 === (int) $wpdb->rows_affected ? $now : 0;
 	}
 
-	/** 釋放租約：只放自己寫進去的那一個（審查 R4-P3-1；超過 30 秒還沒結束的舊請求不會把新請求的租約放掉）。 */
+	/** 釋放租約：只放自己寫進去的那一個（超過 30 秒還沒結束的舊請求不會把新請求的租約放掉）。 */
 	public static function release_lease( int $token ): void {
 		global $wpdb;
 		$wpdb->query( $wpdb->prepare( 'UPDATE ' . YSLoginGuardSchema::counter_table() . " SET window_start = 0 WHERE ip_key = '~cleanup' AND window_start = %d", $token ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- 表名是系統產生的
@@ -784,7 +784,7 @@ final class YSLoginGuardStore {
 	}
 
 	/**
-	 * 一次數好幾個鍵（設定頁的鎖定列表，最多 200 列）：一句 GROUP BY，不是每一列各查一次（實作審查 A 線 P3-11）。
+	 * 一次數好幾個鍵（設定頁的鎖定列表，最多 200 列）：一句 GROUP BY，不是每一列各查一次。
 	 *
 	 * @param string[] $keys
 	 * @return array<string, int> 鍵 => 帳號數；沒有列的鍵不在結果裡。
@@ -966,15 +966,14 @@ final class YSLoginGuardStore {
 	}
 
 	/**
-	 * 查詢失敗：依原因分開記 health（設定頁、全後台提醒、WP-CLI status 看這幾筆；實作審查 A 線 P2-3、差異審查 SEC P3-2～4、CODE N2、N3）。
+	 * 查詢失敗：依原因分開記 health（設定頁、全後台提醒、WP-CLI status 看這幾筆）。
 	 *
 	 * - 表不存在（1146）：先用 SHOW TABLES 再確認一次（還原或搬家換表的那一瞬間，表可能已經回來了）。
 	 *   - 計數表真的不在：記 query_failed（missing）、清掉版本鍵。之後當成「表還沒建好」，不再查這幾張表，
 	 *     管理員下一次打開後台時 admin_init 重新建表。
 	 *   - 計數表在、只少紀錄表或「鍵＋帳號」小表：版本鍵留著，計數與鎖定照常；記 table_missing，管理員打開後台時補表。
 	 *   - 再確認時表都在：當成暫時性的錯誤，什麼都不清。
-	 *   - SHOW TABLES 本身也失敗（不知道表在不在）：記 query_failed（unverified，帶 SHOW TABLES 那一句的錯誤碼），不當成暫時性的錯誤
-	 *     （最終核對 A 線 F4）。理由：
+	 *   - SHOW TABLES 本身也失敗（不知道表在不在）：記 query_failed（unverified，帶 SHOW TABLES 那一句的錯誤碼），不當成暫時性的錯誤。理由：
 	 *     - 1146 是資料庫明確說「表不存在」，不是太忙或連線中斷（暫時性的清單本來就沒有它）；再確認失敗只代表沒辦法確認，不會讓它變得比較不真。
 	 *       當成暫時性的，表真的不見、主機又擋掉 SHOW 這類語句時，會一直放行、不補表，提醒還說成資料庫太忙。
 	 *     - 失敗的那幾次確實沒有計數：跟其他非暫時性的錯誤一樣，最近一小時算「沒有正常作用」，提醒照實說。

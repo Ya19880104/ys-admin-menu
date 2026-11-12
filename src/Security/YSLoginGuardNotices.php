@@ -28,7 +28,7 @@ final class YSLoginGuardNotices {
 	public const RECENT_SECONDS = 3600;
 	public const DAY_SECONDS    = 86400;
 
-	/** 被拒的跨站來源：一天超過幾次要提醒、列出前幾個（§4.13.1，r5 審查 R4-P2-3）。 */
+	/** 被拒的跨站來源：一天超過幾次要提醒、列出前幾個（§4.13.1）。 */
 	public const XSITE_MIN = 5;
 	public const XSITE_TOP = 5;
 
@@ -90,13 +90,13 @@ final class YSLoginGuardNotices {
 		if ( in_array( 'query_failed', $status['reasons'], true ) ) {
 			$out[] = self::notice( 'error', 'query_failed', self::query_failed_text() );
 		}
-		// 死結、逾時、連線斷掉這類暫時性的錯誤：一小時內一再發生才是 error；只有一分鐘時只提醒，不說成表被刪掉（差異審查 SEC P3-4、CODE N2）。
+		// 死結、逾時、連線斷掉這類暫時性的錯誤：一小時內一再發生才是 error；只有一分鐘時只提醒，不說成表被刪掉。
 		if ( in_array( 'query_unstable', $status['reasons'], true ) ) {
 			$out[] = self::notice( 'error', 'query_unstable', self::query_unstable_text() );
 		} elseif ( self::recent( 'query_transient', $now, self::RECENT_SECONDS ) ) {
 			$out[] = self::notice( 'warning', 'query_transient', self::query_transient_text() );
 		}
-		// 計數表在、只少紀錄表或「鍵＋帳號」小表：計數與鎖定照常，管理員打開後台時補表（差異審查 SEC P3-2、CODE N3）。
+		// 計數表在、只少紀錄表或「鍵＋帳號」小表：計數與鎖定照常，管理員打開後台時補表。
 		if ( self::recent( 'table_missing', $now, self::DAY_SECONDS ) ) {
 			$tables = array_values( array_filter( (array) ( YSLoginGuardHealth::get( 'table_missing' )['data']['tables'] ?? [] ), 'is_string' ) );
 			$out[]  = self::notice( 'warning', 'table_missing', '登入防護有資料表不見了：計數與鎖定照常，紀錄或「只原諒同一個帳號」暫時不作用。管理員下一次打開後台會自動補回來，在設定頁按儲存也會馬上補。不見的表：', $tables );
@@ -163,7 +163,7 @@ final class YSLoginGuardNotices {
 		return $top;
 	}
 
-	/** 查詢失敗（不是暫時性的）：依原因說（設定頁卡片、全後台提醒共用；差異審查 SEC P3-4）。 */
+	/** 查詢失敗（不是暫時性的）：依原因說（設定頁卡片、全後台提醒共用）。 */
 	public static function query_failed_text(): string {
 		$data = (array) ( YSLoginGuardHealth::get( 'query_failed' )['data'] ?? [] );
 		$code = self::code_text( (int) ( $data['code'] ?? 0 ) );
@@ -174,7 +174,7 @@ final class YSLoginGuardNotices {
 			case 'missing':
 				return '登入次數限制最近一小時有查詢失敗：計數的資料表不見了' . $code . '。' . $tail . '管理員下一次打開後台會自動重建。';
 			case 'unverified':
-				// 資料庫回報表不存在、再確認時 SHOW TABLES 也失敗（最終核對 A 線 F4）：照實說，不說成資料庫太忙。
+				// 資料庫回報表不存在、再確認時 SHOW TABLES 也失敗：照實說，不說成資料庫太忙。
 				return '登入次數限制最近一小時有查詢失敗：資料庫回報資料表不存在' . $code . '，再確認時查詢也失敗' . self::code_text( (int) ( $data['check'] ?? 0 ) ) . '，無法確定是哪一張。' . $tail . '管理員下一次打開後台會自動檢查並補建，在設定頁按儲存也會馬上補；一直出現時，請確認資料庫帳號可以執行 SHOW TABLES。';
 			default:
 				return '登入次數限制最近一小時有查詢失敗' . $code . '。' . $tail . '一直出現時，請確認資料庫。';

@@ -126,7 +126,7 @@ class YSMenuPage {
 
 	/**
 	 * 設定頁的樣式：YS 後台中央樣式（YSAdminUi 註冊的 ys-admin-ui，含設計系統三支）＋本外掛獨有的元件。
-	 * v1.8.0（10-27 使用者：「後台你有中央化ＣＳＳ嗎」「YS ADMIN 的也要整理」）：原本白牌頁另有一套 .ysca-wl-* 樣式、
+	 * v1.8.0（後台樣式中央化，本外掛的設定頁一起整理）：原本白牌頁另有一套 .ysca-wl-* 樣式、
 	 * 頁首是藍色橫幅、各頁分頁籤與卡片各長各的；改成全部用中央樣式的元件。各頁專屬 JS 與色彩挑選器、排序表的 CSS 由各自的 render() enqueue。
 	 *
 	 * @param string $hook 當前 admin 頁面 hook suffix。

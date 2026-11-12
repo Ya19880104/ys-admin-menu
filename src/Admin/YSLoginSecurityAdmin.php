@@ -309,7 +309,7 @@ final class YSLoginSecurityAdmin {
 		$origins  = get_option( YSLoginGuardSettings::OPTION_CROSS_ORIGINS, '' );
 		$auto     = YSLoginGuard::auto_origins();
 		// 核心的 allowed_http_origins 預設就有本站自己的 http 與 https（後台與首頁的主機）：那只是本站，列出來像是設錯了，
-		// 唯讀清單裡不列（實作審查 A 線 P3-7）。判斷跨站時照樣算。
+		// 唯讀清單裡不列。判斷跨站時照樣算。
 		$own = [];
 		foreach ( [ admin_url(), home_url() ] as $own_url ) {
 			$own_host = (string) wp_parse_url( $own_url, PHP_URL_HOST );
@@ -400,7 +400,7 @@ final class YSLoginSecurityAdmin {
 		];
 	}
 
-	/** 篩選參數：先驗證成 IP 或鍵的格式，不合法就不篩（§4.8、審查 P3-13）。 */
+	/** 篩選參數：先驗證成 IP 或鍵的格式，不合法就不篩（§4.8）。 */
 	public static function clean_filter( string $raw ): string {
 		$raw = trim( $raw );
 		$ip  = YSClientIp::normalize( $raw );

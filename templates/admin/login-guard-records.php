@@ -29,7 +29,7 @@ $lr_post    = admin_url( 'admin-post.php' );
 $lr_errors  = YSLoginSecurityAdmin::action_error_texts( (array) ( $field_errors ?? [] ) );
 $lr_done    = YSLoginSecurityAdmin::done_text( (string) ( $lg_done ?? '' ) );
 $lr_events  = [ 'fail' => '失敗', 'lockout' => '鎖定', 'unlock' => '解鎖', 'clear' => '清空', 'omitted' => '省略', 'xsite' => '跨站' ];
-// 每張表單自己的 nonce。不用 wp_nonce_field()：它每張都印 id="_wpnonce"，一頁七張會有重複的 id（實作審查 A 線 P3-11）。
+// 每張表單自己的 nonce。不用 wp_nonce_field()：它每張都印 id="_wpnonce"，一頁七張會有重複的 id。
 $lr_form    = static function ( string $action, string $id ) use ( $lr_post ): void {
 	echo '<form method="post" action="' . esc_url( $lr_post ) . '" id="' . esc_attr( $id ) . '" class="ys-am-lg-form">';
 	echo '<input type="hidden" name="action" value="' . esc_attr( $action ) . '">';
@@ -130,7 +130,7 @@ $lr_form    = static function ( string $action, string $id ) use ( $lr_post ): v
 											<td><?php echo esc_html( (string) (int) $lr_src['count'] ); ?><?php echo (int) $lr_src['observed'] > 0 ? esc_html( '（觀察中 ' . (int) $lr_src['observed'] . '）' ) : ''; ?></td>
 											<td><?php echo esc_html( wp_date( 'Y-m-d H:i', (int) $lr_src['last'] ) ); ?></td>
 											<td>
-												<?php // 存的時候截到 255 個字：剛好 255 個字的可能被截過，截完還像合法主機也不給按鈕（設計 §4.13.1；實作審查 A 線 P3-6）。 ?>
+												<?php // 存的時候截到 255 個字：剛好 255 個字的可能被截過，截完還像合法主機也不給按鈕（設計 §4.13.1）。 ?>
 												<?php if ( '' !== $lr_origin && strlen( $lr_origin ) < 255 && $lr_origin === YSLoginGuardSettings::valid_origin( $lr_origin ) ) : ?>
 													<button type="submit" class="ysca-btn ysca-btn--sm" name="lg_origin" value="<?php echo esc_attr( $lr_origin ); ?>" data-ys-am-lg-action="allow-origin">允許這個來源</button>
 												<?php else : ?>
@@ -188,7 +188,7 @@ $lr_form    = static function ( string $action, string $id ) use ( $lr_post ): v
 					</div>
 					<?php if ( (int) ( $lr['pages'] ?? 1 ) > 1 ) : ?>
 						<?php
-						// 第一頁、最後一頁，加上目前這一頁前後各 5 頁（紀錄最多 5 萬筆、一頁 50 筆時也到得了每一頁；實作審查 A 線 P3-11）。
+						// 第一頁、最後一頁，加上目前這一頁前後各 5 頁（紀錄最多 5 萬筆、一頁 50 筆時也到得了每一頁）。
 						$lr_pages = (int) $lr['pages'];
 						$lr_cur   = (int) $lr['page'];
 						$lr_list  = array_values( array_unique( array_merge( [ 1 ], range( max( 1, min( $lr_cur, $lr_pages ) - 5 ), min( $lr_pages, max( 1, $lr_cur ) + 5 ) ), [ $lr_pages ] ) ) );

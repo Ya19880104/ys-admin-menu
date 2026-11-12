@@ -586,7 +586,7 @@
     width: 100%;
 }
 
-/* loading 狀態：v2.30.1 UX-1：absolute spinner + invisible label，no width shift */
+/* loading 狀態：v2.30.1：absolute spinner + invisible label，no width shift */
 .ysca-btn.is-loading {
     position: relative;
     cursor: wait;
@@ -622,7 +622,7 @@
     to { transform: rotate(360deg); }
 }
 
-/* v2.30.1 A11Y-H4：reduced motion 下放慢 spinner（不停止，避免使用者誤以為當機）*/
+/* v2.30.1：reduced motion 下放慢 spinner（不停止，避免使用者誤以為當機）*/
 @media (prefers-reduced-motion: reduce) {
     .ysca-btn.is-loading::after {
         animation-duration: 2400ms;
@@ -704,7 +704,7 @@
     padding: var(--ysca-space-4);
 }
 
-/* v2.30.1 UX-7：data-dense pages 用更緊湊 padding（forms / log viewer） */
+/* v2.30.1：data-dense pages 用更緊湊 padding（forms / log viewer） */
 .ysca-card--dense {
     padding: var(--ysca-space-4);
 }
@@ -824,7 +824,7 @@
 .ysca-metric-card__value {
     grid-area: value;
     color: var(--ysca-text);
-    font-size: var(--ysca-fs-h1);  /* v2.30.1 UX-8：22px (was 16px) — match CODEX mockup */
+    font-size: var(--ysca-fs-h1);  /* v2.30.1：22px (was 16px), match mockup */
     font-weight: 800;
     line-height: 1.15;
     font-variant-numeric: tabular-nums;
@@ -1522,7 +1522,7 @@ body.ysca-active textarea.ysca-textarea {
 .ysca-input:focus,
 .ysca-select:focus,
 .ysca-textarea:focus {
-    /* v2.30.1 A11Y-C5：transparent outline 而非 none，forced-colors 模式仍可見 */
+    /* v2.30.1：transparent outline 而非 none，forced-colors 模式仍可見 */
     outline: 2px solid transparent;
     outline-offset: 2px;
     border-color: var(--ysca-primary);
@@ -2960,15 +2960,15 @@ body.ysca-active textarea.ysca-textarea {
 
 .ysca-tabs {
     display: flex;
-    flex-wrap: nowrap;            /* v2.30.1 UX-5：避免 7+ tab 換行破版 */
-    overflow-x: auto;             /* v2.30.1 UX-5：橫向 scroll 取代 wrap */
+    flex-wrap: nowrap;            /* v2.30.1：避免 7+ tab 換行破版 */
+    overflow-x: auto;             /* v2.30.1：橫向 scroll 取代 wrap */
     gap: var(--ysca-space-1);
     padding: 0 var(--ysca-space-2);
     border-bottom: 1px solid var(--ysca-line);
     scrollbar-width: thin;
 }
 
-/* v2.30.1 UX-5：垂直 tab variant 給 settings 用 */
+/* v2.30.1：垂直 tab variant 給 settings 用 */
 .ysca-tabs--navigation,
 nav.ysca-tabs[role="tablist"],
 .ys-ec-filters.ysca-tabs--with-indicator {
@@ -3078,7 +3078,7 @@ nav.ysca-tabs[role="tablist"],
     animation: ysca-fade var(--ysca-motion);
 }
 
-/* v2.39.12 CODEX P1: HTML hidden attribute must hide the backdrop.
+/* v2.39.12: HTML hidden attribute must hide the backdrop.
    Without this rule, display:grid above overrides hidden=true and the modal
    stays full-screen-grey on page load. !important needed because the base
    .ysca-modal-backdrop rule has equal specificity but appears earlier. */
@@ -3100,7 +3100,7 @@ nav.ysca-tabs[role="tablist"],
     box-shadow: var(--ysca-shadow-pop);
 }
 
-/* v2.30.1 UX-6：modal size variants */
+/* v2.30.1：modal size variants */
 .ysca-modal--sm { width: min(420px, 100%); }
 .ysca-modal--lg { width: min(800px, 100%); }
 .ysca-modal--xl { width: min(1080px, 100%); }

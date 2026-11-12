@@ -1,15 +1,15 @@
 <?php
 /**
- * 權限與選單管理（v2.39.0 BATCH Q — 權限設置完善）
+ * 權限與選單管理（v2.39.0 — 權限設置完善）
  *
- * v2.45.20 Phase R2.4-H：權限設置改套 YS CART admin shell（YSAdminApp::open/close）
+ * v2.45.20：權限設置改套 YS CART admin shell（YSAdminApp::open/close）
  * --------------------------------------------------------------------------------
  * 過往（v2.39.12）刻意保留 WP-native UI，理由：權限設置給「架站者」使用、需切
  * 換到使用者/外掛/外觀等 WP 原生 sidebar。v2.45.20 重新評估：
  *
  *   1. 業界白牌標準是「整個 admin 介面 by default 都應同 visual surface」，即使
  *      此頁需要 WP-native sidebar、user 仍可透過 topbar 的 WP chrome toggle 開回。
- *   2. v2.45.x 系列 R2.4-G（白牌設置）/ R2.4-H（權限設置）同步收編到 YS shell，
+ *   2. v2.45.x 系列白牌設置與權限設置同步收編到 YS shell，
  *      避免 sidebar nav 跳出 YS 視覺、影響白牌一致性。
  *   3. 「商店設定 / 權限」改放在 breadcrumb 表達層級，YS sidebar nav 仍導回電商
  *      工作流程；架站者真的要切 WP-native menu，topbar WP chrome toggle 一鍵展開。
@@ -22,13 +22,13 @@
  *     ysca-section">（hub-style section 容器），維持既有 CSS scope。
  *   - capability matrix 表單 nonce / cap_check / REST save 邏輯**完全不變**，只動 wrapper。
  *
- * v2.38.2 → v2.39.0 變更（BATCH Q）：
- *   - Q1：使用者覆寫 tab 從 legacy UI 完整重做為 server-side render + REST save
+ * v2.38.2 → v2.39.0 變更：
+ *   - 使用者覆寫 tab 從 legacy UI 完整重做為 server-side render + REST save
  *           （schema：user_overrides.items[] = { user_id, user_login, user_email, visible_slugs, hide_ys_cart }）
- *   - Q2：個別選單 row 高度由 ~80px → ~38-40px（compact rows）；title + slug 同行 inline；
+ *   - 個別選單 row 高度由 ~80px → ~38-40px（compact rows）；title + slug 同行 inline；
  *           title_override 變成 dashed-border 行內 input（hover-edit pattern）
- *   - Q3：新增「隱藏」checkbox 欄位，勾選後（YSMenuRouter）既不顯示也擋直接訪問
- *   - Q4：進階介面 已 OK；授權設置 placeholder 留待未來版本（v2.x license server）
+ *   - 新增「隱藏」checkbox 欄位，勾選後（YSMenuRouter）既不顯示也擋直接訪問
+ *   - 進階介面 已 OK；授權設置 placeholder 留待未來版本（v2.x license server）
  *
  * 三個子分頁（?tab=）：
  *   - wp_native       ：WordPress 原生選單（順序 / role / 顏色 / 隱藏 / 分隔列）
@@ -154,7 +154,7 @@ class YSPermissionAdmin {
 	 *   - user_overrides v2.39.0 完整重做（search user + card list + REST save）
 	 *   - access         v1.7.0：誰能使用本外掛（YSAccessAdmin）
 	 *
-	 * v2.45.20 Phase R2.4-H：cap check 後統一 YSAdminApp::open() / close()。
+	 * v2.45.20：cap check 後統一 YSAdminApp::open() / close()。
 	 * Capability matrix nonce / cap_check / REST save 邏輯**完全不變**，只動 wrapper。
 	 */
 	public static function render(): void {
@@ -209,10 +209,18 @@ class YSPermissionAdmin {
 			self::$sortablejs_tag_filter_registered = true;
 		}
 
+		// v1.11.0：存檔的基準與「送出之後又改過」的判斷（不碰畫面的小工具；permission JS 存檔時用它）。
+		wp_enqueue_script(
+			'ys-admin-menu-save-state',
+			YS_ADMIN_MENU_PLUGIN_URL . 'assets/js/ys-admin-menu-save-state.js',
+			[],
+			YS_ADMIN_MENU_VERSION,
+			true
+		);
 		wp_enqueue_script(
 			'ys-admin-menu-permission',
 			YS_ADMIN_MENU_PLUGIN_URL . 'assets/js/ys-admin-menu-permission.js',
-			[ 'sortablejs', 'wp-color-picker', 'jquery' ],
+			[ 'sortablejs', 'wp-color-picker', 'jquery', 'ys-admin-menu-save-state' ],
 			YS_ADMIN_MENU_VERSION,
 			true
 		);
@@ -274,7 +282,7 @@ class YSPermissionAdmin {
 	 *
 	 * JS 仍處理：drag (SortableJS)、新增分隔列、刪除 row、儲存（POST /menu-config）
 	 *
-	 * v2.39.0 BATCH Q2 + Q3：compact rows + hide checkbox column
+	 * v2.39.0：compact rows + hide checkbox column
 	 *
 	 * @param string $tab 'wp_native' | 'ys_cart'
 	 */
@@ -327,8 +335,9 @@ class YSPermissionAdmin {
 			}
 		}
 
-		// v1.5.1：網址帶 %xx 的選單（存檔時 %xx 被拿掉）、「自訂」（return 每頁不同）：這次列出的實際 slug 原字串對不到
-		// 已存的設定時，以鍵（YSMenuRouter::slug_key()）找，表格才會顯示已存的順序、名稱、角色、隱藏。
+		// v1.5.1：網址帶 %xx 的選單（存檔時 %xx 被拿掉）、「自訂」（return 每頁不同）、v1.11.0：自訂文章類型的分類子選單
+		// （側欄是 &amp;post_type=，存下的是 &post_type=）：這次列出的實際 slug 原字串對不到已存的設定時，以鍵
+		// （YSMenuRouter::slug_key()）找，表格才會顯示已存的順序、名稱、角色、隱藏。
 		foreach ( $items as $it ) {
 			$live = (string) ( $it['slug'] ?? '' );
 			if ( '' === $live || ! YSMenuRouter::slug_is_altered( $live ) ) {
@@ -369,7 +378,7 @@ class YSPermissionAdmin {
 		self::$self_only_map = YSMenuRouter::sidebar_self_only_map( $saved_config );
 		?>
 		<div class="ys-ec-permission-admin ysca-section">
-			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
+			<?php // v2.45.20：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
 			<?php echo self::tabs_nav( $tabs, $tab, $base_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- tabs_nav 內已逐欄 escape ?>
 
@@ -487,7 +496,142 @@ class YSPermissionAdmin {
 					</div>
 				</div>
 			</div>
+			<?php
+			// v1.11.0：設定裡有、上面的表格沒列出來的頁面規則（不在你的側欄上，規則照樣生效）。讀不到側欄時不列，免得整份設定都被當成這一類。
+			if ( ! empty( $items ) ) {
+				self::render_unlisted_section(
+					$tab,
+					YSPermissionController::unlisted_rows(
+						$saved_config,
+						$tab,
+						array_map( static fn( array $it ): string => (string) ( $it['slug'] ?? '' ), $items ),
+						get_current_user_id(),
+						YSMenuRouter::registered_menu_keys()
+					)
+				);
+			}
+			?>
 		</div>
+		<?php
+	}
+
+	/**
+	 * v1.11.0：「不在側欄上的頁面規則（N）」那一區（YSPermissionController::unlisted_rows() 的結果；沒有就什麼都不輸出）。
+	 * 用中央元件的卡片與表格，列裡的「誰看得到」面板、隱藏勾選與主表格同一套（存檔時 JS 只送改過的與移除的，unlisted）。
+	 * 「僅限本人」綁給別的帳號的只讀：寫明綁給誰，不給任何控制項，存檔也不送。
+	 *
+	 * @param string                           $tab     'wp_native' | 'ys_cart'
+	 * @param array<int, array<string, mixed>> $entries
+	 */
+	private static function render_unlisted_section( string $tab, array $entries ): void {
+		if ( [] === $entries ) {
+			return;
+		}
+		?>
+		<section class="ysca-card ys-ec-unlisted" id="ys-ec-unlisted" data-tab="<?php echo esc_attr( $tab ); ?>">
+			<div class="ysca-card__head"><div>
+				<h3 class="ysca-card__title"><?php echo esc_html( '不在側欄上的頁面規則（' . count( $entries ) . '）' ); ?></h3>
+				<p class="ysca-card__sub">這些規則對應的頁面不在上面的表格裡（不是選單的頁面、停用中外掛的頁面，或只有其他角色、帳號看得到的選單），規則照樣生效，直接開網址也照樣擋。可以在這裡改「誰看得到」與「隱藏」，或按 × 移除，改完按上方的「儲存設定」。「僅限本人」綁給別的帳號的只能看；綁定的帳號已不存在的只能移除。</p>
+			</div></div>
+			<div class="ysca-table-wrap ysca-table-scroll">
+			<table class="ys-ec-permission-table ys-ec-unlisted-table widefat ysca-table" data-tab="<?php echo esc_attr( $tab ); ?>">
+				<thead>
+					<tr>
+						<th>頁面</th>
+						<th class="ysca-table__roles">誰看得到</th>
+						<th class="ysca-table__state ysca-text-center">隱藏</th>
+						<th class="ysca-table__actions">操作</th>
+					</tr>
+				</thead>
+				<tbody id="ys-ec-unlisted-rows">
+					<?php
+					foreach ( $entries as $entry ) {
+						self::render_unlisted_row( $entry );
+					}
+					?>
+				</tbody>
+			</table>
+			</div>
+		</section>
+		<?php
+	}
+
+	/**
+	 * v1.11.0：「不在側欄上的頁面規則」的一列。
+	 *
+	 * @param array<string, mixed> $e YSPermissionController::unlisted_rows() 的一筆。
+	 */
+	private static function render_unlisted_row( array $e ): void {
+		$slug     = (string) ( $e['slug'] ?? '' );
+		$level    = 'sub' === ( $e['level'] ?? 'top' ) ? 'sub' : 'top';
+		$parent   = (string) ( $e['parent'] ?? '' );
+		$kind     = (string) ( $e['kind'] ?? 'other' );
+		$roles    = (array) ( $e['roles'] ?? [] );
+		$access   = is_array( $e['access'] ?? null ) ? $e['access'] : null;
+		$hide     = ! empty( $e['hide'] );
+		$rows     = (int) ( $e['rows'] ?? 1 );
+		$readonly = 'bound_to_other' === $kind;
+		// v1.11.0：綁給的帳號已不存在：沒有人打得開這一頁（連管理員也一樣），只給移除（存檔時當成 deleted 送出）。
+		$gone = 'bound_to_missing' === $kind;
+		$why  = [
+			'not_registered'   => '這一頁目前沒有登記在選單上（不是選單的頁面、停用中外掛的頁面，或已經改名、拿掉的選單）。',
+			'other'            => '這一頁有登記在選單上，但只有其他角色或帳號的側欄有這個選單。',
+			'bound_to_other'   => '僅限本人：綁給 ' . self::user_label( (int) ( $e['bound_to'] ?? 0 ) ) . '，只有那個帳號能改。',
+			'bound_to_missing' => '僅限本人：綁定的帳號 #' . (int) ( $e['bound_to'] ?? 0 ) . ' 已不存在（刪掉的帳號，或從別站匯入的設定），這一頁現在連管理員也打不開。按 × 移除這個頁面的規則，再按「儲存設定」。',
+		][ $kind ] ?? '';
+		$attrs = $readonly
+			? ' data-unlisted-readonly="1" data-slug="' . esc_attr( $slug ) . '"'
+			: ' data-unlisted-key="' . esc_attr( (string) ( $e['key'] ?? '' ) ) . '" data-slug="' . esc_attr( $slug ) . '"';
+		$attrs .= ' data-unlisted-level="' . esc_attr( $level ) . '"';
+		if ( ! empty( $e['core_rules'] ) ) {
+			$attrs .= ' data-core-rules="1"';
+		}
+		if ( $gone ) {
+			$attrs .= ' data-unlisted-bound-missing="1"';
+		}
+		?>
+		<tr<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- 上面逐欄 escape ?>>
+			<td>
+				<div class="menu-line">
+					<code><?php echo esc_html( $slug ); ?></code>
+					<span class="level-badge<?php echo 'sub' === $level ? ' level-sub' : ''; ?>"><?php echo 'sub' === $level ? '子頁' : '頂層'; ?></span>
+					<?php if ( ! empty( $e['core_rules'] ) ) : ?>
+						<span class="level-badge level-core" title="這一列有 YS CART 寫入的可見規則：本外掛原樣保留、不執行。移除這個頁面的規則會一起刪掉。">YS CART 規則</span>
+					<?php endif; ?>
+					<span class="ys-ec-preview-badges" aria-live="polite"></span>
+				</div>
+				<p class="description"><?php echo esc_html( $why . ( 'sub' === $level && '' !== $parent ? '（設定在「' . $parent . '」底下）' : '' ) ); ?></p>
+				<?php if ( $rows > 1 ) : ?>
+					<p class="description"><?php echo esc_html( '這個頁面有 ' . $rows . ' 列設定，這裡顯示最後一列；儲存修改時會一起改成這裡的設定。' ); ?></p>
+				<?php endif; ?>
+				<?php if ( ! $readonly && ! $gone && (int) ( $e['self_only_uid'] ?? 0 ) > 0 ) : ?>
+					<p class="description">僅限本人：你（要取消請移除這個頁面的規則）。</p>
+				<?php endif; ?>
+			</td>
+			<?php if ( $readonly || $gone ) : ?>
+				<td><?php echo esc_html( null !== $access ? '另有「誰看得到」的設定' : ( [] !== $roles ? '只有 ' . implode( '、', array_map( 'strval', $roles ) ) : '不限' ) ); ?></td>
+				<td class="ysca-text-center"><?php echo $hide ? '是' : '—'; ?></td>
+				<?php if ( $gone ) : ?>
+					<td class="ys-ec-row-actions">
+						<button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-unlisted-remove" title="移除這個頁面的規則（按「儲存設定」後生效）">×</button>
+					</td>
+				<?php else : ?>
+					<td class="ys-ec-row-actions"><span class="ysca-text-muted">只能看</span></td>
+				<?php endif; ?>
+			<?php else : ?>
+				<td>
+					<div class="role-cb-group">
+						<?php echo YSMenuRouter::is_own_page( $slug ) ? self::role_picker_html( $roles ) : self::access_picker_html( $roles, $access ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- 兩個函式內已逐欄 escape ?>
+					</div>
+				</td>
+				<td class="ys-ec-hide-cb">
+					<input type="checkbox" class="ys-ec-hide-checkbox" title="勾選後這一頁對管理員以外的帳號隱藏（直接開網址也擋）" <?php checked( $hide ); ?>>
+				</td>
+				<td class="ys-ec-row-actions">
+					<button type="button" class="ysca-btn ysca-btn--ghost ysca-btn--sm ys-ec-unlisted-remove" title="移除這個頁面的規則（按「儲存設定」後生效）">×</button>
+				</td>
+			<?php endif; ?>
+		</tr>
 		<?php
 	}
 
@@ -987,7 +1131,7 @@ class YSPermissionAdmin {
 	}
 
 	/**
-	 * 渲染一般 menu item row（v2.39.0 BATCH Q2 + Q3：compact + hide cb）
+	 * 渲染一般 menu item row（v2.39.0：compact + hide cb）
 	 *
 	 * 結構（單行 ~38px 高）：
 	 *   | drag | order | menu-line(strong+code+badge) + title-override-inline | roles | [color?] | hide | 操作 |
@@ -1423,7 +1567,7 @@ class YSPermissionAdmin {
 	}
 
 	/**
-	 * 渲染 user_overrides tab（v2.39.0 BATCH Q1 完整重做）
+	 * 渲染 user_overrides tab（v2.39.0 完整重做）
 	 *
 	 * 取代 v2.37.1 的 render_legacy_user_overrides() — 改成：
 	 *   1. 上方 toolbar：search input + 「+ 新增使用者覆寫」 button + 「儲存」 button
@@ -1441,7 +1585,7 @@ class YSPermissionAdmin {
 		$tabs = self::tabs();
 		?>
 		<div class="ys-ec-permission-admin ysca-section">
-			<?php // v2.45.20 Phase R2.4-H：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
+			<?php // v2.45.20：page title 由 YSAdminApp::open() 的 page-head 提供，不再 echo <h1>。 ?>
 
 			<?php echo self::tabs_nav( $tabs, 'user_overrides', $base_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- tabs_nav 內已逐欄 escape ?>
 
@@ -1497,7 +1641,7 @@ class YSPermissionAdmin {
 	}
 
 	/**
-	 * 渲染單一 user override card（v2.39.0 Q1）
+	 * 渲染單一 user override card（v2.39.0）
 	 *
 	 * @param array<string, mixed>  $ov         user override row（user_id / user_login / user_email / visible_slugs / hide_ys_cart）
 	 * @param array<string, string> $all_slugs  全部可選 slug → title 對應表

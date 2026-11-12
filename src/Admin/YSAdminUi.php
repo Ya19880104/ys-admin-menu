@@ -2,10 +2,10 @@
 /**
  * YS 後台中央樣式（v1.8.0）
  *
- * 10-27 使用者：「後台你有中央化ＣＳＳ嗎」「YS ADMIN 的也要整理」。
+ * 後台樣式中央化：本外掛的設定頁也一起整理。
  *
  * assets/ys-admin-ui/ 四支：設計系統三支（ysca-tokens、ysca-admin-base、ys-cart-admin-components）＋共用版面 ys-admin-ui.css。
- * 其他 YS 外掛（例如立肯型錄）內附同一份、用同一組代稱；同一頁只註冊一份，取版本最高的那份。
+ * 其他 YS 外掛內附同一份、用同一組代稱；同一頁只註冊一份，取版本最高的那份。
  * 本外掛的設定頁只用這裡的元件，自己的 CSS 只放獨有的元件（ys-admin-menu-settings.css、選單排序表、色彩挑選器）。
  *
  * @package YangSheep\AdminMenu\Admin
@@ -17,8 +17,8 @@ defined( 'ABSPATH' ) || exit;
 
 final class YSAdminUi {
 
-	/** 內附的中央樣式版本（assets/ys-admin-ui/ys-admin-ui.css 檔頭的 @version）。 */
-	public const VERSION = '1.0.0';
+	/** 內附的中央樣式版本（assets/ys-admin-ui/ys-admin-ui.css 檔頭的 @version）。本外掛 1.11.0 起內附 1.1.1（1.1.0 字級、1.1.1 窄螢幕）。 */
+	public const VERSION = '1.1.1';
 
 	public static function register(): void {
 		add_action( 'admin_enqueue_scripts', [ self::class, 'register_styles' ], 1 );

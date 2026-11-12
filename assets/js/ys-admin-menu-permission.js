@@ -1,10 +1,10 @@
 /**
- * YS CART 權限設置 — 前端互動（v2.39.0 BATCH Q）
+ * YS CART 權限設置 — 前端互動（v2.39.0）
  *
  * v2.38.2 → v2.39.0 變更：
- *   - Q1：新 user_overrides tab 完整互動（debounced wp/v2/users 搜尋 + 新增/移除 card + 儲存）
- *   - Q2：compact row（td padding 6px、role-cb-group flex）— JS payload 不變
- *   - Q3：hide checkbox 加入 payload（boolean 欄位）+ separator row 模板更新
+ *   - 新 user_overrides tab 完整互動（debounced wp/v2/users 搜尋 + 新增/移除 card + 儲存）
+ *   - compact row（td padding 6px、role-cb-group flex）— JS payload 不變
+ *   - hide checkbox 加入 payload（boolean 欄位）+ separator row 模板更新
  *
  * v2.38.2 hotfix 改動（已保留）：
  *   - 不再 fetch /menu-enumeration（rows 改由 PHP 在 render 時直接輸出）
@@ -36,8 +36,6 @@
     var rowsTbody = document.getElementById( 'ys-ec-permission-rows' );
     var userList  = document.getElementById( 'ys-ec-user-overrides-list' );
 
-    bootstrap();
-
     /**
      * v2.39.0：保留 v2.38.2 baseline test 的 bootstrap() 名稱（避免破壞 regression）
      * 內部分流到對應 controller。
@@ -54,8 +52,10 @@
     // CONTROLLER A：wp_native / ys_cart 主表
     // ═════════════════════════════════════════════
     // v1.3.2：有沒有未儲存的變更（離開頁面時提醒）。
+    // v1.11.0：每一次修改也記進 saveState（YSAdminMenuSaveState，bootMainTable 建）：存檔回應回來時，送出之後又改過的照樣算沒存。
     var isDirty = false;
-    function markDirty() { isDirty = true; }
+    var saveState = null;
+    function markDirty() { isDirty = true; if ( saveState ) { saveState.touch(); } }
     function markClean() { isDirty = false; }
     window.addEventListener( 'beforeunload', function ( e ) {
         if ( ! isDirty ) {
@@ -78,7 +78,7 @@
 
         if ( typeof window.jQuery !== 'undefined' && window.jQuery.fn.wpColorPicker ) {
             try {
-                window.jQuery( tbody ).find( '.ys-ec-color-picker' ).wpColorPicker();
+                window.jQuery( tbody ).find( '.ys-ec-color-picker' ).wpColorPicker( { change: markDirty, clear: markDirty } );
             } catch ( e ) { /* swallow */ }
         }
         setupSortable( tbody, tab );
@@ -90,6 +90,34 @@
         var renderedTopKeys = topRowKeys( tbody );
         var renderedCopies = collectCopies( tab ); // 載入時的複製項（{slug,parent_slug}）。
         var renderedCustom = customRowUrls( tbody ); // v1.7.0：載入時的自訂連結網址。
+        // v1.11.0：「不在側欄上的頁面規則」那一區：載入時每一列的設定是基準，存檔時只送跟基準不同的（改過的與移除的，unlisted）；
+        // 存成功後基準換成送出當下的快照（YSAdminMenuSaveState），送出之後才改的下次照樣送。
+        var unlistedTbody = document.getElementById( 'ys-ec-unlisted-rows' );
+        if ( ! window.YSAdminMenuSaveState ) {
+            setStatus( saveStatus, '缺少存檔元件（ys-admin-menu-save-state.js），請重新整理頁面後再修改', '#dc2626' );
+            if ( saveBtn ) { saveBtn.disabled = true; }
+            return;
+        }
+        saveState = window.YSAdminMenuSaveState.create( unlistedTbody ? unlistedSnapshot( unlistedTbody ) : {} );
+        if ( unlistedTbody ) {
+            var unlistedTable = unlistedTbody.closest( 'table' );
+            unlistedTbody.addEventListener( 'click', function ( e ) {
+                var btn = e.target.closest && e.target.closest( 'button' );
+                if ( ! btn || ! btn.classList.contains( 'ys-ec-unlisted-remove' ) ) {
+                    return;
+                }
+                var row = btn.closest( 'tr' );
+                var coreNote = row && row.getAttribute( 'data-core-rules' ) === '1' ? '\n這一列有 YS CART 寫入的可見規則，會一起刪掉。' : '';
+                if ( row && window.confirm( '確定要移除這個頁面的規則？\n（按「儲存設定」後生效；移除後這一頁照沒有設定處理）' + coreNote ) ) {
+                    row.parentNode.removeChild( row );
+                    markDirty();
+                }
+            } );
+            if ( unlistedTable ) {
+                unlistedTable.addEventListener( 'input', markDirty );
+                unlistedTable.addEventListener( 'change', markDirty );
+            }
+        }
         syncCopyButtons();
         if ( 'wp_native' !== tab ) {
             addApplyChildrenButtons( tbody );
@@ -104,7 +132,7 @@
                 var row = buildCustomRow( nextOrder( tbody ) );
                 tbody.appendChild( row );
                 if ( typeof window.jQuery !== 'undefined' && window.jQuery.fn.wpColorPicker ) {
-                    try { window.jQuery( row ).find( '.ys-ec-color-picker' ).wpColorPicker(); } catch ( e ) { /* swallow */ }
+                    try { window.jQuery( row ).find( '.ys-ec-color-picker' ).wpColorPicker( { change: markDirty, clear: markDirty } ); } catch ( e ) { /* swallow */ }
                 }
                 renderIconPreview( row.querySelector( '.ys-ec-icon-field' ) );
                 var titleInput = row.querySelector( '.ys-ec-custom-title' );
@@ -211,6 +239,10 @@
         // 任何輸入／勾選都算有未儲存變更。
         table.addEventListener( 'input', markDirty );
         table.addEventListener( 'change', markDirty );
+        [ 'ys-ec-new-items-visibility', 'ys-ec-rename-page-titles' ].forEach( function ( id ) {
+            var control = document.getElementById( id );
+            if ( control ) { control.addEventListener( 'change', markDirty ); }
+        } );
 
         if ( saveBtn ) {
             saveBtn.addEventListener( 'click', function () {
@@ -226,33 +258,58 @@
                     if ( focus ) { focus.focus(); }
                     return;
                 }
-                saveBtn.disabled = true;
-                setStatus( saveStatus, '儲存中…', '#6b7280' );
+                try {
+                    saveBtn.disabled = true;
+                    setStatus( saveStatus, '儲存中…', '#6b7280' );
 
-                var payload = ( 'wp_native' === tab )
-                    ? buildWpNativePayload( tbody, renderedSlugs, renderedCustom )
-                    : buildYsCartPayload( tbody, renderedSlugs, renderedTopKeys, renderedCopies );
+                    // v1.11.0：送出當下的狀態。存成功後以它為基準（表格上存下的列、「不在側欄上的頁面規則」每一列的設定），
+                    // 不是回應回來時畫面上的樣子：送出之後才改、才刪的照樣算沒存，下次照樣送、離開頁面照樣提醒。
+                    var sentRendered = renderedAtSend( tbody, tab );
+                    var sent = saveState.begin( unlistedTbody ? unlistedSnapshot( unlistedTbody ) : {} );
 
-                postMenuConfig( payload )
-                    .then( function ( ok ) {
-                        if ( ok ) {
-                            // 自訂連結的網址改過的列，代稱與網址換成新的（下次儲存時 rendered 清單才對）。
-                            Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-custom="1"]' ), function ( row ) {
-                                var url = trimStr( ( row.querySelector( '.ys-ec-custom-url' ) || {} ).value );
-                                row.setAttribute( 'data-slug', customMenuKey( url ) );
-                                row.setAttribute( 'data-custom-url', url );
-                            } );
-                            renderedSlugs   = rowSlugs( tbody );
-                            renderedTopKeys = topRowKeys( tbody );
-                            renderedCopies  = collectCopies( tab );
-                            renderedCustom  = customRowUrls( tbody );
-                            markClean();
-                            setStatus( saveStatus, '已儲存 ✓', '#16a34a', 3000 );
-                        }
-                    } )
-                    .finally( function () {
-                        saveBtn.disabled = false;
-                    } );
+                    var payload = ( 'wp_native' === tab )
+                        ? buildWpNativePayload( tbody, renderedSlugs, renderedCustom )
+                        : buildYsCartPayload( tbody, renderedSlugs, renderedTopKeys, renderedCopies );
+                    if ( unlistedTbody ) {
+                        payload = Object.assign( payload, { unlisted: unlistedPayload( unlistedTbody, saveState.baseline(), tab ) } );
+                    }
+
+                    postMenuConfig( payload )
+                        .then( function ( ok ) {
+                            var clean = saveState.done( sent, ok );
+                            if ( ok ) {
+                                // 自訂連結的代稱與網址換成這次送出的（下次儲存時 rendered 清單才對；送出之後又改的網址下次照樣送）。
+                                sentRendered.customRows.forEach( function ( c ) {
+                                    c.row.setAttribute( 'data-slug', customMenuKey( c.url ) );
+                                    c.row.setAttribute( 'data-custom-url', c.url );
+                                } );
+                                renderedSlugs   = sentRendered.slugs;
+                                renderedTopKeys = sentRendered.topKeys;
+                                renderedCopies  = sentRendered.copies;
+                                renderedCustom  = sentRendered.custom;
+                                if ( clean ) {
+                                    markClean();
+                                    setStatus( saveStatus, '已儲存 ✓', '#16a34a', 3000 );
+                                } else {
+                                    setStatus( saveStatus, '已儲存；送出之後又有修改還沒存，請再按一次「儲存設定」', '#b45309' );
+                                }
+                            }
+                        } )
+                        .catch( function ( err ) {
+                            markDirty();
+                            setStatus( saveStatus, '儲存錯誤：' + ( err && err.message ? err.message : '請再試一次' ), '#dc2626' );
+                        } )
+                        .finally( function () {
+                            saveBtn.disabled = false;
+                        } );
+                } catch ( err ) {
+                    if ( sent && saveState ) {
+                        try { saveState.done( sent, false ); } catch ( ignored ) { /* 保留未儲存狀態 */ }
+                    }
+                    markDirty();
+                    saveBtn.disabled = false;
+                    setStatus( saveStatus, '儲存錯誤：' + ( err && err.message ? err.message : '請再試一次' ), '#dc2626' );
+                }
             } );
         }
 
@@ -272,6 +329,27 @@
         }
     }
 
+    // ── v1.11.0：送出當下表格上的列（存成功後當成已存的列，下一次存檔的 rendered 清單）。自訂連結列照這次送出的網址算代稱。 ──
+    function renderedAtSend( tbody, tab ) {
+        var customRows = [];
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-custom="1"]' ), function ( row ) {
+            customRows.push( { row: row, url: trimStr( ( row.querySelector( '.ys-ec-custom-url' ) || {} ).value ) } );
+        } );
+        var slugs = Array.prototype.map.call( tbody.querySelectorAll( 'tr[data-slug]' ), function ( r ) {
+            if ( r.getAttribute( 'data-custom' ) === '1' ) {
+                return customMenuKey( trimStr( ( r.querySelector( '.ys-ec-custom-url' ) || {} ).value ) );
+            }
+            return r.getAttribute( 'data-slug' );
+        } );
+        return {
+            slugs:      slugs,
+            topKeys:    topRowKeys( tbody ),
+            copies:     collectCopies( tab ),
+            custom:     customRows.map( function ( c ) { return c.url; } ).filter( function ( u ) { return '' !== u; } ),
+            customRows: customRows
+        };
+    }
+
     // ── 收集目前列的 slug / 頂層複製鍵（rendered 清單用） ──
     function rowSlugs( tbody ) {
         return Array.prototype.map.call(
@@ -284,6 +362,35 @@
             tbody.querySelectorAll( 'tr[data-copy="1"], tr[data-promoted="1"]' ),
             function ( r ) { return r.getAttribute( 'data-copy-key' ); }
         ).filter( function ( k ) { return !! k; } );
+    }
+
+    // ── v1.11.0：「不在側欄上的頁面規則」（只有可以改的列有 data-unlisted-key；綁給別人的只讀，不送） ──
+    function unlistedState( row ) {
+        var who = readAccess( row );
+        var hideCb = row.querySelector( '.ys-ec-hide-checkbox' );
+        return { roles: who.roles, access: who.access, hide: hideCb ? !! hideCb.checked : false };
+    }
+    function unlistedSnapshot( tbody ) {
+        var out = {};
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-unlisted-key]' ), function ( row ) {
+            out[ row.getAttribute( 'data-unlisted-key' ) ] = JSON.stringify( unlistedState( row ) );
+        } );
+        return out;
+    }
+    // 存檔要送的：改過的（跟載入時不同）與移除的（載入時有、現在沒有）；沒動的不送，伺服器照原樣保留。
+    function unlistedPayload( tbody, initial, tab ) {
+        var changed = [];
+        var present = {};
+        Array.prototype.forEach.call( tbody.querySelectorAll( 'tr[data-unlisted-key]' ), function ( row ) {
+            var key = row.getAttribute( 'data-unlisted-key' );
+            var now = unlistedState( row );
+            present[ key ] = true;
+            if ( initial[ key ] !== JSON.stringify( now ) ) {
+                changed.push( { key: key, roles: now.roles, access: now.access, hide: now.hide } );
+            }
+        } );
+        var deleted = Object.keys( initial ).filter( function ( key ) { return ! present[ key ]; } );
+        return { tab: tab, changed: changed, deleted: deleted };
     }
 
     // ── 建立 payload ──
@@ -1188,6 +1295,15 @@
             d.i = out.length;
             out.push( { row: row, data: d } );
         } );
+        // v1.11.0：「不在側欄上的頁面規則」那一區（含只讀的列）：側欄上沒有，只算網址（kind page）。
+        var unlisted = document.getElementById( 'ys-ec-unlisted-rows' );
+        if ( unlisted ) {
+            Array.prototype.forEach.call( unlisted.querySelectorAll( 'tr[data-slug]' ), function ( row ) {
+                var slug = row.getAttribute( 'data-slug' ) || '';
+                if ( '' === slug ) { return; }
+                out.push( { row: row, data: { kind: 'page', slug: slug, cap: '', i: out.length } } );
+            } );
+        }
         return out;
     }
 
@@ -1203,12 +1319,17 @@
         var badge = function ( ok, label ) {
             return '<span class="ys-ec-pv ' + ( ok ? 'ys-ec-pv--ok' : 'ys-ec-pv--no' ) + '">' + ( ok ? '✓ ' : '✕ ' ) + label + '</span>';
         };
-        holder.innerHTML = badge( !! result.sidebar, result.sidebar ? '側欄看得到' : '側欄看不到' )
+        // v1.11.0：sidebar 是 null＝側欄上沒有這一項（「不在側欄上的頁面規則」），只標網址。
+        holder.innerHTML = ( null === result.sidebar ? '' : badge( !! result.sidebar, result.sidebar ? '側欄看得到' : '側欄看不到' ) )
             + ( null === result.url || undefined === result.url ? '' : badge( !! result.url, result.url ? '網址進得去' : '網址進不去' ) );
     }
 
     function clearPreview( tbody ) {
         Array.prototype.forEach.call( tbody.querySelectorAll( '.ys-ec-preview-badges' ), function ( h ) { h.innerHTML = ''; } );
+        var unlisted = document.getElementById( 'ys-ec-unlisted-rows' );
+        if ( unlisted ) {
+            Array.prototype.forEach.call( unlisted.querySelectorAll( '.ys-ec-preview-badges' ), function ( h ) { h.innerHTML = ''; } );
+        }
     }
 
     function bootPreview( tbody ) {
@@ -1262,7 +1383,11 @@
                         if ( hit && null !== result.i ) { paintPreview( hit.row, result ); }
                     } );
                     if ( clear ) { clear.hidden = false; }
-                    setStatus( status, '以「' + u.name + '」試算' + ( isDirty ? '（照已儲存的設定，表上還有沒存的變更）' : '' ), '#0f766e' );
+                    // v1.11.0：一次最多算 600 列（表格的列在前、「不在側欄上的頁面規則」在後），沒算到的照實寫出來。
+                    var skipped = parseInt( res.data.skipped, 10 ) || 0;
+                    setStatus( status, '以「' + u.name + '」試算'
+                        + ( skipped > 0 ? '（最多算 600 列，最後 ' + skipped + ' 列沒有算、沒有標結果）' : '' )
+                        + ( isDirty ? '（照已儲存的設定，表上還有沒存的變更）' : '' ), '#0f766e' );
                 } )
                 .catch( function ( err ) {
                     setStatus( status, '試算失敗：' + err.message, '#dc2626' );
@@ -1709,7 +1834,7 @@
     }
 
     // ═════════════════════════════════════════════
-    // CONTROLLER B：user_overrides tab（v2.39.0 BATCH Q1）
+    // CONTROLLER B：user_overrides tab（v2.39.0）
     // ═════════════════════════════════════════════
     function bootUserOverrides( list ) {
         var saveBtn       = document.getElementById( 'ys-ec-save-permissions' );
@@ -1782,9 +1907,10 @@
                 var li = document.createElement( 'li' );
                 var login = u.slug || u.username || ( 'user-' + u.id );
                 var email = u.email || u.user_email || '';
+                // v1.11.0：email 與 ID 的字級、顏色改由 ys-admin-menu-permission.css 管（原本內嵌 10px 淡灰字）。
                 li.innerHTML = '<strong>' + escapeHtml( login ) + '</strong> '
-                    + '<code style="font-size:10px;color:#9ca3af;">' + escapeHtml( email ) + '</code> '
-                    + '<span style="color:#9ca3af;font-size:10px;">#' + ( u.id | 0 ) + '</span>';
+                    + '<code class="ys-ec-user-result__email">' + escapeHtml( email ) + '</code> '
+                    + '<span class="ys-ec-user-result__id">#' + ( u.id | 0 ) + '</span>';
                 li.dataset.userId    = String( u.id | 0 );
                 li.dataset.userLogin = login;
                 li.dataset.userEmail = email;
@@ -1968,4 +2094,6 @@
     function escapeAttr( s ) {
         return escapeHtml( s );
     }
+    // 初始化所有控制器共用狀態後，才連接頁面事件。
+    bootstrap();
 }());

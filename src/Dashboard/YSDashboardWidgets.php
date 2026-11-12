@@ -1,6 +1,6 @@
 <?php
 /**
- * v1.7.0：控制台小工具（設計 docs/plans/2026-10-26-ys-admin-menu-170-design.md §5；對標 Widget Disable）。
+ * v1.7.0：控制台小工具（設計 §5；對標 Widget Disable）。
  *
  * 選項：
  *   - ys_admin_menu_dashboard_widgets（autoload yes）：{ version: 1, hidden: string[], hide_welcome: bool }
@@ -209,7 +209,7 @@ final class YSDashboardWidgets {
 	}
 
 	/**
-	 * v1.7.1：打開「後台精簡」頁時直接列舉控制台小工具，不必先打開一次控制台（使用者 10-27：「控制台為什麼需要打開一次？」，對標 Widget Disable）。
+	 * v1.7.1：打開「後台精簡」頁時直接列舉控制台小工具，不必先打開一次控制台（對標 Widget Disable）。
 	 *
 	 * 做法同 Widget Disable：載入 wp-admin/includes/dashboard.php、暫時把目前畫面設成控制台、執行 wp_dashboard_setup()。
 	 * 核心與各外掛在這一步只「登記」小工具，不執行小工具的內容；本類別在 wp_dashboard_setup 很晚的那一步照常記下（on_dashboard_setup() → remember()）。

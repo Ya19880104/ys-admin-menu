@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 /** @var string $saved_notice */
 /** @var string $reset_notice */
 /** @var array  $cfg */
+/** @var array{url:string}|null $ys_cart_notice v1.11.0：站上有 YS CART 時的提示（YSAdminThemeAdmin::ys_cart_notice()）。 */
 
 $color_fields = [
 	[
@@ -144,6 +145,17 @@ echo YSMenuPage::page_open( '原生選單樣式', '自訂側欄與 admin bar 的
 	<?php if ( ! empty( $reset_notice ) ) : ?>
 		<div class="notice notice-warning is-dismissible">
 			<p><?php echo esc_html( $reset_notice ); ?></p>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( ! empty( $ys_cart_notice ) ) : // v1.11.0：有 YS CART 時本頁的皮膚設定不會套用（YSAdminThemeRenderer 讓位）。 ?>
+		<div class="ys-admin-note ys-admin-note--warning">
+			<p>
+				<strong>已安裝 YS CART：</strong>後台左側選單的配色、字級與留白由 YS CART 的「原生選單樣式」頁設定，這一頁的「啟用」「顏色」「文字大小」「選單項留白」「子選單項」目前不會套用，停用 YS CART 後才會生效；「分組標籤樣式」不受影響，照樣套用。設定照樣可以儲存。
+				<?php if ( '' !== (string) ( $ys_cart_notice['url'] ?? '' ) ) : ?>
+					<a href="<?php echo esc_url( (string) $ys_cart_notice['url'] ); ?>">前往 YS CART 的原生選單樣式</a>
+				<?php endif; ?>
+			</p>
 		</div>
 	<?php endif; ?>
 
