@@ -4,6 +4,16 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## [1.11.1] - 2026-11-26
+
+**更新到 1.11.1 時不寫任何設定、不做資料遷移。** 只改列出全站選單的 REST（`GET /wp-json/ys-admin-menu/v1/admin/permissions/menu-enumeration`）在其他外掛出錯時的處理。
+
+### 修正：列出全站選單的 REST 遇到其他外掛出錯
+- 這個 REST 在 REST 請求裡觸發 admin_menu 之前，改成先載入 WordPress 後台在 admin_menu 之前載入的函式檔 `wp-admin/includes/admin.php`（以前只載入 `plugin.php`）。其他外掛在 admin_menu 用到後台函式時不再致命錯誤，例如 Simple History 5.36.0 的隱私設定頁呼叫 `add_settings_section()`，以前這個 REST 一律回 500。載入時還沒定義 `WP_ADMIN`，WordPress 會順便載入後台翻譯。
+- 其他外掛在 admin_menu 丟出例外或 PHP 錯誤時，回 500、code 是 `ys_admin_menu_enumeration_failed`，error 寫出錯誤類別、訊息與檔案位置（相對網站根目錄，訊息裡自帶的、網站目錄底下的絕對路徑也改成相對寫法），不列出只建了一半的選單；callback 開了輸出緩衝、印了半截才出錯時，那一截丟掉；同一個錯誤另寫一筆 PHP 錯誤紀錄。以前整個請求致命錯誤。
+- 其他外掛在 admin_menu 直接結束請求時（例：LoginPress 6.2.5 的 `LoginPress_Customizer::menu_url()` 在這個 REST 裡 exit），請求結束時改送 500、code 是 `ys_admin_menu_enumeration_interrupted`，error 列出當時那個優先順序上的 callback（WordPress 只記得跑到哪個優先順序，所以同一個優先順序上的都列出，回應最多 10 個），另寫一筆 PHP 錯誤紀錄、全部列出。以前回 200 空白。標頭已經送出、或 callback 自己已經輸出回應（例如 `wp_die()` 送出的錯誤）時照原樣，不另外改。
+- 「選單與權限」設定頁的表格是在後台頁面裡直接列出，「儲存設定」也不經過這個 REST，這兩處的行為沒有改。
+
 ## [1.11.0] - 2026-11-10
 
 **更新到 1.11.0 時不寫任何設定、不做資料遷移。** 會跟以前不一樣的有四處：分類列表頁的網址開始照那個分類選單的規則擋；自訂文章類型的分類選單以前存下的隱藏、角色與僅限本人開始在側欄生效、設定表格也看得到（兩個都在下面第一節）；有設顏色的主選單項目，滑過去與目前所在時改用 hover 字色（第二節）；本外掛設定頁的字變大（第三節）。

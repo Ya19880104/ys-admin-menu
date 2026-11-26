@@ -12,7 +12,7 @@
  * 設計重點：
  *   - 為了讓 enumeration 能拿到完整 $menu / $submenu，
  *     當全域 $menu 為空時（典型 REST request 不會載入 admin context），
- *     主動 require wp-admin/includes/menu.php + 觸發 admin_menu hook。
+ *     主動 require wp-admin/includes/admin.php（v1.11.1 起；以前只載 plugin.php）+ 觸發 admin_menu hook。
  *   - 列舉 enumeration 時 include 所有 plugin 註冊的 top-level（含 YS CART 自家 +
  *     第三方如「內容權限」/ 「YS POS」），跳過 wp-menu-separator slug。
  *
@@ -55,6 +55,24 @@ class YSPermissionController {
 
 	/** v1.7.0：以某位使用者試算一次最多幾列。 */
 	private const MAX_PREVIEW_ROWS = 600;
+
+	/** v1.11.1：列舉時其他外掛在 admin_menu 丟出例外或錯誤的錯誤代碼（回 500）。 */
+	public const ENUMERATION_FAILED = 'ys_admin_menu_enumeration_failed';
+
+	/** v1.11.1：列舉時其他外掛在 admin_menu 直接結束請求（exit／die）的錯誤代碼（請求結束時補送 500）。 */
+	public const ENUMERATION_INTERRUPTED = 'ys_admin_menu_enumeration_interrupted';
+
+	/** v1.11.1：列舉觸發 admin_menu 的期間是 true；請求在這段期間結束時，關機檢查靠它補送錯誤回應。 */
+	private static bool $firing_admin_menu = false;
+
+	/** v1.11.1：開始觸發 admin_menu 時，各層輸出緩衝已有的位元組數（關機檢查用來分辨 callback 自己有沒有輸出東西）。 */
+	private static int $buffered_before = 0;
+
+	/** v1.11.1：關機檢查一個請求只註冊一次。 */
+	private static bool $shutdown_registered = false;
+
+	/** v1.11.1：觸發 admin_menu 時先取好的 blog_charset（請求結束時送 JSON 用）。 */
+	private static string $charset = '';
 
 	/**
 	 * 註冊路由（由 YSRouteRegistrar 在 rest_api_init 呼叫）
@@ -1270,9 +1288,23 @@ class YSPermissionController {
 	 *
 	 * 為了確保 $menu 已 populate，先檢查；空就 require admin/menu.php 並
 	 * 主動 do_action( 'admin_menu' )，避免 REST 請求時拿到空陣列。
+	 *
+	 * v1.11.1：其他外掛在 admin_menu 丟出例外或 PHP 錯誤時回 500（code ys_admin_menu_enumeration_failed，error 寫出錯誤類別、
+	 * 訊息與檔案位置），不列出只建了一半的選單；在 admin_menu 直接結束請求時，請求結束時補送 500（code
+	 * ys_admin_menu_enumeration_interrupted）。以前前者整個請求致命錯誤、後者回 200 空白。
 	 */
 	public static function enumerate_menus( \WP_REST_Request $request ): \WP_REST_Response {
-		self::ensure_admin_menu_populated();
+		$failure = self::ensure_admin_menu_populated();
+		if ( null !== $failure ) {
+			return new \WP_REST_Response(
+				[
+					'success' => false,
+					'code'    => self::ENUMERATION_FAILED,
+					'error'   => $failure,
+				],
+				500
+			);
+		}
 
 		return new \WP_REST_Response(
 			[
@@ -1289,20 +1321,25 @@ class YSPermissionController {
 	 *
 	 * REST API 預設不載入 wp-admin context，$menu 通常為空。
 	 * 我們需要動態列舉 sidebar 內容，所以主動 trigger admin_menu hook。
+	 *
+	 * v1.11.1：觸發前先載入 wp-admin/includes/admin.php。以前只載入 plugin.php，其他外掛在 admin_menu 用到後台其他函式檔的函式時
+	 * （例：Simple History 5.36.0 的隱私設定頁呼叫 template.php 的 add_settings_section()）整個請求致命錯誤。
+	 *
+	 * @return string|null 其他外掛在 admin_menu 丟出例外或錯誤時的說明（呼叫端回 500）；沒出錯、或這次不用觸發時是 null。
 	 */
-	private static function ensure_admin_menu_populated(): void {
-		global $menu, $submenu;
+	private static function ensure_admin_menu_populated(): ?string {
+		global $menu;
 
 		if ( ! empty( $menu ) ) {
-			return;
+			return null;
 		}
 
-		// 載入 admin menu 系統檔案（含 $menu / $submenu globals 與相關 helpers）
-		if ( ! function_exists( 'add_menu_page' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		}
+		// v1.11.1：WordPress 後台在觸發 admin_menu 之前載入的函式檔（wp-admin/admin.php 經 wp-admin/includes/admin.php，
+		// admin-ajax.php、admin-post.php 也載入這一支）：plugin.php 的 add_menu_page()、template.php 的 add_settings_section()、
+		// misc.php、screen.php…，以及 admin-filters.php 的後台 hook。這時還沒定義 WP_ADMIN，admin.php 會順便載入後台翻譯
+		//（WordPress 從後台頁面以外的地方載入它時的做法）。
+		require_once ABSPATH . 'wp-admin/includes/admin.php';
 
-		// 在某些 minimal REST context 下，需要載入更多 admin 檔案
 		if ( ! defined( 'WP_ADMIN' ) ) {
 			define( 'WP_ADMIN', true );
 		}
@@ -1310,9 +1347,236 @@ class YSPermissionController {
 		// 觸發所有 plugin 的 admin_menu hook（這是 $menu populate 的關鍵）
 		// 注意：do_action 之後 $menu 和 $submenu 才會由各 plugin 的 add_menu_page() 建立
 		if ( did_action( 'admin_menu' ) === 0 ) {
+			return self::fire_admin_menu();
+		}
+		return null;
+	}
+
+	/**
+	 * v1.11.1：觸發 _admin_menu、admin_menu，其他外掛在裡面出錯時不讓列舉整個壞掉。
+	 *
+	 * - 丟出例外或 PHP 錯誤（\Throwable，例：呼叫不存在的函式）：還原 current_filter() 的堆疊、寫一筆 error_log、回傳說明。
+	 *   admin_menu 後面還沒跑的 callback 不會再跑，選單只建了一半，所以呼叫端不列出選單。
+	 * - 在裡面直接結束請求（exit／die；例：LoginPress 6.2.5 的 LoginPress_Customizer::menu_url() 在沒有 $submenu['index.php']
+	 *   時 exit）：請求結束時由 shutdown_after_interrupted_menu() 補送 500 與說明。
+	 *
+	 * @return string|null 出錯時的說明；沒出錯是 null。
+	 */
+	private static function fire_admin_menu(): ?string {
+		global $wp_current_filter;
+
+		$depth                   = is_array( $wp_current_filter ) ? count( $wp_current_filter ) : 0;
+		$ob_level                = ob_get_level();
+		self::$buffered_before   = self::buffered_bytes();
+		// 請求結束時（物件快取可能已經關掉）才要用的編碼，先在這裡取好。
+		self::$charset           = (string) get_option( 'blog_charset' );
+		self::$firing_admin_menu = true;
+		if ( ! self::$shutdown_registered ) {
+			self::$shutdown_registered = true;
+			register_shutdown_function( [ self::class, 'shutdown_after_interrupted_menu' ] );
+		}
+
+		try {
 			do_action( '_admin_menu' );
 			do_action( 'admin_menu' );
+		} catch ( \Throwable $e ) {
+			// do_action() 在 callback 出錯時來不及把 hook 名稱從堆疊拿掉，之後 current_filter()、doing_action() 會答錯。
+			if ( is_array( $wp_current_filter ) && count( $wp_current_filter ) > $depth ) {
+				array_splice( $wp_current_filter, $depth );
+			}
+			// callback 開了輸出緩衝、印了半截才出錯時，那一截不能接在 REST 的 JSON 前面。
+			while ( ob_get_level() > $ob_level ) {
+				$level = ob_get_level();
+				$flags = (int) ( ob_get_status()['flags'] ?? 0 );
+				if ( 0 === ( $flags & PHP_OUTPUT_HANDLER_REMOVABLE ) ) {
+					// 開的人不准移除的緩衝：能清內容就清，留著那一層（不然會一直移除失敗、停不下來）。
+					if ( 0 !== ( $flags & PHP_OUTPUT_HANDLER_CLEANABLE ) ) {
+						ob_clean();
+					}
+					break;
+				}
+				if ( ! ob_end_clean() || ob_get_level() >= $level ) {
+					break;
+				}
+			}
+			$class = self::readable_class( get_class( $e ) );
+			error_log( sprintf( '[YS Admin Menu] 列出選單時其他外掛在 admin_menu 出錯：%1$s: %2$s in %3$s:%4$d', $class, str_replace( "\0", '\0', $e->getMessage() ), $e->getFile(), $e->getLine() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- 取代原本的致命錯誤紀錄。
+			return sprintf(
+				'列出選單時，其他外掛在後台選單（admin_menu）階段出錯，這次沒有列出選單。錯誤：%1$s：%2$s（%3$s:%4$d）',
+				$class,
+				self::strip_site_paths( wp_strip_all_tags( $e->getMessage() ) ),
+				self::site_relative_path( $e->getFile() ),
+				$e->getLine()
+			);
+		} finally {
+			self::$firing_admin_menu = false;
 		}
+		return null;
+	}
+
+	/**
+	 * v1.11.1：請求結束時的檢查。只在列舉觸發 admin_menu 的期間請求就結束了（其他外掛在 admin_menu 裡 exit／die）才動作：
+	 * 這時 REST 回應還沒送出，原本會是 200 的空白，改送 500 與 JSON 說明（寫出當時在跑的 callback）。
+	 * 標頭已經送出、callback 自己已經輸出東西（例：wp_die() 送出的 JSON 錯誤），或是 PHP 致命錯誤（交給 WordPress 的致命錯誤處理）時不動。
+	 */
+	public static function shutdown_after_interrupted_menu(): void {
+		if ( ! self::$firing_admin_menu ) {
+			return;
+		}
+		self::$firing_admin_menu = false;
+
+		$last = error_get_last();
+		if ( is_array( $last ) && in_array( (int) ( $last['type'] ?? 0 ), [ E_ERROR, E_PARSE, E_USER_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR ], true ) ) {
+			return;
+		}
+		if ( headers_sent() || self::buffered_bytes() > self::$buffered_before ) {
+			return;
+		}
+
+		$running = self::running_menu_callbacks( 10 );
+		$message = '列出選單時，其他外掛在後台選單（admin_menu）階段直接結束了這次請求，沒有列出選單。'
+			. ( '' === $running ? '' : '當時在跑的是 ' . $running . '。' );
+		$all     = self::running_menu_callbacks( 0 );
+		error_log( '[YS Admin Menu] 列出選單時其他外掛在 admin_menu 結束了請求' . ( '' === $all ? '' : '：' . $all ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- 補一筆紀錄（列出全部），方便查是哪個外掛。
+
+		header_remove( 'Location' );
+		status_header( 500 );
+		header( 'Content-Type: application/json; charset=' . ( '' === self::$charset ? 'UTF-8' : self::$charset ) );
+		echo wp_json_encode( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON 回應。
+			[
+				'success' => false,
+				'code'    => self::ENUMERATION_INTERRUPTED,
+				'error'   => $message,
+			]
+		);
+	}
+
+	/**
+	 * v1.11.1：請求結束時 _admin_menu／admin_menu 正在跑的那個優先順序上的 callback（WordPress 的 WP_Hook 記著目前的優先順序），
+	 * 例：「admin_menu 優先順序 10 的其中一個：…、LoginPress_Customizer::menu_url、…」。找不到時是空字串。
+	 *
+	 * @param int $limit 最多列幾個（其餘寫「另有 N 個沒列出」）；0 是全部列出。
+	 */
+	private static function running_menu_callbacks( int $limit ): string {
+		global $wp_filter;
+
+		foreach ( [ 'admin_menu', '_admin_menu' ] as $tag ) {
+			$hook = $wp_filter[ $tag ] ?? null;
+			if ( ! is_object( $hook ) || ! method_exists( $hook, 'current_priority' ) || ! isset( $hook->callbacks ) || ! is_array( $hook->callbacks ) ) {
+				continue;
+			}
+			$priority = $hook->current_priority();
+			if ( false === $priority || empty( $hook->callbacks[ $priority ] ) || ! is_array( $hook->callbacks[ $priority ] ) ) {
+				continue;
+			}
+			$names = [];
+			foreach ( $hook->callbacks[ $priority ] as $entry ) {
+				$name = self::callback_name( is_array( $entry ) ? ( $entry['function'] ?? null ) : null );
+				if ( '' !== $name ) {
+					$names[] = $name;
+				}
+			}
+			if ( [] !== $names ) {
+				// WP_Hook 只記得目前跑到哪個優先順序，不記得是那個優先順序上的第幾個，所以列出同一個優先順序上的全部（回應最多 10 個）。
+				$shown = $limit > 0 ? array_slice( $names, 0, $limit ) : $names;
+				return sprintf(
+					'%1$s 優先順序 %2$s 的其中一個：%3$s%4$s',
+					$tag,
+					(string) $priority,
+					implode( '、', $shown ),
+					count( $names ) > count( $shown ) ? '（另有 ' . ( count( $names ) - count( $shown ) ) . ' 個沒列出）' : ''
+				);
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * v1.11.1：callback 的名稱（函式名、類別::方法；匿名函式寫出定義它的檔案與行號）。
+	 *
+	 * @param mixed $callback
+	 */
+	private static function callback_name( $callback ): string {
+		if ( is_string( $callback ) ) {
+			return $callback;
+		}
+		if ( is_array( $callback ) && isset( $callback[0], $callback[1] ) && is_string( $callback[1] ) ) {
+			return ( is_object( $callback[0] ) ? self::readable_class( get_class( $callback[0] ) ) : (string) $callback[0] ) . '::' . $callback[1];
+		}
+		if ( $callback instanceof \Closure ) {
+			try {
+				$ref = new \ReflectionFunction( $callback );
+				return '匿名函式（' . self::site_relative_path( (string) $ref->getFileName() ) . ':' . $ref->getStartLine() . '）';
+			} catch ( \Throwable $e ) {
+				return '匿名函式';
+			}
+		}
+		return is_object( $callback ) ? self::readable_class( get_class( $callback ) ) . '::__invoke' : '';
+	}
+
+	/**
+	 * v1.11.1：類別名稱。匿名類別的名稱是「父類別@anonymous」加 NUL 與定義它的絕對路徑，只留 NUL 前面那一段。
+	 */
+	private static function readable_class( string $class ): string {
+		$cut = strpos( $class, "\0" );
+		return false === $cut ? $class : substr( $class, 0, $cut );
+	}
+
+	/**
+	 * v1.11.1：網站根目錄（ABSPATH）與 wp-content（WP_CONTENT_DIR）底下的檔案依序要試的路徑前綴，和換成的相對寫法。
+	 *
+	 * @return array<int,array{0:string,1:string}> [ 前綴（結尾是 /）, 換成 ]
+	 */
+	private static function site_path_prefixes(): array {
+		$prefixes = [ [ rtrim( str_replace( '\\', '/', (string) ABSPATH ), '/' ) . '/', '' ] ];
+		if ( defined( 'WP_CONTENT_DIR' ) ) {
+			$content = rtrim( str_replace( '\\', '/', (string) WP_CONTENT_DIR ), '/' );
+			// wp-content 不在網站根目錄底下的站（例：Bedrock）。
+			$prefixes[] = [ $content . '/', basename( $content ) . '/' ];
+		}
+		return array_values( array_filter( $prefixes, static fn( array $p ): bool => '/' !== $p[0] ) );
+	}
+
+	/** v1.11.1：檔案位置寫成相對網站根目錄的路徑（wp-content 在別處時從 wp-content 寫起）；都不在底下時只寫檔名。 */
+	private static function site_relative_path( string $file ): string {
+		$file = str_replace( '\\', '/', $file );
+		foreach ( self::site_path_prefixes() as [ $prefix, $label ] ) {
+			if ( 0 === strpos( $file, $prefix ) ) {
+				return $label . substr( $file, strlen( $prefix ) );
+			}
+		}
+		return basename( $file );
+	}
+
+	/**
+	 * v1.11.1：訊息裡自帶的、網站目錄底下的絕對路徑（例：PHP 的 TypeError「called in …」）換成相對寫法，並拿掉 NUL。
+	 * 只換路徑開頭的地方（前面不是英數、點、連字號、斜線或冒號），網址裡剛好有同一段時不換；Windows 的磁碟代號不分大小寫。
+	 */
+	private static function strip_site_paths( string $text ): string {
+		$text = str_replace( "\0", '', $text );
+		foreach ( self::site_path_prefixes() as [ $prefix, $label ] ) {
+			foreach ( [ $prefix, str_replace( '/', '\\', $prefix ) ] as $variant ) {
+				$quoted = preg_quote( $variant, '#' );
+				if ( 1 === preg_match( '/^[A-Za-z]:/', $variant ) ) {
+					$quoted = '[' . strtoupper( $variant[0] ) . strtolower( $variant[0] ) . ']' . substr( $quoted, 1 );
+				}
+				$text = (string) preg_replace_callback(
+					'#(?<![A-Za-z0-9._:/\\\\-])' . $quoted . '#',
+					static fn(): string => $label,
+					$text
+				);
+			}
+		}
+		return $text;
+	}
+
+	/** v1.11.1：各層輸出緩衝目前的位元組數加總。 */
+	private static function buffered_bytes(): int {
+		$total = 0;
+		foreach ( ob_get_status( true ) as $level ) {
+			$total += (int) ( $level['buffer_used'] ?? 0 );
+		}
+		return $total;
 	}
 
 	/**
